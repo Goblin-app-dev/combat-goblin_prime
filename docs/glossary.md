@@ -18,7 +18,7 @@ Deterministic identifier for a stored pack directory.
 The lossless collection of source files and metadata produced by M1 Acquire.
 
 ## Diagnostic
-A structured Acquire diagnostic entry attached to a Raw Pack Bundle.
+Structured acquisition diagnostics surface; Phase 1A uses empty list by default.
 
 ---
 

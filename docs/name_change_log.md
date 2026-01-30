@@ -20,6 +20,12 @@ No silent renames are permitted.
 ## 2026-01-30
 - Old name: N/A
 - New name: Diagnostic
+- Reason: Legalize public type referenced by RawPackBundle.acquireDiagnostics
+- Approval reference: Phase 1A naming contract
+
+## 2026-01-30
+- Old name: N/A
+- New name: Diagnostic
 - Reason: Legalize approved public type referenced by `RawPackBundle.acquireDiagnostics`.
 - Approval reference: M1 Acquire approved names proposal update.
 
