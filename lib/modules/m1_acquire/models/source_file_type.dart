@@ -1,0 +1,4 @@
+enum SourceFileType {
+  gst,
+  cat,
+}
