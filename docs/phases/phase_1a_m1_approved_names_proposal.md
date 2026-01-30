@@ -116,10 +116,9 @@ Fields:
 ---
 
 ### Diagnostic
-**File:** `models/raw_pack_bundle.dart`
+File: `models/raw_pack_bundle.dart`
 
-Fields:
-- (none)
+Fields: none
 
 ---
 
