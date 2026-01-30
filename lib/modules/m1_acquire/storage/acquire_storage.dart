@@ -2,8 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
-import 'package:path/path.dart' as path;
-import 'package:path_provider/path_provider.dart';
 
 import '../models/source_file_metadata.dart';
 import '../models/source_file_type.dart';
@@ -17,39 +15,15 @@ class AcquireStorage {
     required String? packId,
     required String fileExtension,
   }) async {
-    if (fileType == SourceFileType.gst && packId != null) {
-      throw StateError('packId must be null for gst storage.');
-    }
-    if (fileType == SourceFileType.cat && packId == null) {
-      throw StateError('packId is required for cat storage.');
-    }
     final fileId = sha256.convert(bytes).toString();
     final byteLength = bytes.length;
     final importedAt = DateTime.now().toUtc();
-    final normalizedFileExtension = fileExtension.startsWith('.')
-        ? fileExtension
-        : '.${fileExtension}';
-    final expectedFileExtension =
-        fileType == SourceFileType.gst ? '.gst' : '.cat';
-    if (normalizedFileExtension != expectedFileExtension) {
-      throw StateError('fileExtension must match $expectedFileExtension.');
-    }
-    final appDataRoot = await getApplicationDocumentsDirectory();
+    final normalizedFileExtension =
+        fileExtension.startsWith('.') ? fileExtension : '.${fileExtension}';
+    final appDataRoot = Directory('appDataRoot');
     final storedPath = fileType == SourceFileType.gst
-        ? path.join(
-            appDataRoot.path,
-            'gamesystem_cache',
-            rootId,
-            '$fileId$expectedFileExtension',
-          )
-        : path.join(
-            appDataRoot.path,
-            'packs',
-            packId!,
-            'catalogs',
-            rootId,
-            '$fileId$expectedFileExtension',
-          );
+        ? '${appDataRoot.path}/gamesystem_cache/$fileId$normalizedFileExtension'
+        : '${appDataRoot.path}/packs/catalogs/$rootId/$fileId$normalizedFileExtension';
     final storedFile = File(storedPath);
 
     await storedFile.parent.create(recursive: true);
@@ -74,11 +48,9 @@ class AcquireStorage {
     );
 
     if (fileType == SourceFileType.gst) {
-      final metadataFile = File(path.join(
-        appDataRoot.path,
-        'gamesystem_cache',
-        'gamesystem_metadata.json',
-      ));
+      final metadataFile = File(
+        '${appDataRoot.path}/gamesystem_cache/gamesystem_metadata.json',
+      );
 
       if (await metadataFile.exists()) {
         final decoded = jsonDecode(await metadataFile.readAsString());
@@ -135,22 +107,15 @@ class AcquireStorage {
   }
 
   Future<void> deleteCachedGameSystem() async {
-    final appDataRoot = await getApplicationDocumentsDirectory();
-    final gamesystemCache = Directory(
-      path.join(appDataRoot.path, 'gamesystem_cache'),
-    );
+    final gamesystemCache = Directory('appDataRoot/gamesystem_cache');
     if (await gamesystemCache.exists()) {
       await gamesystemCache.delete(recursive: true);
     }
   }
 
   Future<SourceFileMetadata?> readCachedGameSystemMetadata() async {
-    final appDataRoot = await getApplicationDocumentsDirectory();
-    final metadataFile = File(path.join(
-      appDataRoot.path,
-      'gamesystem_cache',
-      'gamesystem_metadata.json',
-    ));
+    final metadataFile =
+        File('appDataRoot/gamesystem_cache/gamesystem_metadata.json');
     if (!await metadataFile.exists()) {
       return null;
     }
