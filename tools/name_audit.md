@@ -12,6 +12,8 @@ Step 2: M1 Acquire models verified against approved names; Diagnostic legalized.
 ## Files Touched
 - [x] Exact file paths listed
 - [x] Full contents provided for every changed file
+- lib/modules/m1_acquire/storage/acquire_storage.dart
+- tools/name_audit.md
 
 ---
 
@@ -27,15 +29,15 @@ Step 2: M1 Acquire models verified against approved names; Diagnostic legalized.
 ---
 
 ## New or Changed Names
-- [ ] No new or changed public names introduced  
-- [x] Yes — new or changed names were introduced
+- [x] No new or changed public names introduced  
+- [ ] Yes — new or changed names were introduced
 
 If **Yes**, ALL of the following are mandatory:
-- [x] Names were proposed before implementation
-- [x] `/docs/glossary.md` updated
-- [x] `/docs/naming_contract.md` updated if rules changed
-- [x] `/docs/name_change_log.md` updated (for renames or semantic changes)
-- [x] Explicit approval obtained
+- [ ] Names were proposed before implementation
+- [ ] `/docs/glossary.md` updated
+- [ ] `/docs/naming_contract.md` updated if rules changed
+- [ ] `/docs/name_change_log.md` updated (for renames or semantic changes)
+- [ ] Explicit approval obtained
 
 If any box above is unchecked, the change is invalid.
 
