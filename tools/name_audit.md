@@ -5,6 +5,8 @@
 This checklist MUST be completed for every change or PR.
 If any required item is unchecked, the change is invalid.
 
+Step 2: M1 Acquire models verified against approved names; Diagnostic legalized.
+
 ---
 
 ## Files Touched
@@ -25,15 +27,15 @@ If any required item is unchecked, the change is invalid.
 ---
 
 ## New or Changed Names
-- [x] No new or changed public names introduced  
-- [ ] Yes — new or changed names were introduced
+- [ ] No new or changed public names introduced  
+- [x] Yes — new or changed names were introduced
 
 If **Yes**, ALL of the following are mandatory:
-- [ ] Names were proposed before implementation
-- [ ] `/docs/glossary.md` updated
-- [ ] `/docs/naming_contract.md` updated if rules changed
-- [ ] `/docs/name_change_log.md` updated (for renames or semantic changes)
-- [ ] Explicit approval obtained
+- [x] Names were proposed before implementation
+- [x] `/docs/glossary.md` updated
+- [x] `/docs/naming_contract.md` updated if rules changed
+- [x] `/docs/name_change_log.md` updated (for renames or semantic changes)
+- [x] Explicit approval obtained
 
 If any box above is unchecked, the change is invalid.
 
