@@ -14,6 +14,9 @@ A `.cat` file representing a modular data pack loaded under a gamesystem.
 ## Raw Pack Bundle
 The lossless collection of source files and metadata produced by M1 Acquire.
 
+## Diagnostic
+A structured record that captures acquisition issues or warnings.
+
 ---
 
 Any concept used in code must appear here first.

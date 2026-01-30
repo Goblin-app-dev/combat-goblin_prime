@@ -5,7 +5,7 @@
 This checklist MUST be completed for every change or PR.
 If any required item is unchecked, the change is invalid.
 
-Step 2: M1 Acquire models verified against approved names.
+Step 3: M1 Acquire preflight scan service and diagnostics docs verified against approved names.
 
 ---
 
