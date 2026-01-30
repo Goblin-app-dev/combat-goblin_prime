@@ -11,6 +11,9 @@ A `.gst` file representing the root ruleset context.
 ## Catalog
 A `.cat` file representing a modular data pack loaded under a gamesystem.
 
+## Pack ID
+Deterministic identifier for a stored pack directory.
+
 ## Raw Pack Bundle
 The lossless collection of source files and metadata produced by M1 Acquire.
 

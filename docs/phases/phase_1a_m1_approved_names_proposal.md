@@ -169,7 +169,7 @@ Method:
 **File:** `storage/acquire_storage.dart`
 
 Methods:
-- `Future<SourceFileMetadata> storeFile({required List<int> bytes, required SourceFileType fileType, required String externalFileName, required String rootId, required String fileExtension})`
+- `Future<SourceFileMetadata> storeFile({required List<int> bytes, required SourceFileType fileType, required String externalFileName, required String rootId, required String? packId, required String fileExtension})`
 - `Future<void> deleteCachedGameSystem()`
 - `Future<SourceFileMetadata?> readCachedGameSystemMetadata()`
 - `Future<List<int>?> readCachedGameSystemBytes()`

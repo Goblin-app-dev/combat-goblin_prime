@@ -12,6 +12,7 @@ class AcquireStorage {
     required SourceFileType fileType,
     required String externalFileName,
     required String rootId,
+    required String? packId,
     required String fileExtension,
   }) async {
     final fileId = sha256.convert(bytes).toString();
