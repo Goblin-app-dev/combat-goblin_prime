@@ -1,10 +1,6 @@
 import 'preflight_scan_result.dart';
 import 'source_file_metadata.dart';
 
-class Diagnostic {
-  const Diagnostic();
-}
-
 class RawPackBundle {
   final String packId;
   final DateTime createdAt;
