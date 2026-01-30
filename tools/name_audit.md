@@ -12,6 +12,12 @@ Step 2: M1 Acquire models verified against approved names; Diagnostic legalized.
 ## Files Touched
 - [x] Exact file paths listed
 - [x] Full contents provided for every changed file
+- lib/modules/m1_acquire/storage/acquire_storage.dart
+- docs/phases/phase_1a_m1_approved_names_proposal.md
+- docs/glossary.md
+- docs/name_change_log.md
+- pubspec.yaml
+- tools/name_audit.md
 
 ---
 
