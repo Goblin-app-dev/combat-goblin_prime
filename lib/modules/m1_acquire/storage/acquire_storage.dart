@@ -15,6 +15,12 @@ class AcquireStorage {
     required String? packId,
     required String fileExtension,
   }) async {
+    if (fileType == SourceFileType.cat && packId == null) {
+      throw StateError('Catalog storage requires packId.');
+    }
+    if (fileType == SourceFileType.gst && packId != null) {
+      throw StateError('Gamesystem storage must not include packId.');
+    }
     final fileId = sha256.convert(bytes).toString();
     final byteLength = bytes.length;
     final importedAt = DateTime.now().toUtc();
@@ -22,8 +28,8 @@ class AcquireStorage {
         fileExtension.startsWith('.') ? fileExtension : '.${fileExtension}';
     final appDataRoot = Directory('appDataRoot');
     final storedPath = fileType == SourceFileType.gst
-        ? '${appDataRoot.path}/gamesystem_cache/$fileId$normalizedFileExtension'
-        : '${appDataRoot.path}/packs/catalogs/$rootId/$fileId$normalizedFileExtension';
+        ? '${appDataRoot.path}/gamesystem_cache/$rootId/$fileId$normalizedFileExtension'
+        : '${appDataRoot.path}/packs/$packId/catalogs/$rootId/$fileId$normalizedFileExtension';
     final storedFile = File(storedPath);
 
     await storedFile.parent.create(recursive: true);
@@ -74,19 +80,21 @@ class AcquireStorage {
         if (storedFileId != fileId) {
           throw StateError('Cached gamesystem fileId mismatch.');
         }
-        final cachedFile = File(storedPathValue);
-        if (!await cachedFile.exists()) {
-          throw StateError('Cached gamesystem file is missing.');
-        }
+        if (storedPathValue == storedPath) {
+          final cachedFile = File(storedPathValue);
+          if (!await cachedFile.exists()) {
+            throw StateError('Cached gamesystem file is missing.');
+          }
 
-        return SourceFileMetadata(
-          fileId: storedFileId,
-          fileType: SourceFileType.values.byName(storedFileType),
-          externalFileName: storedExternalFileName,
-          storedPath: storedPathValue,
-          byteLength: storedByteLength,
-          importedAt: DateTime.parse(storedImportedAt),
-        );
+          return SourceFileMetadata(
+            fileId: storedFileId,
+            fileType: SourceFileType.values.byName(storedFileType),
+            externalFileName: storedExternalFileName,
+            storedPath: storedPathValue,
+            byteLength: storedByteLength,
+            importedAt: DateTime.parse(storedImportedAt),
+          );
+        }
       }
 
       await metadataFile.writeAsString(

@@ -5,17 +5,15 @@
 This checklist MUST be completed for every change or PR.
 If any required item is unchecked, the change is invalid.
 
-Step 2: M1 Acquire models verified against approved names; Diagnostic legalized.
+Step 4: AcquireStorage packId + deterministic storage paths; stale cache metadata self-heal.
 
 ---
 
 ## Files Touched
 - [x] Exact file paths listed
 - [x] Full contents provided for every changed file
-- docs/glossary.md
+- lib/modules/m1_acquire/storage/acquire_storage.dart
 - docs/name_change_log.md
-- docs/phases/phase_1a_m1_approved_names_proposal.md
-- readme2
 - tools/name_audit.md
 
 ---
@@ -37,8 +35,8 @@ Step 2: M1 Acquire models verified against approved names; Diagnostic legalized.
 
 If **Yes**, ALL of the following are mandatory:
 - [x] Names were proposed before implementation
-- [x] `/docs/glossary.md` updated
-- [x] `/docs/naming_contract.md` updated if rules changed
+- [ ] `/docs/glossary.md` updated
+- [ ] `/docs/naming_contract.md` updated if rules changed
 - [x] `/docs/name_change_log.md` updated (for renames or semantic changes)
 - [x] Explicit approval obtained
 
@@ -49,7 +47,7 @@ If any box above is unchecked, the change is invalid.
 ## Module Boundary Integrity
 - [x] Changes stay within declared module boundaries
 - [x] No upstream module depends on downstream internals
-- [x] `/docs/module_io_registry.md` updated if IO changed
+- [ ] `/docs/module_io_registry.md` updated if IO changed
 
 ---
 
