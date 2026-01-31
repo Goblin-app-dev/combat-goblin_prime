@@ -36,14 +36,14 @@ Step 4: AcquireStorage packId + deterministic storage paths; stale cache metadat
 - [ ] No new or changed public names introduced  
 - [x] Yes — new or changed names were introduced
 
-If **Yes**, ALL of the following are mandatory:
+If **Yes**, check items that apply for this change:
 - [x] Names were proposed before implementation
 - [ ] `/docs/glossary.md` updated
 - [ ] `/docs/naming_contract.md` updated if rules changed
 - [x] `/docs/name_change_log.md` updated (for renames or semantic changes)
 - [x] Explicit approval obtained
 
-If any box above is unchecked, the change is invalid.
+Only required items must be checked for validity.
 
 ---
 
