@@ -14,6 +14,8 @@ Required for phase freeze validation.
 
 ### Outputs
 - RawPackBundle
+### Storage Contracts
+- AcquireStorage.storeFile(..., packId)
 
 ---
 

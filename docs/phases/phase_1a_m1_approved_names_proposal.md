@@ -169,6 +169,8 @@ Method:
 
 Methods:
 - `Future<SourceFileMetadata> storeFile({required List<int> bytes, required SourceFileType fileType, required String externalFileName, required String rootId, required String? packId, required String fileExtension})`
+  - `packId` is required for `SourceFileType.cat`
+  - `packId` is `null` for `SourceFileType.gst`
 - `Future<void> deleteCachedGameSystem()`
 - `Future<SourceFileMetadata?> readCachedGameSystemMetadata()`
 - `Future<List<int>?> readCachedGameSystemBytes()`

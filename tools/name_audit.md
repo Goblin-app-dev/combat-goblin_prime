@@ -16,6 +16,10 @@ Step 2: M1 Acquire models verified against approved names; Diagnostic legalized.
 - docs/name_change_log.md
 - docs/phases/phase_1a_m1_approved_names_proposal.md
 - readme2
+- lib/modules/m1_acquire/services/preflight_scan_service.dart
+- docs/module_io_registry.md
+- lib/modules/m1_acquire/services/acquire_service.dart
+- lib/modules/m1_acquire/storage/acquire_storage.dart
 - tools/name_audit.md
 
 ---
