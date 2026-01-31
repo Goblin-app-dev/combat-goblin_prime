@@ -14,6 +14,11 @@ Required for phase freeze validation.
 
 ### Outputs
 - RawPackBundle
+### Storage Contracts
+- AcquireStorage.storeFile(..., packId)
+  - `gst`: `appDataRoot/gamesystem_cache/{rootId}/{fileId}.{ext}`
+  - `cat`: `appDataRoot/packs/{packId}/catalogs/{rootId}/{fileId}.{ext}`
+  - `packId` is required for `cat` and `null` for `gst`
 
 ---
 
