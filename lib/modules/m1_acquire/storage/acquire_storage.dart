@@ -77,19 +77,21 @@ class AcquireStorage {
         if (storedFileId != fileId) {
           throw StateError('Cached gamesystem fileId mismatch.');
         }
-        final cachedFile = File(storedPathValue);
-        if (!await cachedFile.exists()) {
-          throw StateError('Cached gamesystem file is missing.');
-        }
+        if (storedPathValue == storedPath) {
+          final cachedFile = File(storedPathValue);
+          if (!await cachedFile.exists()) {
+            throw StateError('Cached gamesystem file is missing.');
+          }
 
-        return SourceFileMetadata(
-          fileId: storedFileId,
-          fileType: SourceFileType.values.byName(storedFileType),
-          externalFileName: storedExternalFileName,
-          storedPath: storedPathValue,
-          byteLength: storedByteLength,
-          importedAt: DateTime.parse(storedImportedAt),
-        );
+          return SourceFileMetadata(
+            fileId: storedFileId,
+            fileType: SourceFileType.values.byName(storedFileType),
+            externalFileName: storedExternalFileName,
+            storedPath: storedPathValue,
+            byteLength: storedByteLength,
+            importedAt: DateTime.parse(storedImportedAt),
+          );
+        }
       }
 
       await metadataFile.writeAsString(
