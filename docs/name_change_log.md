@@ -23,8 +23,20 @@ No silent renames are permitted.
 - Reason: Legalize public type referenced by RawPackBundle.acquireDiagnostics
 - Approval reference: Phase 1A naming contract
 
+## 2026-01-30
+- Old name: N/A
+- New name: Diagnostic
+- Reason: Legalize approved public type referenced by `RawPackBundle.acquireDiagnostics`.
+- Approval reference: M1 Acquire approved names proposal update.
+
+## 2026-02-01
+- Old name: N/A
+- New name: packId
+- Reason: Capture pack storage identity in AcquireStorage storeFile signature.
+- Approval reference: M1 Acquire approved names proposal update.
+
 ## 2026-01-31
 - Old name: AcquireStorage.storeFile(...) (without packId)
-- New name: AcquireStorage.storeFile(..., packId) with invariant checks
-- Reason: require packId for catalogs, forbid for gamesystems, and support deterministic pack-scoped catalog storage layout
+- New name: AcquireStorage.storeFile(..., packId)
+- Reason: required to support deterministic pack-scoped catalog storage layout
 - Approval reference: user approval (Phase 1A Step 4)

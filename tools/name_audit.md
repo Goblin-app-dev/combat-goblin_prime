@@ -12,7 +12,11 @@ Step 4: AcquireStorage packId + deterministic storage paths; stale cache metadat
 ## Files Touched
 - [x] Exact file paths listed
 - [x] Full contents provided for every changed file
-- docs/module_io_registry.md
+- lib/modules/m1_acquire/storage/acquire_storage.dart
+- docs/name_change_log.md
+- docs/phases/phase_1a_m1_approved_names_proposal.md
+- readme2
+- lib/modules/m1_acquire/services/preflight_scan_service.dart
 - tools/name_audit.md
 
 ---
@@ -46,7 +50,7 @@ Only required items must be checked for validity.
 ## Module Boundary Integrity
 - [x] Changes stay within declared module boundaries
 - [x] No upstream module depends on downstream internals
-- [x] `/docs/module_io_registry.md` updated if IO changed
+- [ ] `/docs/module_io_registry.md` updated if IO changed
 
 ---
 
