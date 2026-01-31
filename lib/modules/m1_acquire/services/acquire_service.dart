@@ -63,6 +63,7 @@ class AcquireService {
       fileType: SourceFileType.gst,
       externalFileName: gameSystemExternalFileName,
       rootId: gameSystemPreflight.rootId,
+      packId: null,
       fileExtension: gameSystemFileExtension,
     );
 
@@ -71,6 +72,7 @@ class AcquireService {
       fileType: SourceFileType.cat,
       externalFileName: primaryCatalogExternalFileName,
       rootId: primaryCatalogPreflight.rootId,
+      packId: packId,
       fileExtension: primaryCatalogFileExtension,
     );
 
@@ -111,6 +113,7 @@ class AcquireService {
         fileType: SourceFileType.cat,
         externalFileName: targetId,
         rootId: dependencyPreflight.rootId,
+        packId: packId,
         fileExtension: SourceFileType.cat.name,
       );
 
