@@ -34,3 +34,9 @@ No silent renames are permitted.
 - New name: packId
 - Reason: Capture pack storage identity in AcquireStorage storeFile signature.
 - Approval reference: M1 Acquire approved names proposal update.
+
+## 2026-01-31
+- Old name: AcquireStorage.storeFile(...) (without packId)
+- New name: AcquireStorage.storeFile(..., packId)
+- Reason: required to support deterministic pack-scoped catalog storage layout
+- Approval reference: user approval (Phase 1A Step 4)
