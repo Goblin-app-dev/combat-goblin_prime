@@ -11,11 +11,18 @@ class PreflightScanService {
     required List<int> bytes,
     required SourceFileType fileType,
   }) async {
-    final document = XmlDocument.parse(utf8.decode(bytes));
+    final document =
+        XmlDocument.parse(utf8.decode(bytes, allowMalformed: true));
     final rootElement = document.rootElement;
     final rootTag = rootElement.name.local;
 
-    _validateRootTag(rootTag, fileType);
+    final expectedRootTag = switch (fileType) {
+      SourceFileType.gst => 'gameSystem',
+      SourceFileType.cat => 'catalogue',
+    };
+    if (rootTag != expectedRootTag) {
+      throw FormatException('Unexpected root tag: $rootTag.');
+    }
 
     final rootId = rootElement.getAttribute('id');
     if (rootId == null) {
@@ -43,7 +50,7 @@ class PreflightScanService {
             in catalogueLinks.findElements('catalogueLink')) {
           final targetId = catalogueLink.getAttribute('targetId');
           if (targetId == null) {
-            throw const FormatException('Missing catalogueLink targetId.');
+            continue;
           }
           final importRootEntriesValue =
               catalogueLink.getAttribute('importRootEntries');
@@ -68,16 +75,5 @@ class PreflightScanService {
       libraryFlag: libraryFlag,
       importDependencies: importDependencies,
     );
-  }
-}
-
-void _validateRootTag(String rootTag, SourceFileType fileType) {
-  final expectedRootTag = switch (fileType) {
-    SourceFileType.gst => 'gameSystem',
-    SourceFileType.cat => 'catalogue',
-  };
-
-  if (rootTag != expectedRootTag) {
-    throw FormatException('Unexpected root tag: $rootTag.');
   }
 }
