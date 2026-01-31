@@ -18,9 +18,6 @@ class AcquireStorage {
     if (fileType == SourceFileType.cat && packId == null) {
       throw StateError('Catalog storage requires packId.');
     }
-    if (fileType == SourceFileType.gst && packId != null) {
-      throw StateError('Gamesystem storage must not include packId.');
-    }
     final fileId = sha256.convert(bytes).toString();
     final byteLength = bytes.length;
     final importedAt = DateTime.now().toUtc();

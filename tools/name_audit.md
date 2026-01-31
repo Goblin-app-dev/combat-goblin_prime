@@ -14,6 +14,9 @@ Step 4: AcquireStorage packId + deterministic storage paths; stale cache metadat
 - [x] Full contents provided for every changed file
 - lib/modules/m1_acquire/storage/acquire_storage.dart
 - docs/name_change_log.md
+- docs/phases/phase_1a_m1_approved_names_proposal.md
+- readme2
+- lib/modules/m1_acquire/services/preflight_scan_service.dart
 - tools/name_audit.md
 
 ---
