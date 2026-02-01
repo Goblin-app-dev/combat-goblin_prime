@@ -2,6 +2,10 @@ name: combat_goblin_prime
 description: M1 Acquire storage implementation
 version: 0.0.1
 
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
 environment:
   sdk: ">=2.17.0 <4.0.0"
 
