@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:combat_goblin_prime/modules/m1_acquire/m1_acquire.dart';
+import 'package:combat_goblin/modules/m1_acquire/m1_acquire.dart';
 
 void main() {
   group('M1 Acquire: flow harness (fixtures)', () {
