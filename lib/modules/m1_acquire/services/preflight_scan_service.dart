@@ -16,13 +16,7 @@ class PreflightScanService {
     final rootElement = document.rootElement;
     final rootTag = rootElement.name.local;
 
-    final expectedRootTag = switch (fileType) {
-      SourceFileType.gst => 'gameSystem',
-      SourceFileType.cat => 'catalogue',
-    };
-    if (rootTag != expectedRootTag) {
-      throw FormatException('Unexpected root tag: $rootTag.');
-    }
+    _validateRootTag(rootTag, fileType);
 
     final rootId = rootElement.getAttribute('id');
     if (rootId == null) {
@@ -75,5 +69,22 @@ class PreflightScanService {
       libraryFlag: libraryFlag,
       importDependencies: importDependencies,
     );
+  }
+}
+
+void _validateRootTag(String rootTag, SourceFileType fileType) {
+  String expectedRootTag;
+
+  switch (fileType) {
+    case SourceFileType.gst:
+      expectedRootTag = 'gameSystem';
+      break;
+    case SourceFileType.cat:
+      expectedRootTag = 'catalogue';
+      break;
+  }
+
+  if (rootTag != expectedRootTag) {
+    throw FormatException('Unexpected root tag: $rootTag.');
   }
 }
