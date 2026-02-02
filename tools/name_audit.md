@@ -5,19 +5,15 @@
 This checklist MUST be completed for every change or PR.
 If any required item is unchecked, the change is invalid.
 
-Step 4: AcquireStorage packId + deterministic storage paths; stale cache metadata self-heal.
+Step 5: Fix test compilation errors (import path correction + template removal).
 
 ---
 
 ## Files Touched
 - [x] Exact file paths listed
 - [x] Full contents provided for every changed file
-- lib/modules/m1_acquire/storage/acquire_storage.dart
-- docs/name_change_log.md
-- docs/phases/phase_1a_m1_approved_names_proposal.md
-- readme2
-- lib/modules/m1_acquire/services/preflight_scan_service.dart
-- tools/name_audit.md
+- test/modules/m1_acquire/m1_acquire_flow_test.dart (import fix: combat_goblin → combat_goblin_prime)
+- test/widget_test.dart (deleted: template with invalid package:untitled import)
 
 ---
 
@@ -33,29 +29,23 @@ Step 4: AcquireStorage packId + deterministic storage paths; stale cache metadat
 ---
 
 ## New or Changed Names
-- [ ] No new or changed public names introduced  
-- [x] Yes — new or changed names were introduced
+- [x] No new or changed public names introduced
+- [ ] Yes — new or changed names were introduced
 
-If **Yes**, check items that apply for this change:
-- [x] Names were proposed before implementation
-- [ ] `/docs/glossary.md` updated
-- [ ] `/docs/naming_contract.md` updated if rules changed
-- [x] `/docs/name_change_log.md` updated (for renames or semantic changes)
-- [x] Explicit approval obtained
-
-Only required items must be checked for validity.
+This change corrects a bug (wrong package name in import) to match the existing
+established package name `combat_goblin_prime` from pubspec.yaml. No new names.
 
 ---
 
 ## Module Boundary Integrity
 - [x] Changes stay within declared module boundaries
 - [x] No upstream module depends on downstream internals
-- [ ] `/docs/module_io_registry.md` updated if IO changed
+- [x] `/docs/module_io_registry.md` not affected (test-only change)
 
 ---
 
 ## Phase Freeze Compliance
-- [x] No frozen module was modified  
+- [x] No frozen module was modified
 - [ ] Frozen module modified with explicit approval
 
 ---
