@@ -52,14 +52,19 @@ void main() {
       } on AcquireFailure catch (e) {
         // Expected outcome when the primary catalog declares dependencies and
         // the harness does not provide them.
+        print('[TEST OUTCOME] AcquireFailure thrown: ${e.message}');
         expect(e.message.isNotEmpty, isTrue);
         return;
       }
 
       // If it did not throw AcquireFailure, we expect a valid bundle.
       expect(bundle, isNotNull);
+      print('[TEST OUTCOME] RawPackBundle produced successfully');
 
       final b = bundle!;
+      print('[TEST OUTCOME] packId: ${b.packId}');
+      print('[TEST OUTCOME] gameSystem fileId: ${b.gameSystemMetadata.fileId}');
+      print('[TEST OUTCOME] primaryCatalog fileId: ${b.primaryCatalogMetadata.fileId}');
 
       // Preflight sanity
       expect(b.gameSystemPreflight.fileType, SourceFileType.gst);
