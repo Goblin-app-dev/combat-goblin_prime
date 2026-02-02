@@ -35,6 +35,14 @@ void main() {
       final gameSystemBytes = await gameSystemFile.readAsBytes();
       final primaryCatalogBytes = await primaryCatalogFile.readAsBytes();
 
+      // Dependency catalog mapping: targetId -> file path
+      final dependencyFiles = <String, String>{
+        'b00-cd86-4b4c-97ba': 'test/Imperium - Agents of the Imperium.cat',
+        '7481-280e-b55e-7867': 'test/Library - Titans.cat',
+        '1b6d-dc06-5db9-c7d1': 'test/Imperium - Imperial Knights - Library.cat',
+        'ac3b-689c-4ad4-70cb': 'test/Library - Astartes Heresy Legends.cat',
+      };
+
       // Diagnostic: scan preflight first to see rootIds
       final preflightService = PreflightScanService();
       final gsPreflight = await preflightService.scanBytes(
@@ -60,10 +68,19 @@ void main() {
           primaryCatalogBytes: primaryCatalogBytes,
           primaryCatalogExternalFileName: 'Imperium - Space Marines.cat',
           requestDependencyBytes: (missingTargetId) async {
-            // Fixtures-only harness: no dependency catalog files yet.
-            // Returning null should cause AcquireFailure if dependencies exist.
             print('[TEST] Dependency requested: $missingTargetId');
-            return null;
+            final filePath = dependencyFiles[missingTargetId];
+            if (filePath == null) {
+              print('[TEST] No fixture for dependency: $missingTargetId');
+              return null;
+            }
+            final file = File(filePath);
+            if (!await file.exists()) {
+              print('[TEST] Fixture file not found: $filePath');
+              return null;
+            }
+            print('[TEST] Loading dependency from: $filePath');
+            return await file.readAsBytes();
           },
         );
       } on AcquireFailure catch (e) {
@@ -120,7 +137,11 @@ void main() {
         primaryCatalogBytes: primaryCatalogBytes,
         primaryCatalogExternalFileName: 'Imperium - Space Marines.cat',
         requestDependencyBytes: (missingTargetId) async {
-          return null;
+          final filePath = dependencyFiles[missingTargetId];
+          if (filePath == null) return null;
+          final file = File(filePath);
+          if (!await file.exists()) return null;
+          return await file.readAsBytes();
         },
       );
 
