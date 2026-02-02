@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:combat_goblin_prime/modules/m1_acquire/m1_acquire.dart';
+import 'package:combat_goblin_prime/modules/m1_acquire/services/preflight_scan_service.dart';
 
 void main() {
   group('M1 Acquire: flow harness (fixtures)', () {
@@ -33,6 +34,21 @@ void main() {
 
       final gameSystemBytes = await gameSystemFile.readAsBytes();
       final primaryCatalogBytes = await primaryCatalogFile.readAsBytes();
+
+      // Diagnostic: scan preflight first to see rootIds
+      final preflightService = PreflightScanService();
+      final gsPreflight = await preflightService.scanBytes(
+        bytes: gameSystemBytes,
+        fileType: SourceFileType.gst,
+      );
+      final catPreflight = await preflightService.scanBytes(
+        bytes: primaryCatalogBytes,
+        fileType: SourceFileType.cat,
+      );
+      print('[DIAGNOSTIC] gameSystem rootId: ${gsPreflight.rootId}');
+      print('[DIAGNOSTIC] primaryCatalog rootId: ${catPreflight.rootId}');
+      print('[DIAGNOSTIC] primaryCatalog declaredGameSystemId: ${catPreflight.declaredGameSystemId}');
+      print('[DIAGNOSTIC] primaryCatalog dependencies: ${catPreflight.importDependencies.map((d) => d.targetId).toList()}');
 
       final acquireService = AcquireService();
 
