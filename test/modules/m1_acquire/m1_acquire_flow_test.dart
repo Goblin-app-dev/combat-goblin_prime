@@ -46,6 +46,7 @@ void main() {
           requestDependencyBytes: (missingTargetId) async {
             // Fixtures-only harness: no dependency catalog files yet.
             // Returning null should cause AcquireFailure if dependencies exist.
+            print('[TEST] Dependency requested: $missingTargetId');
             return null;
           },
         );
