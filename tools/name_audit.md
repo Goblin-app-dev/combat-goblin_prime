@@ -5,7 +5,7 @@
 This checklist MUST be completed for every change or PR.
 If any required item is unchecked, the change is invalid.
 
-Step 8: Add Import Dependency and Update definitions to glossary (docs-only).
+Step 9: Phase 1B M2 Parse naming proposal (docs-only, awaiting approval).
 
 ---
 
@@ -14,11 +14,11 @@ Step 8: Add Import Dependency and Update definitions to glossary (docs-only).
 - [x] Full contents provided for every changed file
 
 ### New Files
-- (none)
+- docs/phases/phase_1b_m2_approved_names_proposal.md (M2 naming proposal)
 
 ### Modified Files
-- docs/glossary.md (added: Import Dependency, Update definitions)
-- tools/name_audit.md (updated: Step 8 docs-only change)
+- docs/module_io_registry.md (added: M2 Parse section)
+- tools/name_audit.md (updated: Step 9 naming proposal)
 
 ---
 
@@ -37,10 +37,18 @@ Step 8: Add Import Dependency and Update definitions to glossary (docs-only).
 - [x] No new or changed public names introduced
 - [ ] Yes — new or changed names were introduced
 
-This is a docs-only change. No new public API names introduced.
-Glossary terms added align with existing code:
-- Import Dependency (aligns with ImportDependency model in code)
-- Update (defines the operation semantics for future Update Checker)
+This is a naming proposal (docs-only). No code written yet.
+Proposed names awaiting approval:
+- ElementDto (generic XML element representation)
+- ParsedFile (parsed file with provenance)
+- ParsedPackBundle (complete parsed output)
+- ParseFailure (parse error with diagnostics)
+- ParseService (bytes → DTO conversion)
+
+Glossary additions required before implementation:
+- Element DTO
+- Parsed File
+- Parsed Pack Bundle
 
 ---
 
