@@ -20,6 +20,12 @@ The lossless collection of source files and metadata produced by M1 Acquire.
 ## Diagnostic
 Structured acquisition diagnostics surface; Phase 1A uses empty list by default.
 
+## Import Dependency
+A catalog-to-catalog reference declared via `<catalogueLink targetId="...">` in XML. Represents a required dependency that must be acquired before the referencing catalog can be fully processed.
+
+## Update
+The operation of refreshing an installed pack when upstream changes are detected. Definition: delete all pack-associated data (storage + derived) → reacquire all files fresh → reparse → rebind. No incremental reconciliation; always a full reinstall.
+
 ## Dependency Record
 Version information for a single dependency catalog; survives raw file deletion for update checking.
 

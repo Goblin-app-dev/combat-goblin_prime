@@ -29,6 +29,39 @@ Required for phase freeze validation.
 
 ---
 
+## M2 Parse (Proposal — Phase 1B)
+
+Converts raw XML bytes into generic DTO trees preserving structure and document order.
+
+### Inputs
+- RawPackBundle (from M1 Acquire)
+
+### Outputs
+- ParsedPackBundle containing:
+  - ParsedFile for gameSystem (ElementDto tree + provenance)
+  - ParsedFile for primaryCatalog
+  - List<ParsedFile> for dependencyCatalogs
+  - packId and parsedAt timestamp
+
+### Behavior
+- Parses XML bytes into ElementDto trees
+- Preserves all attributes, children, text content
+- Preserves document order (element sequence as declared)
+- Links each ParsedFile to source via fileId
+- No cross-link resolution (deferred to M3)
+- No semantic validation (deferred to later phases)
+
+### Error Contracts
+- ParseFailure with fileId, lineNumber, and diagnostic message
+
+### Design Decision
+Generic ElementDto approach chosen over typed DTOs:
+- Truly lossless (any XML structure preserved)
+- No premature schema commitment
+- Cross-link resolution is M3/Phase 2 concern
+
+---
+
 ## Index Reader (Future — Phase 1B+)
 
 Reads and caches the upstream repository index for dependency resolution and update checking.

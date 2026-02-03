@@ -5,7 +5,7 @@
 This checklist MUST be completed for every change or PR.
 If any required item is unchecked, the change is invalid.
 
-Step 7: Document Phase 1B+ layer contracts (docs-only, no code changes).
+Step 9: Phase 1B M2 Parse naming proposal (docs-only, awaiting approval).
 
 ---
 
@@ -14,12 +14,11 @@ Step 7: Document Phase 1B+ layer contracts (docs-only, no code changes).
 - [x] Full contents provided for every changed file
 
 ### New Files
-- (none)
+- docs/phases/phase_1b_m2_approved_names_proposal.md (M2 naming proposal)
 
 ### Modified Files
-- docs/module_io_registry.md (added: Phase 1B+ layer contracts for Index Reader, Downloader, Orchestrator, Cleanup, Update Checker)
-- docs/glossary.md (added: Attempt Status Wrapper, Index (BSData), Version Token definitions)
-- tools/name_audit.md (updated: Step 7 docs-only change)
+- docs/module_io_registry.md (added: M2 Parse section)
+- tools/name_audit.md (updated: Step 9 naming proposal)
 
 ---
 
@@ -38,13 +37,18 @@ Step 7: Document Phase 1B+ layer contracts (docs-only, no code changes).
 - [x] No new or changed public names introduced
 - [ ] Yes — new or changed names were introduced
 
-This is a docs-only change. No new public API names introduced.
-Glossary terms added are conceptual definitions, not code symbols:
-- Attempt Status Wrapper (concept, not a type)
-- Index (BSData) (external ecosystem term)
-- Version Token (concept, not a type)
+This is a naming proposal (docs-only). No code written yet.
+Proposed names awaiting approval:
+- ElementDto (generic XML element representation)
+- ParsedFile (parsed file with provenance)
+- ParsedPackBundle (complete parsed output)
+- ParseFailure (parse error with diagnostics)
+- ParseService (bytes → DTO conversion)
 
-Future Phase 1B+ layers described use conceptual names only (Index Reader, Downloader, Orchestrator, Cleanup, Update Checker) — actual implementation names will be proposed and approved before coding.
+Glossary additions required before implementation:
+- Element DTO
+- Parsed File
+- Parsed Pack Bundle
 
 ---
 
