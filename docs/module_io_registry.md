@@ -29,7 +29,7 @@ Required for phase freeze validation.
 
 ---
 
-## M2 Parse (Proposal — Phase 1B)
+## M2 Parse (Phase 1B)
 
 Converts raw XML bytes into generic DTO trees preserving structure and document order.
 
@@ -52,7 +52,7 @@ Converts raw XML bytes into generic DTO trees preserving structure and document 
 - No semantic validation (deferred to later phases)
 
 ### Error Contracts
-- ParseFailure with fileId, lineNumber, and diagnostic message
+- ParseFailure with fileId, sourceIndex, and diagnostic message
 
 ### Design Decision
 Generic ElementDto approach chosen over typed DTOs:

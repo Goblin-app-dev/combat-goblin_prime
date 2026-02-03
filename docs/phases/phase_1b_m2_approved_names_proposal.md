@@ -1,4 +1,4 @@
-# Phase 1B — M2 Parse Approved Names (Proposal)
+# Phase 1B — M2 Parse Approved Names
 
 ## Purpose
 This document proposes the exact internal names (files, classes, fields) needed to implement M2 Parse
@@ -38,6 +38,26 @@ Once approved, these names become authoritative and must be reused exactly.
 - Would require exhaustive schema mapping upfront
 - Risk of losing unknown/future elements
 - Premature interpretation before binding phase
+
+---
+
+## Definition of "Lossless" for M2
+
+**Semantic preservation**, not byte-identical reconstruction.
+
+Preserved:
+- All XML element tags
+- All XML attributes (key-value pairs)
+- All text content
+- Element ordering (document order)
+
+Not guaranteed:
+- Exact whitespace between elements
+- Attribute ordering within an element (XML spec treats as unordered)
+- XML declaration / encoding header
+- Comments and processing instructions (may be stripped)
+
+This definition supports downstream binding/resolution while avoiding parser complexity.
 
 ---
 
@@ -97,7 +117,9 @@ Fields:
 - `Map<String, String> attributes` — All XML attributes as key-value pairs
 - `List<ElementDto> children` — Child elements in document order
 - `String? textContent` — Text content if present (null if element has only children)
-- `int sourceLineNumber` — Line number in source XML for diagnostics
+- `int? sourceIndex` — Document-order index for diagnostics (nullable; best-effort)
+
+**Note on sourceIndex:** Dart's xml package does not guarantee line/column numbers. sourceIndex is a document-order counter (0, 1, 2, ...) assigned during parse traversal. It is optional and best-effort; absence does not affect semantic correctness.
 
 ---
 
@@ -136,7 +158,7 @@ Exception for parse errors with diagnostic context.
 Fields:
 - `String message` — Human-readable error description
 - `String? fileId` — Which file failed (if known)
-- `int? lineNumber` — Where in the file (if known)
+- `int? sourceIndex` — Document-order index where error occurred (if known)
 - `String? details` — Additional context
 
 ---
@@ -174,10 +196,14 @@ Before implementation, add to `/docs/glossary.md`:
 ---
 
 ## Approval Checklist
-- [ ] File layout approved
-- [ ] Core model names approved (ElementDto, ParsedFile, ParsedPackBundle, ParseFailure)
-- [ ] Service name approved (ParseService)
-- [ ] Generic DTO approach approved (vs typed DTOs)
-- [ ] Output bundle shape approved
+- [x] File layout approved
+- [x] Core model names approved (ElementDto, ParsedFile, ParsedPackBundle, ParseFailure)
+- [x] Service name approved (ParseService)
+- [x] Generic DTO approach approved (vs typed DTOs)
+- [x] Output bundle shape approved
+- [x] sourceIndex caveat documented (nullable, best-effort)
+- [x] Lossless definition documented (semantic, not byte-identical)
+
+**Approved: 2026-02-03**
 
 Any change requires explicit approval and documentation update.

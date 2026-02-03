@@ -44,6 +44,18 @@ Upstream repository manifest (index.bsi / index.xml) that lists available files,
 ## Version Token
 Identifier used to detect file changes. Tier 1: index-provided version for cheap checks. Tier 2: SHA-256 fileId for verification after download.
 
+## Element DTO
+Generic representation of any XML element preserving tag name, attributes, child elements, and text content. Document order preserved via ordered child lists.
+
+## Parsed File
+A single XML file converted to Element DTO form with source provenance (fileId linking back to raw bytes).
+
+## Parsed Pack Bundle
+The complete DTO output for a pack: parsed game system + primary catalog + dependency catalogs. Produced by M2 Parse.
+
+## Parse Failure
+Exception thrown when XML parsing fails, with diagnostic context (fileId, sourceIndex, message).
+
 ---
 
 Any concept used in code must appear here first.
