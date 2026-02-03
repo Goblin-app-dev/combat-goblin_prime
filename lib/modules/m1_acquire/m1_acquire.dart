@@ -5,3 +5,6 @@ export 'models/source_file_metadata.dart';
 export 'models/preflight_scan_result.dart';
 export 'models/import_dependency.dart';
 export 'models/acquire_failure.dart';
+export 'models/dependency_record.dart';
+export 'models/source_locator.dart';
+export 'models/pack_manifest.dart';
