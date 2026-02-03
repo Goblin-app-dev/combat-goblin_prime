@@ -18,7 +18,10 @@ This document uses only generic terms:
   - `*Repository` for persistence abstraction
   - `*Result` / `*Bundle` for returned values
   - `*Metadata` for metadata records
-- “Id” not “ID”
+  - `*Record` for version/tracking records
+  - `*Locator` for source identification
+  - `*Manifest` for persisted pack records
+- "Id" not "ID"
 - Fields are `lowerCamelCase`
 - Types are `UpperCamelCase`
 - No prohibited IP terms used
@@ -37,6 +40,9 @@ This document uses only generic terms:
 - `models/preflight_scan_result.dart`
 - `models/import_dependency.dart`
 - `models/acquire_failure.dart`
+- `models/dependency_record.dart`
+- `models/source_locator.dart`
+- `models/pack_manifest.dart`
 
 ---
 
@@ -55,7 +61,10 @@ lib/modules/m1_acquire/
 │ ├── source_file_metadata.dart
 │ ├── preflight_scan_result.dart
 │ ├── import_dependency.dart
-│ └── acquire_failure.dart
+│ ├── acquire_failure.dart
+│ ├── dependency_record.dart
+│ ├── source_locator.dart
+│ └── pack_manifest.dart
 ├── services/
 │ ├── acquire_service.dart
 │ └── preflight_scan_service.dart
@@ -122,6 +131,47 @@ Fields: none
 
 ---
 
+### DependencyRecord
+**File:** `models/dependency_record.dart`
+
+Fields:
+- `String rootId`
+- `String fileId`
+- `String? revision`
+- `String? gitBlobSha`
+
+---
+
+### SourceLocator
+**File:** `models/source_locator.dart`
+
+Fields:
+- `String sourceKey`
+- `String sourceUrl`
+- `String? branch`
+- `String? commitSha`
+
+---
+
+### PackManifest
+**File:** `models/pack_manifest.dart`
+
+Fields:
+- `String packId`
+- `DateTime installedAt`
+- `String gameSystemRootId`
+- `String gameSystemFileId`
+- `String? gameSystemRevision`
+- `String? gameSystemGitBlobSha`
+- `String primaryCatalogRootId`
+- `String primaryCatalogFileId`
+- `String? primaryCatalogRevision`
+- `String? primaryCatalogGitBlobSha`
+- `List<DependencyRecord> dependencies`
+- `SourceLocator source`
+
+---
+
 ### RawPackBundle
 **File:** `models/raw_pack_bundle.dart`
 
@@ -143,6 +193,8 @@ Fields:
 
 - `List<Diagnostic> acquireDiagnostics`
 
+- `PackManifest manifest`
+
 ---
 
 ### AcquireFailure
@@ -151,6 +203,7 @@ Fields:
 Fields:
 - `String message`
 - `String? details`
+- `List<String> missingTargetIds`
 
 ---
 
@@ -181,13 +234,15 @@ Methods:
 **File:** `services/acquire_service.dart`
 
 Method:
-- `Future<RawPackBundle> buildBundle({required List<int> gameSystemBytes, required String gameSystemExternalFileName, required List<int> primaryCatalogBytes, required String primaryCatalogExternalFileName, required Future<List<int>?> Function(String missingTargetId) requestDependencyBytes})`
+- `Future<RawPackBundle> buildBundle({required List<int> gameSystemBytes, required String gameSystemExternalFileName, required List<int> primaryCatalogBytes, required String primaryCatalogExternalFileName, required Future<List<int>?> Function(String missingTargetId) requestDependencyBytes, required SourceLocator source})`
 
 ---
 
 ## Cross-Module Contract Notes
 - M2 consumes `RawPackBundle` only.
 - M3 nodes must be able to surface `SourceFileMetadata.fileId` and `SourceFileType`.
+- Pack Manager persists `PackManifest` after downstream success.
+- Update Service uses `PackManifest` to check for upstream changes.
 
 ---
 
@@ -196,5 +251,10 @@ Method:
 - [x] Core model names approved
 - [x] Service names approved
 - [x] Output bundle shape approved
+- [x] DependencyRecord approved (2026-02-02)
+- [x] SourceLocator approved (2026-02-02)
+- [x] PackManifest approved (2026-02-02)
+- [x] AcquireFailure.missingTargetIds approved (2026-02-02)
+- [x] RawPackBundle.manifest approved (2026-02-02)
 
 Any change requires explicit approval and documentation update.
