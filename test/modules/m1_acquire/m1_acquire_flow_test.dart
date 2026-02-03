@@ -6,6 +6,13 @@ import 'package:combat_goblin_prime/modules/m1_acquire/m1_acquire.dart';
 import 'package:combat_goblin_prime/modules/m1_acquire/services/preflight_scan_service.dart';
 
 void main() {
+  // Test source locator for BSData wh40k-10e
+  const testSource = SourceLocator(
+    sourceKey: 'bsdata_wh40k_10e',
+    sourceUrl: 'https://github.com/BSData/wh40k-10e',
+    branch: 'main',
+  );
+
   group('M1 Acquire: flow harness (fixtures)', () {
     setUp(() async {
       // Always start clean: deterministic storage root.
@@ -82,11 +89,13 @@ void main() {
             print('[TEST] Loading dependency from: $filePath');
             return await file.readAsBytes();
           },
+          source: testSource,
         );
       } on AcquireFailure catch (e) {
         // Expected outcome when the primary catalog declares dependencies and
         // the harness does not provide them.
         print('[TEST OUTCOME] AcquireFailure thrown: ${e.message}');
+        print('[TEST OUTCOME] Missing targetIds: ${e.missingTargetIds}');
         expect(e.message.isNotEmpty, isTrue);
         return;
       }
@@ -130,6 +139,32 @@ void main() {
       expect(b.primaryCatalogMetadata.storedPath.contains('catalogs'), isTrue);
       expect(b.primaryCatalogMetadata.storedPath.contains(b.primaryCatalogPreflight.rootId), isTrue);
 
+      // Manifest validation
+      print('[TEST OUTCOME] Manifest validation:');
+      print('[TEST OUTCOME]   packId: ${b.manifest.packId}');
+      print('[TEST OUTCOME]   gameSystemRootId: ${b.manifest.gameSystemRootId}');
+      print('[TEST OUTCOME]   primaryCatalogRootId: ${b.manifest.primaryCatalogRootId}');
+      print('[TEST OUTCOME]   dependencies count: ${b.manifest.dependencies.length}');
+      print('[TEST OUTCOME]   source: ${b.manifest.source.sourceKey}');
+
+      expect(b.manifest.packId, b.packId);
+      expect(b.manifest.gameSystemRootId, b.gameSystemPreflight.rootId);
+      expect(b.manifest.gameSystemFileId, b.gameSystemMetadata.fileId);
+      expect(b.manifest.primaryCatalogRootId, b.primaryCatalogPreflight.rootId);
+      expect(b.manifest.primaryCatalogFileId, b.primaryCatalogMetadata.fileId);
+      expect(b.manifest.dependencies.length, b.dependencyCatalogMetadatas.length);
+      expect(b.manifest.source.sourceKey, testSource.sourceKey);
+      expect(b.manifest.source.sourceUrl, testSource.sourceUrl);
+
+      // Verify each dependency record
+      for (var i = 0; i < b.manifest.dependencies.length; i++) {
+        final depRecord = b.manifest.dependencies[i];
+        final depMetadata = b.dependencyCatalogMetadatas[i];
+        final depPreflight = b.dependencyCatalogPreflights[i];
+        expect(depRecord.rootId, depPreflight.rootId);
+        expect(depRecord.fileId, depMetadata.fileId);
+      }
+
       // Idempotency: second run must not change ids or break overwrite rules.
       final bundle2 = await acquireService.buildBundle(
         gameSystemBytes: gameSystemBytes,
@@ -143,11 +178,13 @@ void main() {
           if (!await file.exists()) return null;
           return await file.readAsBytes();
         },
+        source: testSource,
       );
 
       expect(bundle2.packId, b.packId);
       expect(bundle2.gameSystemMetadata.fileId, b.gameSystemMetadata.fileId);
       expect(bundle2.primaryCatalogMetadata.fileId, b.primaryCatalogMetadata.fileId);
+      expect(bundle2.manifest.packId, b.manifest.packId);
 
       expect(await File(bundle2.gameSystemMetadata.storedPath).exists(), isTrue);
       expect(await File(bundle2.primaryCatalogMetadata.storedPath).exists(), isTrue);
