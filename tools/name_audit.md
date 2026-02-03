@@ -5,7 +5,7 @@
 This checklist MUST be completed for every change or PR.
 If any required item is unchecked, the change is invalid.
 
-Step 6: Add PackManifest, SourceLocator, DependencyRecord for update checking workflow.
+Step 7: Document Phase 1B+ layer contracts (docs-only, no code changes).
 
 ---
 
@@ -14,20 +14,12 @@ Step 6: Add PackManifest, SourceLocator, DependencyRecord for update checking wo
 - [x] Full contents provided for every changed file
 
 ### New Files
-- lib/modules/m1_acquire/models/dependency_record.dart (new: DependencyRecord model)
-- lib/modules/m1_acquire/models/source_locator.dart (new: SourceLocator model)
-- lib/modules/m1_acquire/models/pack_manifest.dart (new: PackManifest model)
+- (none)
 
 ### Modified Files
-- lib/modules/m1_acquire/models/acquire_failure.dart (added: missingTargetIds field)
-- lib/modules/m1_acquire/models/raw_pack_bundle.dart (added: manifest field)
-- lib/modules/m1_acquire/services/acquire_service.dart (added: source parameter, manifest building)
-- lib/modules/m1_acquire/m1_acquire.dart (added: new model exports)
-- test/modules/m1_acquire/m1_acquire_flow_test.dart (added: source parameter, manifest validation)
-- docs/glossary.md (added: new term definitions)
-- docs/name_change_log.md (added: new name entries)
-- docs/phases/phase_1a_m1_approved_names_proposal.md (added: new model specs)
-- docs/module_io_registry.md (updated: M1 IO contracts)
+- docs/module_io_registry.md (added: Phase 1B+ layer contracts for Index Reader, Downloader, Orchestrator, Cleanup, Update Checker)
+- docs/glossary.md (added: Attempt Status Wrapper, Index (BSData), Version Token definitions)
+- tools/name_audit.md (updated: Step 7 docs-only change)
 
 ---
 
@@ -43,21 +35,16 @@ Step 6: Add PackManifest, SourceLocator, DependencyRecord for update checking wo
 ---
 
 ## New or Changed Names
-- [ ] No new or changed public names introduced
-- [x] Yes — new or changed names were introduced
+- [x] No new or changed public names introduced
+- [ ] Yes — new or changed names were introduced
 
-### New Names (all approved 2026-02-02)
-- DependencyRecord (model)
-- SourceLocator (model)
-- PackManifest (model)
-- AcquireFailure.missingTargetIds (field)
-- RawPackBundle.manifest (field)
-- AcquireService.buildBundle source parameter
+This is a docs-only change. No new public API names introduced.
+Glossary terms added are conceptual definitions, not code symbols:
+- Attempt Status Wrapper (concept, not a type)
+- Index (BSData) (external ecosystem term)
+- Version Token (concept, not a type)
 
-All names documented in:
-- /docs/glossary.md
-- /docs/name_change_log.md
-- /docs/phases/phase_1a_m1_approved_names_proposal.md
+Future Phase 1B+ layers described use conceptual names only (Index Reader, Downloader, Orchestrator, Cleanup, Update Checker) — actual implementation names will be proposed and approved before coding.
 
 ---
 
@@ -72,7 +59,7 @@ All names documented in:
 - [x] No frozen module was modified
 - [ ] Frozen module modified with explicit approval
 
-M1 Acquire is not yet frozen; changes are permitted.
+Docs-only change; no code modified.
 
 ---
 
@@ -83,14 +70,11 @@ M1 Acquire is not yet frozen; changes are permitted.
 ---
 
 ## Determinism & Debuggability
-- [x] Output is deterministic
-- [x] Diagnostics are structured and explain failures
-- [x] No silent failure paths introduced
-- [x] AcquireFailure now includes missingTargetIds for actionable UI prompts
+- [x] N/A — docs-only change, no runtime behavior affected
 
 ---
 
 ## Final Verification
 - [x] Names copied, not retyped
 - [x] Naming docs are authoritative and current
-- [x] Code matches approved names exactly
+- [x] Conceptual layer names are proposals only, not final implementation names
