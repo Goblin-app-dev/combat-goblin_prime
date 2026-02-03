@@ -1,3 +1,4 @@
+import 'pack_manifest.dart';
 import 'preflight_scan_result.dart';
 import 'source_file_metadata.dart';
 
@@ -5,6 +6,7 @@ class Diagnostic {
   const Diagnostic();
 }
 
+/// The lossless collection of source files and metadata produced by M1 Acquire.
 class RawPackBundle {
   final String packId;
   final DateTime createdAt;
@@ -23,6 +25,10 @@ class RawPackBundle {
 
   final List<Diagnostic> acquireDiagnostics;
 
+  /// Manifest data for persistence after downstream success.
+  /// Contains version tokens for update checking.
+  final PackManifest manifest;
+
   const RawPackBundle({
     required this.packId,
     required this.createdAt,
@@ -36,5 +42,6 @@ class RawPackBundle {
     required this.dependencyCatalogPreflights,
     required this.dependencyCatalogBytesList,
     required this.acquireDiagnostics,
+    required this.manifest,
   });
 }
