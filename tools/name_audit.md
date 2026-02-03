@@ -5,7 +5,7 @@
 This checklist MUST be completed for every change or PR.
 If any required item is unchecked, the change is invalid.
 
-Step 7: Document Phase 1B+ layer contracts (docs-only, no code changes).
+Step 8: Add Import Dependency and Update definitions to glossary (docs-only).
 
 ---
 
@@ -17,9 +17,8 @@ Step 7: Document Phase 1B+ layer contracts (docs-only, no code changes).
 - (none)
 
 ### Modified Files
-- docs/module_io_registry.md (added: Phase 1B+ layer contracts for Index Reader, Downloader, Orchestrator, Cleanup, Update Checker)
-- docs/glossary.md (added: Attempt Status Wrapper, Index (BSData), Version Token definitions)
-- tools/name_audit.md (updated: Step 7 docs-only change)
+- docs/glossary.md (added: Import Dependency, Update definitions)
+- tools/name_audit.md (updated: Step 8 docs-only change)
 
 ---
 
@@ -39,12 +38,9 @@ Step 7: Document Phase 1B+ layer contracts (docs-only, no code changes).
 - [ ] Yes — new or changed names were introduced
 
 This is a docs-only change. No new public API names introduced.
-Glossary terms added are conceptual definitions, not code symbols:
-- Attempt Status Wrapper (concept, not a type)
-- Index (BSData) (external ecosystem term)
-- Version Token (concept, not a type)
-
-Future Phase 1B+ layers described use conceptual names only (Index Reader, Downloader, Orchestrator, Cleanup, Update Checker) — actual implementation names will be proposed and approved before coding.
+Glossary terms added align with existing code:
+- Import Dependency (aligns with ImportDependency model in code)
+- Update (defines the operation semantics for future Update Checker)
 
 ---
 
