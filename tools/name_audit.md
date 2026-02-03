@@ -5,7 +5,7 @@
 This checklist MUST be completed for every change or PR.
 If any required item is unchecked, the change is invalid.
 
-Step 9: Phase 1B M2 Parse naming proposal (docs-only, awaiting approval).
+Step 10: Phase 1B M2 Parse naming approved + glossary + stub code.
 
 ---
 
@@ -14,11 +14,18 @@ Step 9: Phase 1B M2 Parse naming proposal (docs-only, awaiting approval).
 - [x] Full contents provided for every changed file
 
 ### New Files
-- docs/phases/phase_1b_m2_approved_names_proposal.md (M2 naming proposal)
+- lib/modules/m2_parse/m2_parse.dart (barrel)
+- lib/modules/m2_parse/models/element_dto.dart
+- lib/modules/m2_parse/models/parsed_file.dart
+- lib/modules/m2_parse/models/parsed_pack_bundle.dart
+- lib/modules/m2_parse/models/parse_failure.dart
+- lib/modules/m2_parse/services/parse_service.dart
 
 ### Modified Files
-- docs/module_io_registry.md (added: M2 Parse section)
-- tools/name_audit.md (updated: Step 9 naming proposal)
+- docs/phases/phase_1b_m2_approved_names_proposal.md (approved, caveats documented)
+- docs/module_io_registry.md (M2 Parse section finalized)
+- docs/glossary.md (added: Element DTO, Parsed File, Parsed Pack Bundle, Parse Failure)
+- tools/name_audit.md (updated: Step 10)
 
 ---
 
@@ -34,21 +41,23 @@ Step 9: Phase 1B M2 Parse naming proposal (docs-only, awaiting approval).
 ---
 
 ## New or Changed Names
-- [x] No new or changed public names introduced
-- [ ] Yes — new or changed names were introduced
+- [ ] No new or changed public names introduced
+- [x] Yes — new or changed names were introduced
 
-This is a naming proposal (docs-only). No code written yet.
-Proposed names awaiting approval:
+### New Names (approved 2026-02-03)
 - ElementDto (generic XML element representation)
-- ParsedFile (parsed file with provenance)
+- ParsedFile (parsed file with source provenance)
 - ParsedPackBundle (complete parsed output)
 - ParseFailure (parse error with diagnostics)
 - ParseService (bytes → DTO conversion)
 
-Glossary additions required before implementation:
-- Element DTO
-- Parsed File
-- Parsed Pack Bundle
+All names documented in:
+- /docs/glossary.md
+- /docs/phases/phase_1b_m2_approved_names_proposal.md
+
+Caveats documented:
+- sourceIndex is nullable/best-effort (line numbers not guaranteed by xml package)
+- "Lossless" means semantic preservation, not byte-identical reconstruction
 
 ---
 
