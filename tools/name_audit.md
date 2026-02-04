@@ -5,10 +5,10 @@
 This checklist MUST be completed for every change or PR.
 If any required item is unchecked, the change is invalid.
 
-Step 14: Phase 1C (M3 Wrap) implementation complete — tests pending.
+Step 15: Phase 1C (M3 Wrap) — FROZEN (2026-02-04). All tests passed.
 
 **PROCESS NOTE:** M3 code landed (commit `88c6a77`) before docs trail was fully consistent.
-Docs trail repaired in this commit. No docs-first compliance claimed for M3.
+Docs trail repaired in commit `b9ccb03`. No docs-first compliance claimed for M3.
 
 ---
 
@@ -63,7 +63,7 @@ All names documented in:
 - /docs/phases/phase_1c_m3_approved_names_proposal.md
 - /docs/glossary.md
 
-**APPROVED AND IMPLEMENTED. Tests pending.**
+**FROZEN.** All 17 tests passed (2026-02-04).
 
 ---
 
@@ -78,7 +78,7 @@ All names documented in:
 - [x] No frozen module was modified
 - [ ] Frozen module modified with explicit approval
 
-M1 Acquire frozen. M2 Parse frozen. M3 Wrap implemented (tests pending, freeze pending).
+M1 Acquire frozen. M2 Parse frozen. M3 Wrap frozen (2026-02-04).
 
 ---
 
@@ -99,5 +99,5 @@ M1 Acquire frozen. M2 Parse frozen. M3 Wrap implemented (tests pending, freeze p
 - [x] Naming proposal document created
 - [x] Glossary updated with M3 terms
 - [x] Module IO registry updated with M3 contract
-- [x] Implementation complete — tests pending
-- [ ] **FREEZE PENDING** — mark M3 frozen after tests pass
+- [x] Implementation complete — tests passed
+- [x] **M3 FROZEN** (2026-02-04)

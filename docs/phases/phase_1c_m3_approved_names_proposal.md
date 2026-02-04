@@ -4,7 +4,7 @@
 
 - Phase 1A (M1 Acquire): **FROZEN**
 - Phase 1B (M2 Parse): **FROZEN**
-- Phase 1C (M3 Wrap): **IMPLEMENTED** — tests pending, freeze pending
+- Phase 1C (M3 Wrap): **FROZEN** (2026-02-04)
 
 ---
 
