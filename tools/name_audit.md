@@ -5,7 +5,7 @@
 This checklist MUST be completed for every change or PR.
 If any required item is unchecked, the change is invalid.
 
-Step 11: Add M2 Parse integration test (acquire → parse flow).
+Step 12: Phase 1B (M2 Parse) structural validation tests added. M2 frozen.
 
 ---
 
@@ -14,10 +14,11 @@ Step 11: Add M2 Parse integration test (acquire → parse flow).
 - [x] Full contents provided for every changed file
 
 ### New Files
-- test/modules/m2_parse/m2_parse_flow_test.dart (integration test: acquire → parse)
+- test/modules/m2_parse/m2_parse_invariants_test.dart (structural invariant tests)
 
 ### Modified Files
-- tools/name_audit.md (updated: Step 11)
+- tools/name_audit.md (updated: Step 12)
+- docs/module_io_registry.md (marked M2 Parse as frozen)
 
 ---
 
@@ -36,8 +37,8 @@ Step 11: Add M2 Parse integration test (acquire → parse flow).
 - [x] No new or changed public names introduced
 - [ ] Yes — new or changed names were introduced
 
-This is an app-serving integration test. No new public API names introduced.
-Test validates the M1 Acquire → M2 Parse pipeline using existing fixtures.
+Structural invariant tests only. No new public API names introduced.
+Tests validate M2 losslessness guarantees: tag, attributes, child order, text, provenance, determinism.
 
 ---
 
@@ -52,7 +53,7 @@ Test validates the M1 Acquire → M2 Parse pipeline using existing fixtures.
 - [x] No frozen module was modified
 - [ ] Frozen module modified with explicit approval
 
-Test addition only. M1 Acquire remains frozen. M2 Parse stub unchanged.
+Test addition only. M1 Acquire frozen. M2 Parse now frozen (API-stable, no logic changes).
 
 ---
 
@@ -72,3 +73,5 @@ Test addition only. M1 Acquire remains frozen. M2 Parse stub unchanged.
 - [x] Names copied, not retyped
 - [x] Test imports use approved barrel paths
 - [x] No deep schema assertions (deferred to Phase 2)
+- [x] M2 API verified against phase_1b_m2_approved_names_proposal.md
+- [x] M1 files unchanged

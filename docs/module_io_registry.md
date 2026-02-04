@@ -6,7 +6,9 @@ Required for phase freeze validation.
 
 ---
 
-## M1 Acquire
+## M1 Acquire (Phase 1A) — FROZEN
+
+**Status:** Frozen (2026-02-03). No behavior changes; only bug fixes with explicit approval.
 
 ### Inputs
 - User-selected file bytes (gameSystem .gst, primaryCatalog .cat)
@@ -29,9 +31,11 @@ Required for phase freeze validation.
 
 ---
 
-## M2 Parse (Phase 1B)
+## M2 Parse (Phase 1B) — FROZEN
 
 Converts raw XML bytes into generic DTO trees preserving structure and document order.
+
+**Status:** Frozen (2026-02-03). No behavior changes; only bug fixes with explicit approval.
 
 ### Inputs
 - RawPackBundle (from M1 Acquire)
