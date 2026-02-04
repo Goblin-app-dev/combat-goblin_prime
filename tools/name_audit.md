@@ -5,7 +5,7 @@
 This checklist MUST be completed for every change or PR.
 If any required item is unchecked, the change is invalid.
 
-Step 13: Phase 1C (M3 Wrap) naming proposal — docs-first, awaiting approval.
+Step 14: Phase 1C (M3 Wrap) implementation complete — tests pending.
 
 ---
 
@@ -15,11 +15,20 @@ Step 13: Phase 1C (M3 Wrap) naming proposal — docs-first, awaiting approval.
 
 ### New Files
 - docs/phases/phase_1c_m3_approved_names_proposal.md (M3 naming proposal)
+- lib/modules/m3_wrap/m3_wrap.dart (barrel file)
+- lib/modules/m3_wrap/models/node_ref.dart
+- lib/modules/m3_wrap/models/wrapped_node.dart
+- lib/modules/m3_wrap/models/wrapped_file.dart
+- lib/modules/m3_wrap/models/wrapped_pack_bundle.dart
+- lib/modules/m3_wrap/models/wrap_failure.dart
+- lib/modules/m3_wrap/services/wrap_service.dart
+- test/modules/m3_wrap/m3_wrap_flow_test.dart
+- test/modules/m3_wrap/m3_wrap_invariants_test.dart
 
 ### Modified Files
 - docs/module_io_registry.md (added M3 Wrap proposal section)
 - docs/glossary.md (added: Node Ref, Wrapped Node, Wrapped File, Wrapped Pack Bundle, Wrap Failure)
-- tools/name_audit.md (updated: Step 13)
+- tools/name_audit.md (updated: Step 14)
 
 ---
 
@@ -38,7 +47,7 @@ Step 13: Phase 1C (M3 Wrap) naming proposal — docs-first, awaiting approval.
 - [ ] No new or changed public names introduced
 - [x] Yes — new or changed names were introduced
 
-### Proposed Names (awaiting approval)
+### Implemented Names (approved)
 - NodeRef (strongly-typed node handle)
 - WrappedNode (indexed element with provenance)
 - WrappedFile (per-file node table + idIndex)
@@ -50,7 +59,7 @@ All names documented in:
 - /docs/phases/phase_1c_m3_approved_names_proposal.md
 - /docs/glossary.md
 
-**NO CODE UNTIL APPROVAL.**
+**APPROVED AND IMPLEMENTED. Tests pending.**
 
 ---
 
@@ -86,4 +95,5 @@ Docs-only change. M1 Acquire frozen. M2 Parse frozen. M3 Wrap proposal only.
 - [x] Naming proposal document created
 - [x] Glossary updated with M3 terms
 - [x] Module IO registry updated with M3 contract
-- [ ] **AWAITING APPROVAL** — no code written yet
+- [x] Implementation complete — tests pending
+- [ ] **FREEZE PENDING** — mark M3 frozen after tests pass
