@@ -7,6 +7,9 @@ If any required item is unchecked, the change is invalid.
 
 Step 14: Phase 1C (M3 Wrap) implementation complete — tests pending.
 
+**PROCESS NOTE:** M3 code landed (commit `88c6a77`) before docs trail was fully consistent.
+Docs trail repaired in this commit. No docs-first compliance claimed for M3.
+
 ---
 
 ## Files Touched
@@ -26,9 +29,10 @@ Step 14: Phase 1C (M3 Wrap) implementation complete — tests pending.
 - test/modules/m3_wrap/m3_wrap_invariants_test.dart
 
 ### Modified Files
-- docs/module_io_registry.md (added M3 Wrap proposal section)
+- docs/phases/phase_1c_m3_approved_names_proposal.md (updated status: IMPLEMENTED, approval checklist marked complete)
+- docs/module_io_registry.md (updated M3 status: Implemented, tests pending)
 - docs/glossary.md (added: Node Ref, Wrapped Node, Wrapped File, Wrapped Pack Bundle, Wrap Failure)
-- tools/name_audit.md (updated: Step 14)
+- tools/name_audit.md (added process repair note, updated Step 14)
 
 ---
 
@@ -74,7 +78,7 @@ All names documented in:
 - [x] No frozen module was modified
 - [ ] Frozen module modified with explicit approval
 
-Docs-only change. M1 Acquire frozen. M2 Parse frozen. M3 Wrap proposal only.
+M1 Acquire frozen. M2 Parse frozen. M3 Wrap implemented (tests pending, freeze pending).
 
 ---
 

@@ -4,7 +4,7 @@
 
 - Phase 1A (M1 Acquire): **FROZEN**
 - Phase 1B (M2 Parse): **FROZEN**
-- Phase 1C (M3 Wrap): **AUTHORIZED** (docs-first, awaiting approval)
+- Phase 1C (M3 Wrap): **IMPLEMENTED** — tests pending, freeze pending
 
 ---
 
@@ -257,11 +257,11 @@ Before implementation, add to `/docs/glossary.md`:
 
 ## Approval Checklist
 
-- [ ] File layout approved
-- [ ] Core model names approved (NodeRef, WrappedNode, WrappedFile, WrappedPackBundle, WrapFailure)
-- [ ] Service name approved (WrapService)
-- [ ] Traversal contract approved (pre-order depth-first, root=0)
-- [ ] idIndex collision policy approved (List-based, no throwing)
-- [ ] Provenance fields approved (fileId/fileType on every node)
+- [x] File layout approved
+- [x] Core model names approved (NodeRef, WrappedNode, WrappedFile, WrappedPackBundle, WrapFailure)
+- [x] Service name approved (WrapService)
+- [x] Traversal contract approved (pre-order depth-first, root=0)
+- [x] idIndex collision policy approved (List-based, no throwing)
+- [x] Provenance fields approved (fileId/fileType on every node)
 
-**Awaiting approval before any code.**
+**IMPLEMENTED.** Code landed in commit `88c6a77`. Tests pending before freeze.

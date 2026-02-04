@@ -66,11 +66,11 @@ Generic ElementDto approach chosen over typed DTOs:
 
 ---
 
-## M3 Wrap (Phase 1C) — Proposal
+## M3 Wrap (Phase 1C) — Implemented
 
 Converts parsed DTO trees into wrapped, indexed, navigable node graphs.
 
-**Status:** Awaiting approval. Docs-first phase.
+**Status:** Implemented (commit `88c6a77`). Tests pending. Freeze pending.
 
 ### Inputs
 - ParsedPackBundle (from M2 Parse)
