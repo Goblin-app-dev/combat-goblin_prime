@@ -66,6 +66,56 @@ Generic ElementDto approach chosen over typed DTOs:
 
 ---
 
+## M3 Wrap (Phase 1C) — Implemented
+
+Converts parsed DTO trees into wrapped, indexed, navigable node graphs.
+
+**Status:** Implemented (commit `88c6a77`). Tests pending. Freeze pending.
+
+### Inputs
+- ParsedPackBundle (from M2 Parse)
+
+### Outputs
+- WrappedPackBundle containing:
+  - WrappedFile for gameSystem (flat node table + idIndex)
+  - WrappedFile for primaryCatalog
+  - List<WrappedFile> for dependencyCatalogs
+  - packId and wrappedAt timestamp
+
+### Behavior
+- Pre-order depth-first traversal of ElementDto trees
+- Deterministic nodeIndex assignment (root=0, +1 per node)
+- Builds parent/child relationships with NodeRef handles
+- Computes depth for each node
+- Builds per-file idIndex: `Map<String, List<NodeRef>>`
+- Preserves provenance (fileId/fileType on every node)
+- No cross-file linking
+- No semantic interpretation
+
+### Traversal Contract
+- Pre-order depth-first
+- Children visited in ElementDto.children order
+- root.nodeIndex == 0
+- Re-wrapping same input yields identical indices
+
+### idIndex Contract
+- Maps `id` attribute → List<NodeRef>
+- Duplicate IDs preserved (list contains all occurrences)
+- No throwing for duplicates
+
+### Error Contracts
+- WrapFailure for structural corruption only
+- Not used for duplicate IDs or semantic issues
+
+### Design Decision
+Flat node table with NodeRef handles chosen over recursive structures:
+- Stack-safe traversal
+- Deterministic indexing
+- O(1) node lookup by index
+- Explicit provenance per node
+
+---
+
 ## Index Reader (Future — Phase 1B+)
 
 Reads and caches the upstream repository index for dependency resolution and update checking.

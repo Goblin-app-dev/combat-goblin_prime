@@ -5,7 +5,10 @@
 This checklist MUST be completed for every change or PR.
 If any required item is unchecked, the change is invalid.
 
-Step 12: Phase 1B (M2 Parse) structural validation tests added. M2 frozen.
+Step 14: Phase 1C (M3 Wrap) implementation complete — tests pending.
+
+**PROCESS NOTE:** M3 code landed (commit `88c6a77`) before docs trail was fully consistent.
+Docs trail repaired in this commit. No docs-first compliance claimed for M3.
 
 ---
 
@@ -14,11 +17,22 @@ Step 12: Phase 1B (M2 Parse) structural validation tests added. M2 frozen.
 - [x] Full contents provided for every changed file
 
 ### New Files
-- test/modules/m2_parse/m2_parse_invariants_test.dart (structural invariant tests)
+- docs/phases/phase_1c_m3_approved_names_proposal.md (M3 naming proposal)
+- lib/modules/m3_wrap/m3_wrap.dart (barrel file)
+- lib/modules/m3_wrap/models/node_ref.dart
+- lib/modules/m3_wrap/models/wrapped_node.dart
+- lib/modules/m3_wrap/models/wrapped_file.dart
+- lib/modules/m3_wrap/models/wrapped_pack_bundle.dart
+- lib/modules/m3_wrap/models/wrap_failure.dart
+- lib/modules/m3_wrap/services/wrap_service.dart
+- test/modules/m3_wrap/m3_wrap_flow_test.dart
+- test/modules/m3_wrap/m3_wrap_invariants_test.dart
 
 ### Modified Files
-- tools/name_audit.md (updated: Step 12)
-- docs/module_io_registry.md (marked M2 Parse as frozen)
+- docs/phases/phase_1c_m3_approved_names_proposal.md (updated status: IMPLEMENTED, approval checklist marked complete)
+- docs/module_io_registry.md (updated M3 status: Implemented, tests pending)
+- docs/glossary.md (added: Node Ref, Wrapped Node, Wrapped File, Wrapped Pack Bundle, Wrap Failure)
+- tools/name_audit.md (added process repair note, updated Step 14)
 
 ---
 
@@ -34,11 +48,22 @@ Step 12: Phase 1B (M2 Parse) structural validation tests added. M2 frozen.
 ---
 
 ## New or Changed Names
-- [x] No new or changed public names introduced
-- [ ] Yes — new or changed names were introduced
+- [ ] No new or changed public names introduced
+- [x] Yes — new or changed names were introduced
 
-Structural invariant tests only. No new public API names introduced.
-Tests validate M2 losslessness guarantees: tag, attributes, child order, text, provenance, determinism.
+### Implemented Names (approved)
+- NodeRef (strongly-typed node handle)
+- WrappedNode (indexed element with provenance)
+- WrappedFile (per-file node table + idIndex)
+- WrappedPackBundle (complete M3 output)
+- WrapFailure (structural corruption exception)
+- WrapService (ParsedPackBundle → WrappedPackBundle)
+
+All names documented in:
+- /docs/phases/phase_1c_m3_approved_names_proposal.md
+- /docs/glossary.md
+
+**APPROVED AND IMPLEMENTED. Tests pending.**
 
 ---
 
@@ -53,7 +78,7 @@ Tests validate M2 losslessness guarantees: tag, attributes, child order, text, p
 - [x] No frozen module was modified
 - [ ] Frozen module modified with explicit approval
 
-Test addition only. M1 Acquire frozen. M2 Parse now frozen (API-stable, no logic changes).
+M1 Acquire frozen. M2 Parse frozen. M3 Wrap implemented (tests pending, freeze pending).
 
 ---
 
@@ -64,14 +89,15 @@ Test addition only. M1 Acquire frozen. M2 Parse now frozen (API-stable, no logic
 ---
 
 ## Determinism & Debuggability
-- [x] Test validates deterministic pipeline (M1 → M2)
-- [x] Diagnostic output for debugging
+- [x] M3 traversal contract specifies deterministic indexing (pre-order depth-first, root=0)
+- [x] idIndex collision policy documented (list-based, no throwing)
 
 ---
 
 ## Final Verification
-- [x] Names copied, not retyped
-- [x] Test imports use approved barrel paths
-- [x] No deep schema assertions (deferred to Phase 2)
-- [x] M2 API verified against phase_1b_m2_approved_names_proposal.md
-- [x] M1 files unchanged
+- [x] Names follow established codebase patterns (m1_acquire, m2_parse → m3_wrap)
+- [x] Naming proposal document created
+- [x] Glossary updated with M3 terms
+- [x] Module IO registry updated with M3 contract
+- [x] Implementation complete — tests pending
+- [ ] **FREEZE PENDING** — mark M3 frozen after tests pass

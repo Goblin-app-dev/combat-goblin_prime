@@ -56,6 +56,21 @@ The complete DTO output for a pack: parsed game system + primary catalog + depen
 ## Parse Failure
 Exception thrown when XML parsing fails, with diagnostic context (fileId, sourceIndex, message).
 
+## Node Ref
+Strongly-typed handle for node identity within a WrappedFile. Contains nodeIndex. Prevents raw integer indices from leaking outside M3 internals.
+
+## Wrapped Node
+Indexed, navigable representation of an XML element with explicit provenance. Contains tag, attributes, text, parent/child references (as NodeRef), depth, and source fileId/fileType. Part of a flat node table in WrappedFile.
+
+## Wrapped File
+Per-file node table produced by M3 Wrap. Contains flat list of WrappedNode plus idIndex mapping `id` attribute to List<NodeRef>. No cross-file linking.
+
+## Wrapped Pack Bundle
+Complete M3 output for a pack: wrapped game system + primary catalog + dependency catalogs. One-to-one correspondence with ParsedPackBundle. Produced by M3 Wrap.
+
+## Wrap Failure
+Exception thrown for structural corruption during M3 wrapping. Not used for duplicate IDs or semantic issues.
+
 ---
 
 Any concept used in code must appear here first.
