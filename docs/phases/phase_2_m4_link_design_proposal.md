@@ -266,8 +266,8 @@ Catalogue (root element)
 | `profile` | Stat block (row of characteristics) | Yes | `infoLink.targetId` |
 | `rule` | Multi-line text, preserves line breaks | Yes | `infoLink.targetId` |
 | `categoryEntry` | Tags/categories (Infantry, HQ) | Yes | `categoryLink.targetId` |
-| `costType` | Point system definition (pts, PL) | Yes | `cost.typeId` (DEFERRED) |
-| `profileType` | Stat line schema (Unit, Ranged Weapons) | Yes | `profile.typeId` (DEFERRED) |
+| `costType` | Point system definition (pts, PL) | Yes | — |
+| `profileType` | Stat line schema (Unit, Ranged Weapons) | Yes | — |
 | `forceEntry` | Detachment structure | Yes | — |
 
 ### Cross-File Reference Mechanisms (for context)
@@ -296,13 +296,6 @@ Catalogue (root element)
 <categoryLink id="..." name="Infantry" targetId="4ac9-fd30-1e3d-b249" primary="true"/>
 ```
 - `targetId` references a `categoryEntry`
-
-**5. Constraint/Condition references (DEFERRED)**
-```xml
-<condition field="selections" scope="roster" childId="abc-123" .../>
-```
-- `childId` references another entry for conditional logic — **NOT resolved in M4**
-- `scope` defines query context — **NOT resolved in M4**
 
 ---
 
