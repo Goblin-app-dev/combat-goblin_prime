@@ -5,6 +5,22 @@
 This checklist MUST be completed for every change or PR.
 If any required item is unchecked, the change is invalid.
 
+Step 22: Phase 3 (M5 Bind) docs-first proposal created — awaiting approval.
+
+**Step 22 details:** M5 Bind docs-first proposal:
+- Created design proposal: docs/phases/phase_3_m5_bind_design_proposal.md
+- Created approved names proposal: docs/phases/phase_3_m5_bind_approved_names_proposal.md
+- Updated module_io_registry.md with M5 PROPOSAL section
+- Updated name_audit.md (this file, Step 22)
+- Glossary NOT updated (no code yet; terms added when M5 implemented)
+- Files touched this step:
+  - docs/phases/phase_3_m5_bind_design_proposal.md (NEW)
+  - docs/phases/phase_3_m5_bind_approved_names_proposal.md (NEW)
+  - docs/module_io_registry.md (M5 PROPOSAL section)
+  - tools/name_audit.md (this file)
+
+---
+
 Step 21: Phase 2 (M4 Link) FROZEN — all tests passed.
 
 **PROCESS NOTE:** M3 code landed (commit `88c6a77`) before docs trail was fully consistent.
