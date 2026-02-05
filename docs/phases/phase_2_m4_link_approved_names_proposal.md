@@ -36,6 +36,9 @@ M4 Link resolves cross-file `targetId` references across a `WrappedPackBundle` a
 - Merge or duplicate nodes
 - Interpret game rules or profiles
 - Perform roster/army construction
+- Verify that `catalogueLink.targetId` resolves to a root node (`nodeIndex == 0`) — this is semantic validation, deferred to M5+
+
+M4 resolves `targetId` for link elements without validating target element type or position.
 
 ---
 
@@ -115,7 +118,7 @@ Cross-file ID registry.
 
 **Scope:** One `SymbolTable` per `LinkedPackBundle`.
 
-**Construction:** Aggregate `WrappedFile.idIndex` from each file. No re-traversal.
+**Construction:** `SymbolTable` is constructed by aggregating `WrappedFile.idIndex` in file resolution order: primaryCatalog, then dependencyCatalogs (list order), then gameSystem. Targets are stored in node order as provided by each file's `idIndex` (which is M3 traversal order). No re-traversal of nodes.
 
 **Fields:**
 - Internal storage mapping ID → list of (fileId, NodeRef) pairs
@@ -179,7 +182,7 @@ Non-fatal resolution issue.
 |------|-----------|----------|
 | `UNRESOLVED_TARGET` | `targetId` not found in SymbolTable (zero targets) | Emit diagnostic, `ResolvedRef.targets` is empty, continue processing |
 | `DUPLICATE_ID_REFERENCE` | `targetId` found >1 time in SymbolTable | Emit diagnostic, keep ALL targets in `ResolvedRef.targets` list, continue processing |
-| `INVALID_LINK_FORMAT` | Link element has no `targetId` attribute | Emit diagnostic, no `ResolvedRef` created for this element, continue processing |
+| `INVALID_LINK_FORMAT` | Link element has no `targetId` attribute, or `targetId` is empty/whitespace after trimming | Emit diagnostic, no `ResolvedRef` created for this element, continue processing |
 
 **Rules:**
 - Diagnostics are accumulated, never thrown

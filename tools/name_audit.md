@@ -5,17 +5,17 @@
 This checklist MUST be completed for every change or PR.
 If any required item is unchecked, the change is invalid.
 
-Step 18: Phase 2 (M4 Link) approved names proposal revised for SME conditions.
+Step 19: Phase 2 ambiguity cleanup — docs-only.
 
 **PROCESS NOTE:** M3 code landed (commit `88c6a77`) before docs trail was fully consistent.
 Docs trail repaired in commit `b9ccb03`. No docs-first compliance claimed for M3.
 
-**Step 18 details:** Phase 2 approved names proposal revised (docs-only):
-- ResolvedRef.targets explicitly declared as `List<(String fileId, NodeRef nodeRef)>` with ordering contract
-- Diagnostic definitions made mechanistic: condition → behavior for each code
-- LinkFailure fatality policy explicitly stated: diagnostics-only in normal operation
-- Removed invented type name (ResolvedTarget) — using (fileId, NodeRef) pairs instead
+**Step 19 details:** Three ambiguities resolved per SME review (docs-only):
+1. `targetId=""` (empty/whitespace) → `INVALID_LINK_FORMAT` diagnostic
+2. `catalogueLink` root validation explicitly deferred (M4 does not verify nodeIndex==0)
+3. `SymbolTable` construction order pinned to file resolution order (primary → deps → gamesystem)
 - No new names introduced
+- No new diagnostic codes added
 
 ---
 
