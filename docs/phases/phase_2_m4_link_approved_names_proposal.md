@@ -142,20 +142,22 @@ Result of resolving a single cross-file reference.
 - `String sourceFileId` — file containing the link element
 - `NodeRef sourceNode` — the link element node
 - `String targetId` — the `targetId` attribute value being resolved
-- `List<ResolvedTarget> targets` — zero, one, or many resolved targets
+- `List<(String fileId, NodeRef nodeRef)> targets` — resolved targets as (fileId, NodeRef) pairs
 
-Where `ResolvedTarget` contains:
-- `String fileId` — file containing the target
-- `NodeRef nodeRef` — the target node
+**Representation:** `targets` is a `List` of record/tuple pairs. Each pair contains:
+- `fileId` (String) — file containing the target node
+- `nodeRef` (NodeRef) — the target node reference
 
-**Target Ordering:** When multiple targets exist, list order is:
-1. File resolution order: primaryCatalog → dependencyCatalogs (list order) → gameSystem
-2. Within each file: `WrappedFile.nodes` order (M3 traversal order)
+**Ordering Contract:** The `targets` list is ordered deterministically:
+1. By file resolution order: primaryCatalog → dependencyCatalogs (in `WrappedPackBundle.dependencyCatalogs` list order) → gameSystem
+2. Within each file: by `WrappedFile.nodes` index order (M3 pre-order depth-first traversal)
 
-**Rules:**
-- Empty `targets` list = unresolved (produces `UNRESOLVED_TARGET` diagnostic)
-- Multiple targets = multi-hit (produces `DUPLICATE_ID_REFERENCE` diagnostic)
-- `ResolvedRef` records outcomes; it does not enforce correctness
+**Invariants:**
+- `targets.isEmpty` ⇔ unresolved (UNRESOLVED_TARGET diagnostic emitted)
+- `targets.length > 1` ⇔ multi-hit (DUPLICATE_ID_REFERENCE diagnostic emitted)
+- `targets.length == 1` ⇔ unique resolution (no diagnostic)
+
+`ResolvedRef` records outcomes; it does not enforce correctness.
 
 ---
 
@@ -171,17 +173,18 @@ Non-fatal resolution issue.
 - `NodeRef? sourceNode` — node where issue occurred (if applicable)
 - `String? targetId` — the ID involved (if applicable)
 
-**Diagnostic Codes (closed set):**
+**Diagnostic Codes (closed set, mechanistic definitions):**
 
-| Code | Meaning |
-|------|---------|
-| `UNRESOLVED_TARGET` | No targets found for `targetId` in SymbolTable |
-| `DUPLICATE_ID_REFERENCE` | More than one target found for `targetId` |
-| `INVALID_LINK_FORMAT` | Link element missing `targetId` attribute |
+| Code | Condition | Behavior |
+|------|-----------|----------|
+| `UNRESOLVED_TARGET` | `targetId` not found in SymbolTable (zero targets) | Emit diagnostic, `ResolvedRef.targets` is empty, continue processing |
+| `DUPLICATE_ID_REFERENCE` | `targetId` found >1 time in SymbolTable | Emit diagnostic, keep ALL targets in `ResolvedRef.targets` list, continue processing |
+| `INVALID_LINK_FORMAT` | Link element has no `targetId` attribute | Emit diagnostic, no `ResolvedRef` created for this element, continue processing |
 
 **Rules:**
-- Diagnostics are accumulated, not thrown
+- Diagnostics are accumulated, never thrown
 - Diagnostics do not stop processing
+- All diagnostics are non-fatal
 - New diagnostic codes require doc + glossary update
 
 ---
@@ -196,15 +199,19 @@ Fatal exception for M4 failures.
 - `String? fileId`
 - `String? details`
 
-**Used only for:**
-- Structural corruption detected
-- Internal invariants violated
-- Resolution cannot proceed deterministically
+**Fatality Policy for Phase 2:**
 
-**NOT used for:**
-- Unresolved references → diagnostic
-- Duplicate IDs → diagnostic
-- Missing `targetId` attribute → diagnostic
+Phase 2 (M4 Link) emits diagnostics only for all expected resolution outcomes. `LinkFailure` is thrown **only** for:
+
+1. **Corrupted M3 input** — `WrappedPackBundle` violates frozen M3 contracts (e.g., `idIndex` references invalid `NodeRef`)
+2. **Internal invariant violation** — M4 implementation bug detected
+
+**LinkFailure is NOT thrown for:**
+- Unresolved references → `UNRESOLVED_TARGET` diagnostic
+- Duplicate IDs → `DUPLICATE_ID_REFERENCE` diagnostic
+- Missing `targetId` attribute → `INVALID_LINK_FORMAT` diagnostic
+
+**In normal operation, no `LinkFailure` is thrown.** All resolution issues produce diagnostics and processing continues to completion.
 
 ---
 
@@ -255,8 +262,8 @@ M4 guarantees:
 - Linking same input twice yields identical output
 
 ### Provenance
-- Every `ResolvedTarget.fileId` matches source file
-- Every `ResolvedTarget.nodeRef` is valid in that file
+- Every target pair's `fileId` identifies a valid file in the bundle
+- Every target pair's `nodeRef` is valid within that file's `WrappedFile.nodes`
 
 ### No Structural Mutation
 - `WrappedPackBundle` unchanged after linking

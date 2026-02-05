@@ -5,16 +5,17 @@
 This checklist MUST be completed for every change or PR.
 If any required item is unchecked, the change is invalid.
 
-Step 17: Phase 2 (M4 Link) approved names proposal created. Docs-first.
+Step 18: Phase 2 (M4 Link) approved names proposal revised for SME conditions.
 
 **PROCESS NOTE:** M3 code landed (commit `88c6a77`) before docs trail was fully consistent.
 Docs trail repaired in commit `b9ccb03`. No docs-first compliance claimed for M3.
 
-**Step 17 details:** Phase 2 approved names proposal created (docs-first):
-- Design doc nit fixed (removed redundant deferred attribute mentions)
-- Approved names proposal created matching design doc
-- SME conditions verified: file resolution order consistent, duplicate ID is non-fatal diagnostic
-- No code until approval
+**Step 18 details:** Phase 2 approved names proposal revised (docs-only):
+- ResolvedRef.targets explicitly declared as `List<(String fileId, NodeRef nodeRef)>` with ordering contract
+- Diagnostic definitions made mechanistic: condition → behavior for each code
+- LinkFailure fatality policy explicitly stated: diagnostics-only in normal operation
+- Removed invented type name (ResolvedTarget) — using (fileId, NodeRef) pairs instead
+- No new names introduced
 
 ---
 
