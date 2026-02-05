@@ -98,6 +98,16 @@ void main() {
       print('[M4 TEST]   DUPLICATE_ID_REFERENCE: ${linkedBundle.duplicateRefCount}');
       print('[M4 TEST]   INVALID_LINK_FORMAT: ${linkedBundle.invalidFormatCount}');
 
+      // Pinpoint each diagnostic for debugging
+      for (final d in linkedBundle.diagnostics) {
+        print('[M4 TEST] Diagnostic detail:');
+        print('[M4 TEST]   code: ${d.code}');
+        print('[M4 TEST]   targetId: ${d.targetId}');
+        print('[M4 TEST]   sourceFileId: ${d.sourceFileId}');
+        print('[M4 TEST]   sourceNode.nodeIndex: ${d.sourceNode?.nodeIndex}');
+        print('[M4 TEST]   message: ${d.message}');
+      }
+
       // wrappedBundle reference preserved
       expect(linkedBundle.wrappedBundle, same(wrappedBundle));
 
