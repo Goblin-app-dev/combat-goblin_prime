@@ -5,7 +5,7 @@
 This checklist MUST be completed for every change or PR.
 If any required item is unchecked, the change is invalid.
 
-Step 20: Phase 2 (M4 Link) implementation complete — tests pending.
+Step 21: Phase 2 (M4 Link) FROZEN — all tests passed.
 
 **PROCESS NOTE:** M3 code landed (commit `88c6a77`) before docs trail was fully consistent.
 Docs trail repaired in commit `b9ccb03`. No docs-first compliance claimed for M3.
@@ -15,6 +15,15 @@ Docs trail repaired in commit `b9ccb03`. No docs-first compliance claimed for M3
 - Implemented: LinkedPackBundle, SymbolTable, ResolvedRef, LinkDiagnostic, LinkFailure, LinkService
 - Tests: m4_link_flow_test.dart, m4_link_invariants_test.dart
 - All names from approved Phase 2 proposal only
+
+**Step 21 details:** M4 Link freeze:
+- All 9 tests passed (2026-02-05)
+- Added diagnostic pinpointing to flow test
+- Files touched this step:
+  - test/modules/m4_link/m4_link_flow_test.dart (diagnostic detail output)
+  - docs/module_io_registry.md (M4 section marked FROZEN)
+  - docs/glossary.md (added: Symbol Table, Resolved Ref, Link Diagnostic, Link Failure, Linked Pack Bundle, Link Service)
+  - tools/name_audit.md (this file, Step 21)
 
 ---
 
@@ -84,7 +93,7 @@ All names documented in:
 - [x] No frozen module was modified
 - [ ] Frozen module modified with explicit approval
 
-M1 Acquire frozen. M2 Parse frozen. M3 Wrap frozen (2026-02-04).
+M1 Acquire frozen. M2 Parse frozen. M3 Wrap frozen (2026-02-04). M4 Link frozen (2026-02-05).
 
 ---
 

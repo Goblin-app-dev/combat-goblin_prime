@@ -116,6 +116,49 @@ Flat node table with NodeRef handles chosen over recursive structures:
 
 ---
 
+## M4 Link (Phase 2) — FROZEN
+
+Resolves cross-file references by building a global symbol table and linking targetId attributes on link elements.
+
+**Status:** FROZEN (2026-02-05). Bug fixes only with explicit approval.
+
+### Inputs
+- WrappedPackBundle (from M3 Wrap)
+
+### Outputs
+- LinkedPackBundle containing:
+  - SymbolTable (cross-file ID registry)
+  - List<ResolvedRef> (resolution results for each link element)
+  - List<LinkDiagnostic> (non-fatal diagnostics)
+  - wrappedBundle reference (unchanged)
+  - packId and linkedAt timestamp
+
+### Behavior
+- Builds SymbolTable by aggregating idIndex from all files in resolution order
+- File resolution order: primaryCatalog → dependencyCatalogs (list order) → gameSystem
+- Resolves ONLY `targetId` attribute on link elements: catalogueLink, entryLink, infoLink, categoryLink
+- Does NOT resolve childId, typeId, or other ID-bearing attributes
+- Does NOT verify catalogueLink resolves to root node (deferred to M5+)
+- Target ordering: file resolution order, then node index within file
+
+### Diagnostic Codes
+- UNRESOLVED_TARGET: targetId not found in any file
+- DUPLICATE_ID_REFERENCE: targetId found in multiple locations
+- INVALID_LINK_FORMAT: missing or empty targetId (including whitespace-only)
+
+### Error Contracts
+- LinkDiagnostic for resolution issues (non-fatal, always emitted)
+- LinkFailure only for corrupted M3 input or internal bugs
+- In normal operation, no LinkFailure is thrown
+
+### Design Decision
+Non-fatal diagnostics chosen over throwing:
+- Complete resolution even with some failures
+- Downstream phases decide what to do with diagnostics
+- Deterministic ordering enables reproducible debugging
+
+---
+
 ## Index Reader (Future — Phase 1B+)
 
 Reads and caches the upstream repository index for dependency resolution and update checking.

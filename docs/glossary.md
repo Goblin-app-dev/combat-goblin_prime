@@ -71,6 +71,24 @@ Complete M3 output for a pack: wrapped game system + primary catalog + dependenc
 ## Wrap Failure
 Exception thrown for structural corruption during M3 wrapping. Not used for duplicate IDs or semantic issues.
 
+## Symbol Table
+Cross-file ID registry built by M4 Link. Aggregates idIndex from all WrappedFiles in file resolution order (primaryCatalog → dependencyCatalogs → gameSystem). Maps ID string to list of (fileId, NodeRef) pairs. Lookup returns targets in deterministic order.
+
+## Resolved Ref
+Resolution result for a single cross-file reference. Contains sourceFileId, sourceNode (NodeRef), targetId, and list of resolved targets as (fileId, NodeRef) pairs. Targets ordered by file resolution order, then node index within file.
+
+## Link Diagnostic
+Non-fatal issue detected during M4 Link resolution. Closed code set: UNRESOLVED_TARGET (targetId not found), DUPLICATE_ID_REFERENCE (targetId found multiple times), INVALID_LINK_FORMAT (missing or empty targetId). Always emitted; never thrown.
+
+## Link Failure
+Exception thrown by M4 Link only for corrupted M3 input or internal bugs. In normal operation, no LinkFailure is thrown. Resolution issues are reported via LinkDiagnostic instead.
+
+## Linked Pack Bundle
+Complete M4 output for a pack: SymbolTable + resolved references + diagnostics + unchanged WrappedPackBundle reference. Produced by M4 Link (LinkService).
+
+## Link Service
+Service that performs cross-file reference resolution. Converts WrappedPackBundle to LinkedPackBundle. Resolves only targetId on link elements (catalogueLink, entryLink, infoLink, categoryLink).
+
 ---
 
 Any concept used in code must appear here first.
