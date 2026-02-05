@@ -5,10 +5,18 @@
 This checklist MUST be completed for every change or PR.
 If any required item is unchecked, the change is invalid.
 
-Step 15: Phase 1C (M3 Wrap) — FROZEN (2026-02-04). All tests passed.
+Step 16: Phase 2 (M4 Link) proposal clarified for determinism. Docs-only.
 
 **PROCESS NOTE:** M3 code landed (commit `88c6a77`) before docs trail was fully consistent.
 Docs trail repaired in commit `b9ccb03`. No docs-first compliance claimed for M3.
+
+**Step 16 details:** Phase 2 design doc revised with six determinism clarifications:
+- Resolution order pinned to `WrappedPackBundle.dependencyCatalogs` list order
+- Resolution targets limited to `targetId` on link elements only
+- SymbolTable scope: one per bundle, aggregates `idIndex`
+- ResolvedRef target ordering defined
+- Diagnostic taxonomy closed (removed AMBIGUOUS_REFERENCE)
+- No new names introduced
 
 ---
 
