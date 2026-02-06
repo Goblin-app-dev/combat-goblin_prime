@@ -43,6 +43,25 @@ M5 Bind converts `LinkedPackBundle` (from M4) into a `BoundPackBundle` containin
 - Persist data (storage is M1's domain)
 - Make network calls (network is M1's domain)
 - Produce UI elements (UI is downstream)
+- Bind `rule` elements (deferred to future phase)
+- Bind `infoGroup` containers (presentation concern, deferred)
+- Build type registries for profileType/costType (store IDs as strings only)
+
+---
+
+## Tag Eligibility (MANDATORY)
+
+Each bound type binds ONLY nodes with specific tagNames. This prevents accidental binding of wrong element types that happen to share an ID.
+
+| Bound Type | Eligible tagNames |
+|------------|-------------------|
+| BoundEntry | `selectionEntry`, `selectionEntryGroup` |
+| BoundProfile | `profile` |
+| BoundCategory | `categoryEntry` |
+| BoundCost | `cost` |
+| BoundConstraint | `constraint` |
+
+**Link elements (entryLink, infoLink, categoryLink)** are NOT directly bound. They are followed to their resolved targets, and the target node is bound if its tagName is eligible.
 
 ---
 
@@ -110,6 +129,25 @@ Complete M5 output.
 - `Iterable<BoundCategory> categoriesForEntry(String entryId)`
 - `Iterable<BoundCost> costsForEntry(String entryId)`
 
+**Query Semantics (Missing/Partial Binding):**
+
+| Query | ID not found | Relationship empty |
+|-------|--------------|-------------------|
+| `*ById(id)` | Returns `null` | N/A |
+| `all*` getters | N/A | Returns empty iterable |
+| `*ForEntry(id)` | Returns empty iterable | Returns empty iterable |
+| `entriesInCategory(id)` | Returns empty iterable | Returns empty iterable |
+
+**No query throws on missing data.** All return null or empty.
+
+**Deterministic Ordering:**
+All list-returning queries return results in **binding order**:
+1. File resolution order (primaryCatalog → dependencyCatalogs → gameSystem)
+2. Within each file: node index order (pre-order depth-first from M3)
+
+**Hidden Content:**
+Queries return all bound content **including hidden entries**. Use `BoundEntry.isHidden` to filter.
+
 **Rules:**
 - One-to-one correspondence with input LinkedPackBundle
 - Does not modify linked nodes
@@ -120,7 +158,9 @@ Complete M5 output.
 ### BoundEntry
 **File:** `models/bound_entry.dart`
 
-Interpreted entry (selectionEntry, selectionEntryGroup, or resolved entryLink).
+Interpreted entry (selectionEntry or selectionEntryGroup).
+
+**Eligible tagNames:** `selectionEntry`, `selectionEntryGroup`
 
 **Fields:**
 - `String id`
@@ -148,6 +188,8 @@ Interpreted entry (selectionEntry, selectionEntryGroup, or resolved entryLink).
 
 Profile definition with characteristics.
 
+**Eligible tagNames:** `profile`
+
 **Fields:**
 - `String id`
 - `String name`
@@ -169,6 +211,8 @@ Profile definition with characteristics.
 
 Category definition.
 
+**Eligible tagNames:** `categoryEntry`
+
 **Fields:**
 - `String id`
 - `String name`
@@ -182,6 +226,8 @@ Category definition.
 **File:** `models/bound_cost.dart`
 
 Cost value.
+
+**Eligible tagNames:** `cost`
 
 **Fields:**
 - `String typeId` — references costType
@@ -201,6 +247,8 @@ Cost value.
 
 Constraint definition (not evaluated).
 
+**Eligible tagNames:** `constraint`
+
 **Fields:**
 - `String type` — constraint type (min, max, etc.)
 - `String field` — field being constrained
@@ -211,6 +259,7 @@ Constraint definition (not evaluated).
 - `NodeRef sourceNode` — provenance
 
 **Rules:**
+- **BoundConstraint captures raw fields and linked targets only; no truth evaluation.**
 - Constraint data is stored, NOT evaluated
 - Evaluation requires roster state (deferred to M6+)
 
@@ -298,15 +347,38 @@ Future<BoundPackBundle> bindBundle({
 
 ## Shadowing Policy
 
+### Definition of "Match"
+
+A **match** for binding occurs when:
+1. The node's `id` attribute equals the target ID being resolved
+2. The node's `tagName` is in the eligible set for the binding type (see Tag Eligibility)
+
+**Both conditions must be true.** A node with matching ID but wrong tagName is NOT a match.
+
+### File Precedence
+
 **First-match-wins** based on file resolution order:
 
 1. primaryCatalog (highest precedence)
 2. dependencyCatalogs (in list order)
 3. gameSystem (lowest precedence)
 
+### Within-File Tie-Break
+
+If multiple nodes with the same ID exist in one file:
+- **First in node order wins** — earliest NodeRef in `WrappedFile.nodes` order
+- Emit SHADOWED_DEFINITION diagnostic for skipped duplicates
+
+### Cross-File Resolution
+
+M5 iterates M4's ResolvedRef.targets in order and selects the **first node where tagName is eligible** for the binding type.
+
 When M4's ResolvedRef contains multiple targets:
-- Use targets[0] (first in file resolution order)
-- Emit SHADOWED_DEFINITION diagnostic listing skipped targets
+- Iterate targets in order (already sorted by file precedence → node order)
+- Select first with eligible tagName
+- Emit SHADOWED_DEFINITION diagnostic listing all skipped targets
+
+**M5 does NOT merge definitions.** Provenance (sourceFileId) enables debugging when data is dropped.
 
 ---
 
@@ -368,9 +440,15 @@ Before implementation, add to `/docs/glossary.md`:
 - [ ] Module layout approved
 - [ ] Core model names approved (BoundPackBundle, BoundEntry, BoundProfile, BoundCategory, BoundCost, BoundConstraint, BindDiagnostic, BindFailure)
 - [ ] Service name approved (BindService)
+- [ ] Tag eligibility lists approved (per bound type)
+- [ ] Match definition approved (id + tagName)
+- [ ] Within-file tie-break approved (first in node order)
 - [ ] Field definitions approved
 - [ ] Query surface approved
-- [ ] Shadowing policy approved (first-match-wins)
+- [ ] Query semantics approved (null/empty on missing)
+- [ ] Deterministic ordering approved (binding order)
+- [ ] Hidden content policy approved (bind with flag, don't filter)
+- [ ] Shadowing policy approved (first-match-wins with type gating)
 - [ ] Diagnostic codes approved
 - [ ] Determinism contract approved
 - [ ] Glossary terms approved

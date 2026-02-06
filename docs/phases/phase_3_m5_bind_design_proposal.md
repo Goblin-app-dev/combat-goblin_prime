@@ -59,14 +59,36 @@ M5 MUST NOT:
 
 M5 Phase 3 defines these entities. Additional entity types may be added in future phases.
 
+**M5 does NOT expose EntryGroup as a first-class entity in the initial slice.** Group membership is represented via BoundEntry.isGroup flag and parent-child relationships.
+
+**Rules are deferred.** M5 does not bind `rule` elements in the initial slice. If needed, add BoundRule in a future phase with explicit eligibility and query contract.
+
+**InfoGroups are deferred.** M5 does not bind `infoGroup` containers (presentation/organization concern).
+
+### Tag Eligibility (MANDATORY)
+
+Each bound type binds ONLY nodes with specific tagNames. This prevents accidental binding of wrong element types that happen to share an ID.
+
+| Bound Type | Eligible tagNames |
+|------------|-------------------|
+| BoundEntry | `selectionEntry`, `selectionEntryGroup` |
+| BoundProfile | `profile` |
+| BoundCategory | `categoryEntry` |
+| BoundCost | `cost` |
+| BoundConstraint | `constraint` |
+
+**entryLink, infoLink, categoryLink** are NOT directly bound. They are followed to their resolved targets, and the target node is bound if its tagName is eligible.
+
 ### BoundEntry
 
-Represents a selectionEntry (or resolved entryLink).
+Represents a selectionEntry or selectionEntryGroup.
 
-**Source tags:** `selectionEntry`, `selectionEntryGroup`, `entryLink` (when resolved)
+**Eligible tagNames:** `selectionEntry`, `selectionEntryGroup`
 
 **Contains:**
 - Entry ID and name
+- `isGroup` flag (true if tagName was `selectionEntryGroup`)
+- `isHidden` flag (true if `hidden="true"` attribute present)
 - Resolved child entries (nested selectionEntries, resolved entryLinks)
 - Resolved profiles (via infoLink or nested profile)
 - Resolved categories (via categoryLink or nested categoryEntry)
@@ -78,52 +100,66 @@ Represents a selectionEntry (or resolved entryLink).
 
 Represents a profile definition with characteristics.
 
-**Source tags:** `profile` (or resolved infoLink to profile)
+**Eligible tagNames:** `profile`
 
 **Contains:**
 - Profile ID and name
-- Profile type ID (links to profileType)
+- Profile type ID (string, stored as-is; no registry lookup)
+- Profile type name (string, stored as-is if available)
 - Characteristics (list of name-value pairs)
 - Source provenance (fileId, NodeRef)
+
+**M5 does NOT build a type registry for profileType. Type IDs are stored as strings for downstream consumption.**
 
 ### BoundCategory
 
 Represents a category definition.
 
-**Source tags:** `categoryEntry`, `categoryLink` (when resolved)
+**Eligible tagNames:** `categoryEntry`
 
 **Contains:**
 - Category ID and name
-- Primary flag (is this entry's primary category?)
+- Primary flag (true if `primary="true"` attribute present)
 - Source provenance (fileId, NodeRef)
 
 ### BoundCost
 
 Represents a cost value.
 
-**Source tags:** `cost`
+**Eligible tagNames:** `cost`
 
 **Contains:**
-- Cost type ID (links to costType in gameSystem)
+- Cost type ID (string, stored as-is; no registry lookup)
+- Cost type name (string, stored as-is if available)
 - Cost value (numeric)
 - Source provenance (fileId, NodeRef)
+
+**M5 does NOT build a type registry for costType. Type IDs are stored as strings for downstream consumption.**
 
 ### BoundConstraint
 
 Represents a constraint (NOT evaluated).
 
-**Source tags:** `constraint`
+**Eligible tagNames:** `constraint`
 
 **Contains:**
 - Constraint type (min, max, etc.)
 - Field, scope, value
 - Source provenance (fileId, NodeRef)
 
-**M5 stores constraint data. M5 does NOT evaluate constraints.**
+**BoundConstraint captures raw fields and linked targets only; no truth evaluation.**
 
 ---
 
 ## Scope and Shadowing Policy
+
+### Definition of "Match"
+
+A **match** for binding occurs when:
+1. The node's `id` attribute equals the target ID being resolved
+2. The node's `tagName` is in the eligible set for the binding type (see Tag Eligibility table)
+
+**Both conditions must be true.** A node with matching ID but wrong tagName is NOT a match and is skipped.
 
 ### File Precedence (Shadowing)
 
@@ -135,14 +171,31 @@ When the same ID appears in multiple files, M5 uses **first-match-wins** based o
 
 **Rationale:** Catalogues extend/override gameSystem definitions. Primary catalogue is the user's chosen faction and takes precedence over shared dependencies.
 
+### Within-File Tie-Break
+
+If `idIndex[id]` contains multiple NodeRefs within the same file (duplicates allowed by M3):
+- **First in node order wins** — use the earliest NodeRef in `WrappedFile.nodes` order
+- Emit `SHADOWED_DEFINITION` diagnostic noting the skipped duplicates
+
+### Cross-File Resolution
+
+M5 uses M4's ResolvedRef.targets list, which is already ordered:
+1. By file resolution order (primaryCatalog → dependencyCatalogs → gameSystem)
+2. Within each file: by `WrappedFile.nodes` index order
+
+M5 iterates targets in order and selects the **first node where tagName is eligible** for the binding type.
+
 ### Duplicate ID Handling
 
 M4 reports `DUPLICATE_ID_REFERENCE` when an ID resolves to multiple targets.
 
 M5 behavior:
-- Use **first target** from ResolvedRef.targets (already ordered by file precedence)
-- Emit `SHADOWED_DEFINITION` diagnostic noting the shadowed targets
-- Do NOT fail; binding continues with first match
+- Iterate ResolvedRef.targets in order
+- Select **first node with eligible tagName** for the binding type
+- Emit `SHADOWED_DEFINITION` diagnostic noting all skipped targets
+- Do NOT fail; binding continues with first eligible match
+
+**Important:** This can drop data when different files define the same ID. M5 does NOT merge definitions. Provenance (sourceFileId) on each bound entity enables debugging.
 
 ---
 
@@ -198,10 +251,52 @@ Iterable<BoundCategory> categoriesForEntry(String entryId)
 Iterable<BoundCost> costsForEntry(String entryId)
 ```
 
-**Query contracts:**
-- Lookups return null if ID not found (no throwing)
-- Relationship queries return empty iterable if source not found
-- All queries are O(1) or O(n) in result size (indexed lookups)
+### Query Semantics on Missing/Partial Binding
+
+| Query | ID not found | Source exists but relationship empty |
+|-------|--------------|-------------------------------------|
+| `entryById(id)` | Returns `null` | N/A |
+| `profileById(id)` | Returns `null` | N/A |
+| `categoryById(id)` | Returns `null` | N/A |
+| `allEntries` | N/A | Returns empty iterable |
+| `allProfiles` | N/A | Returns empty iterable |
+| `allCategories` | N/A | Returns empty iterable |
+| `entriesInCategory(id)` | Returns empty iterable | Returns empty iterable |
+| `profilesForEntry(id)` | Returns empty iterable | Returns empty iterable |
+| `categoriesForEntry(id)` | Returns empty iterable | Returns empty iterable |
+| `costsForEntry(id)` | Returns empty iterable | Returns empty iterable |
+
+**No query throws on missing data.** All return null or empty.
+
+### Deterministic Ordering for List Queries
+
+All list-returning queries return results in **binding order**:
+1. File resolution order (primaryCatalog → dependencyCatalogs → gameSystem)
+2. Within each file: node index order (pre-order depth-first traversal from M3)
+
+| Query | Ordering |
+|-------|----------|
+| `allEntries` | Binding order |
+| `allProfiles` | Binding order |
+| `allCategories` | Binding order |
+| `entriesInCategory(id)` | Binding order (filtered) |
+| `profilesForEntry(id)` | Binding order (filtered) |
+| `categoriesForEntry(id)` | Binding order (filtered) |
+| `costsForEntry(id)` | Binding order (filtered) |
+
+**No hash-map iteration order leaks.** Results are deterministic.
+
+### Hidden Content Policy
+
+Queries return **all bound content including hidden entries**.
+
+M5 binds entries with `hidden="true"` and exposes `BoundEntry.isHidden` flag. Filtering hidden content is a UI/UX concern, not M5's responsibility.
+
+### Query Performance
+
+- ID lookups: O(1) via indexed maps
+- List queries: O(n) in result size
+- Relationship queries: O(n) in result size (may require index scan)
 
 ---
 
@@ -285,17 +380,19 @@ lib/modules/m5_bind/
 
 ---
 
-## Open Questions for SME Review
+## SME Decisions (Resolved)
 
-1. **Entry grouping:** Should `selectionEntryGroup` become a distinct `BoundEntryGroup` type, or be treated as a special kind of `BoundEntry`?
+The following questions were raised in the initial proposal and resolved by SME review:
 
-2. **Rules and InfoGroups:** Should M5 bind `rule` elements and `infoGroup` containers, or defer to a later phase?
+1. **Entry grouping:** Treat as `BoundEntry` with `isGroup` flag. Do NOT introduce `BoundEntryGroup` as a distinct type in the initial slice.
 
-3. **ProfileType/CostType lookup:** These are defined in gameSystem. Should M5 build a type registry, or just store the type IDs and let consumers look them up?
+2. **Rules and InfoGroups:** Rules deferred to future phase. InfoGroups deferred (presentation concern). M5 initial slice does not bind `rule` or `infoGroup` elements.
 
-4. **Shared entries:** Some entries are defined in shared catalogues (dependencies) and used by multiple primary catalogues. Should M5 track which primary catalogue an entry "belongs to", or just bind everything flat?
+3. **ProfileType/CostType lookup:** Store type IDs as strings. Do NOT build a type registry in M5. Downstream can look up types if needed.
 
-5. **Hidden entries:** Entries can have `hidden="true"`. Should M5 filter these out, or bind them with a hidden flag?
+4. **Shared entries:** Bind with provenance. Each bound entity includes `sourceFileId` to show which file it came from. Shadowing policy determines which definition "wins" for duplicate IDs.
+
+5. **Hidden entries:** Bind with `isHidden` flag. Do NOT filter in M5. Filtering is UI/UX policy.
 
 ---
 
@@ -346,10 +443,16 @@ lib/modules/m5_bind/
 - [ ] Input/Output contract approved
 - [ ] Non-goals approved
 - [ ] Initial entity scope approved (BoundEntry, BoundProfile, BoundCategory, BoundCost, BoundConstraint)
-- [ ] Shadowing policy approved (first-match-wins)
+- [ ] Tag eligibility lists approved (per bound type)
+- [ ] Match definition approved (id + tagName)
+- [ ] Within-file tie-break approved (first in node order)
+- [ ] Shadowing policy approved (first-match-wins with type gating)
 - [ ] Unresolved target handling approved (skip with diagnostic)
 - [ ] Constraint boundary approved (represent, not evaluate)
 - [ ] Query surface approved
+- [ ] Query semantics approved (null/empty on missing)
+- [ ] Deterministic ordering approved (binding order)
+- [ ] Hidden content policy approved (bind with flag, don't filter)
 - [ ] Diagnostic codes approved
 - [ ] Module layout approved
 

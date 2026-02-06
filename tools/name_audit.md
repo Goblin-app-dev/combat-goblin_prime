@@ -5,6 +5,25 @@
 This checklist MUST be completed for every change or PR.
 If any required item is unchecked, the change is invalid.
 
+Step 23: M5 proposal SME clarifications applied (docs-only).
+
+**Step 23 details:** SME review identified under-specifications; clarifications added:
+- Tag eligibility lists per bound type (prevents wrong-type binding)
+- Match definition: id + tagName both required
+- Within-file tie-break: first in node order wins
+- Query semantics: null/empty on missing, no throwing
+- Deterministic ordering: binding order for all list queries
+- Hidden content policy: bind with flag, don't filter
+- SME decisions recorded (EntryGroup=no, Rules=deferred, TypeRegistry=no, Provenance=yes, Hidden=flag)
+- Audited against frozen M3/M4 contracts: consistent
+- Files touched this step:
+  - docs/phases/phase_3_m5_bind_design_proposal.md (clarifications)
+  - docs/phases/phase_3_m5_bind_approved_names_proposal.md (clarifications)
+  - tools/name_audit.md (this file, Step 23)
+- No new names introduced
+
+---
+
 Step 22: Phase 3 (M5 Bind) docs-first proposal created — awaiting approval.
 
 **Step 22 details:** M5 Bind docs-first proposal:
