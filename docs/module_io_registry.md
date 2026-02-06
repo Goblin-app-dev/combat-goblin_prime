@@ -159,6 +159,76 @@ Non-fatal diagnostics chosen over throwing:
 
 ---
 
+## M5 Bind (Phase 3) — PROPOSAL
+
+Converts LinkedPackBundle into typed, queryable entities with resolved cross-file references.
+
+**Status:** PROPOSAL — awaiting approval. No implementation until approved.
+
+### Inputs
+- LinkedPackBundle (from M4 Link)
+
+### Outputs
+- BoundPackBundle containing:
+  - List<BoundEntry> (all bound entries)
+  - List<BoundProfile> (all bound profiles)
+  - List<BoundCategory> (all bound categories)
+  - List<BindDiagnostic> (semantic issues)
+  - Query surface for lookups
+  - linkedBundle reference (unchanged)
+  - packId and boundAt timestamp
+
+### Entity Types (Initial Slice)
+- BoundEntry: selectionEntry, selectionEntryGroup, resolved entryLink
+- BoundProfile: profile with characteristics
+- BoundCategory: categoryEntry, resolved categoryLink
+- BoundCost: cost value with type reference
+- BoundConstraint: constraint data (NOT evaluated)
+
+### Behavior
+- Traverses all files in file resolution order
+- Binds selectionEntry/selectionEntryGroup → BoundEntry
+- Binds profile → BoundProfile
+- Binds categoryEntry → BoundCategory
+- Follows entryLinks, infoLinks, categoryLinks using M4's ResolvedRefs
+- Applies shadowing policy: first-match-wins by file order
+- Builds query indices for O(1) lookups
+
+### Query Surface
+- entryById(id), profileById(id), categoryById(id)
+- allEntries, allProfiles, allCategories
+- entriesInCategory(categoryId)
+- profilesForEntry(entryId)
+- categoriesForEntry(entryId)
+- costsForEntry(entryId)
+
+### Shadowing Policy
+First-match-wins based on file resolution order:
+1. primaryCatalog (highest precedence)
+2. dependencyCatalogs (in list order)
+3. gameSystem (lowest precedence)
+
+When ID matches multiple targets: use first, emit SHADOWED_DEFINITION diagnostic.
+
+### Diagnostic Codes (Proposed)
+- UNRESOLVED_ENTRY_LINK: entryLink target not found
+- UNRESOLVED_INFO_LINK: infoLink target not found
+- UNRESOLVED_CATEGORY_LINK: categoryLink target not found
+- SHADOWED_DEFINITION: ID matched multiple targets, using first
+- INVALID_PROFILE_TYPE: profile references unknown profileType
+- INVALID_COST_TYPE: cost references unknown costType
+
+### Error Contracts
+- BindDiagnostic for semantic issues (non-fatal)
+- BindFailure only for corrupted M4 input or internal bugs
+- In normal operation, no BindFailure is thrown
+
+### Constraint Boundary
+M5 represents constraints. M5 does NOT evaluate constraints.
+Constraint evaluation requires roster state (deferred to M6+).
+
+---
+
 ## Index Reader (Future — Phase 1B+)
 
 Reads and caches the upstream repository index for dependency resolution and update checking.

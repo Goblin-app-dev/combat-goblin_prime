@@ -5,6 +5,65 @@
 This checklist MUST be completed for every change or PR.
 If any required item is unchecked, the change is invalid.
 
+Step 24: Phase 3 (M5 Bind) implementation complete — tests pending.
+
+**Step 24 details:** M5 Bind implementation:
+- Created m5_bind module (barrel + models + service)
+- Implemented: BoundPackBundle, BoundEntry, BoundProfile, BoundCategory, BoundCost, BoundConstraint, BindDiagnostic, BindFailure, BindService
+- Tests: m5_bind_flow_test.dart, m5_bind_invariants_test.dart
+- All names from approved Phase 3 proposal only
+- Files touched this step:
+  - lib/modules/m5_bind/m5_bind.dart (NEW - barrel)
+  - lib/modules/m5_bind/models/bind_diagnostic.dart (NEW)
+  - lib/modules/m5_bind/models/bind_failure.dart (NEW)
+  - lib/modules/m5_bind/models/bound_category.dart (NEW)
+  - lib/modules/m5_bind/models/bound_constraint.dart (NEW)
+  - lib/modules/m5_bind/models/bound_cost.dart (NEW)
+  - lib/modules/m5_bind/models/bound_entry.dart (NEW)
+  - lib/modules/m5_bind/models/bound_pack_bundle.dart (NEW)
+  - lib/modules/m5_bind/models/bound_profile.dart (NEW)
+  - lib/modules/m5_bind/services/bind_service.dart (NEW)
+  - test/modules/m5_bind/m5_bind_flow_test.dart (NEW)
+  - test/modules/m5_bind/m5_bind_invariants_test.dart (NEW)
+  - tools/name_audit.md (this file, Step 24)
+
+---
+
+Step 23: M5 proposal SME clarifications applied (docs-only).
+
+**Step 23 details:** SME review identified under-specifications; clarifications added:
+- Tag eligibility lists per bound type (prevents wrong-type binding)
+- Match definition: id + tagName both required
+- Within-file tie-break: first in node order wins
+- Query semantics: null/empty on missing, no throwing
+- Deterministic ordering: binding order for all list queries
+- Hidden content policy: bind with flag, don't filter
+- SME decisions recorded (EntryGroup=no, Rules=deferred, TypeRegistry=no, Provenance=yes, Hidden=flag)
+- Audited against frozen M3/M4 contracts: consistent
+- Files touched this step:
+  - docs/phases/phase_3_m5_bind_design_proposal.md (clarifications)
+  - docs/phases/phase_3_m5_bind_approved_names_proposal.md (clarifications)
+  - tools/name_audit.md (this file, Step 23)
+- No new names introduced
+
+---
+
+Step 22: Phase 3 (M5 Bind) docs-first proposal created — awaiting approval.
+
+**Step 22 details:** M5 Bind docs-first proposal:
+- Created design proposal: docs/phases/phase_3_m5_bind_design_proposal.md
+- Created approved names proposal: docs/phases/phase_3_m5_bind_approved_names_proposal.md
+- Updated module_io_registry.md with M5 PROPOSAL section
+- Updated name_audit.md (this file, Step 22)
+- Glossary NOT updated (no code yet; terms added when M5 implemented)
+- Files touched this step:
+  - docs/phases/phase_3_m5_bind_design_proposal.md (NEW)
+  - docs/phases/phase_3_m5_bind_approved_names_proposal.md (NEW)
+  - docs/module_io_registry.md (M5 PROPOSAL section)
+  - tools/name_audit.md (this file)
+
+---
+
 Step 21: Phase 2 (M4 Link) FROZEN — all tests passed.
 
 **PROCESS NOTE:** M3 code landed (commit `88c6a77`) before docs trail was fully consistent.
