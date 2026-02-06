@@ -420,13 +420,6 @@ class BindService {
       ));
     }
 
-    // Find the WrappedFile for the selected node
-    final targetFile = _findFileById(selectedFileId!,
-        _filesInResolutionOrder(nodeLookup.entries.first.value as WrappedPackBundle? ??
-            throw StateError('Cannot find bundle')));
-
-    // Actually, we need to pass the bundle. Let me restructure this.
-    // For now, create entry with the info we have.
     return BoundEntry(
       id: selectedNode.attributes['id'] ?? '',
       name: selectedNode.attributes['name'] ?? '',
