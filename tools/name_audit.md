@@ -5,6 +5,30 @@
 This checklist MUST be completed for every change or PR.
 If any required item is unchecked, the change is invalid.
 
+Step 24: Phase 3 (M5 Bind) implementation complete — tests pending.
+
+**Step 24 details:** M5 Bind implementation:
+- Created m5_bind module (barrel + models + service)
+- Implemented: BoundPackBundle, BoundEntry, BoundProfile, BoundCategory, BoundCost, BoundConstraint, BindDiagnostic, BindFailure, BindService
+- Tests: m5_bind_flow_test.dart, m5_bind_invariants_test.dart
+- All names from approved Phase 3 proposal only
+- Files touched this step:
+  - lib/modules/m5_bind/m5_bind.dart (NEW - barrel)
+  - lib/modules/m5_bind/models/bind_diagnostic.dart (NEW)
+  - lib/modules/m5_bind/models/bind_failure.dart (NEW)
+  - lib/modules/m5_bind/models/bound_category.dart (NEW)
+  - lib/modules/m5_bind/models/bound_constraint.dart (NEW)
+  - lib/modules/m5_bind/models/bound_cost.dart (NEW)
+  - lib/modules/m5_bind/models/bound_entry.dart (NEW)
+  - lib/modules/m5_bind/models/bound_pack_bundle.dart (NEW)
+  - lib/modules/m5_bind/models/bound_profile.dart (NEW)
+  - lib/modules/m5_bind/services/bind_service.dart (NEW)
+  - test/modules/m5_bind/m5_bind_flow_test.dart (NEW)
+  - test/modules/m5_bind/m5_bind_invariants_test.dart (NEW)
+  - tools/name_audit.md (this file, Step 24)
+
+---
+
 Step 23: M5 proposal SME clarifications applied (docs-only).
 
 **Step 23 details:** SME review identified under-specifications; clarifications added:
