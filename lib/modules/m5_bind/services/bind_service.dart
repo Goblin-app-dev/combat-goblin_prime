@@ -430,7 +430,7 @@ class BindService {
       categories: const [],
       costs: const [],
       constraints: const [],
-      sourceFileId: selectedFileId,
+      sourceFileId: selectedFileId!,
       sourceNode: selectedNode.ref,
     );
   }
