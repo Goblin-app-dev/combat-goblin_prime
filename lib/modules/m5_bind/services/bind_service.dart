@@ -15,6 +15,10 @@ import '../models/bound_profile.dart';
 /// Implements eligibility filtering before matching.
 /// Never binds a node solely because id matches.
 ///
+/// Entry-root detection: An entry is a "root" if its parent is not an
+/// eligible entry tag. This is container-agnostic and robust across
+/// schema variants.
+///
 /// Part of M5 Bind (Phase 3).
 class BindService {
   /// Eligible tagNames for BoundEntry.
@@ -58,57 +62,79 @@ class BindService {
     final files = _filesInResolutionOrder(linkedBundle.wrappedBundle);
 
     for (final file in files) {
-      // Find root node (the one with parent == null, depth == 0)
-      final rootNode = file.nodes.firstWhere(
-        (n) => n.parent == null,
-        orElse: () => file.nodes.first,
-      );
-
-      // Process root-level containers in document order
-      for (final containerRef in rootNode.children) {
-        final container = file.nodes[containerRef.nodeIndex];
-
-        // Entry containers at root level
-        if (_rootEntryContainers.contains(container.tagName)) {
-          _bindRootEntryContainer(
-            container: container,
-            file: file,
-            resolvedRefIndex: resolvedRefIndex,
-            nodeLookup: nodeLookup,
-            diagnostics: diagnostics,
-            allEntries: allEntries,
-            allProfiles: allProfiles,
-            allCategories: allCategories,
-          );
+      // Process nodes in node order (already M3 traversal order)
+      for (final node in file.nodes) {
+        // Entry-root detection: bind if eligible entry AND parent is not an entry
+        if (_entryTags.contains(node.tagName)) {
+          final isEntryRoot = _isEntryRoot(node, file);
+          if (isEntryRoot) {
+            final entry = _bindEntry(
+              node: node,
+              file: file,
+              resolvedRefIndex: resolvedRefIndex,
+              nodeLookup: nodeLookup,
+              diagnostics: diagnostics,
+            );
+            if (entry != null) {
+              allEntries.add(entry);
+              // Collect nested entities
+              _collectNestedEntities(entry, allEntries, allProfiles, allCategories);
+            }
+          }
         }
-        // Profile containers at root level
-        else if (_rootProfileContainers.contains(container.tagName)) {
-          _bindRootProfileContainer(
-            container: container,
-            file: file,
-            allProfiles: allProfiles,
-          );
+        // Profile-root detection: bind if eligible profile AND no entry ancestor
+        else if (_profileTags.contains(node.tagName)) {
+          final isProfileRoot = !_hasEntryAncestor(node, file);
+          if (isProfileRoot) {
+            final profile = _bindProfile(node: node, file: file);
+            if (profile != null) {
+              allProfiles.add(profile);
+            }
+          }
         }
-        // Category containers at root level
-        else if (_rootCategoryContainers.contains(container.tagName)) {
-          _bindRootCategoryContainer(
-            container: container,
-            file: file,
-            allCategories: allCategories,
-          );
+        // Category-root detection: bind if eligible category AND no entry ancestor
+        else if (_categoryTags.contains(node.tagName)) {
+          final isCategoryRoot = !_hasEntryAncestor(node, file);
+          if (isCategoryRoot) {
+            final category = _bindCategory(node: node, file: file);
+            if (category != null) {
+              allCategories.add(category);
+            }
+          }
         }
       }
     }
 
     return BoundPackBundle(
       packId: linkedBundle.packId,
-      boundAt: DateTime.now().toUtc(),
+      boundAt: linkedBundle.linkedAt, // Deterministic: derived from upstream
       entries: allEntries,
       profiles: allProfiles,
       categories: allCategories,
       diagnostics: diagnostics,
       linkedBundle: linkedBundle,
     );
+  }
+
+  /// Returns true if this entry node is an "entry root" (not nested in another entry).
+  bool _isEntryRoot(WrappedNode node, WrappedFile file) {
+    if (node.parent == null) return true;
+    final parentNode = file.nodes[node.parent!.nodeIndex];
+    // Entry root = parent is not an eligible entry tag
+    return !_entryTags.contains(parentNode.tagName);
+  }
+
+  /// Returns true if this node has an entry ancestor (is nested inside an entry).
+  bool _hasEntryAncestor(WrappedNode node, WrappedFile file) {
+    var current = node.parent;
+    while (current != null) {
+      final parentNode = file.nodes[current.nodeIndex];
+      if (_entryTags.contains(parentNode.tagName)) {
+        return true;
+      }
+      current = parentNode.parent;
+    }
+    return false;
   }
 
   /// Returns files in file resolution order.
@@ -296,103 +322,6 @@ class BindService {
       'constraints',
       'categories',
     }.contains(tagName);
-  }
-
-  /// Root-level containers that hold top-level entries.
-  static const _rootEntryContainers = {
-    'selectionEntries',
-    'sharedSelectionEntries',
-    'selectionEntryGroups',
-    'sharedSelectionEntryGroups',
-    'entryLinks',
-  };
-
-  /// Root-level containers that hold top-level profiles.
-  static const _rootProfileContainers = {
-    'profiles',
-    'sharedProfiles',
-  };
-
-  /// Root-level containers that hold top-level categories.
-  static const _rootCategoryContainers = {
-    'categoryEntries',
-  };
-
-  /// Binds entries from a root-level entry container.
-  void _bindRootEntryContainer({
-    required WrappedNode container,
-    required WrappedFile file,
-    required Map<(String, int), ResolvedRef> resolvedRefIndex,
-    required Map<(String, int), WrappedNode> nodeLookup,
-    required List<BindDiagnostic> diagnostics,
-    required List<BoundEntry> allEntries,
-    required List<BoundProfile> allProfiles,
-    required List<BoundCategory> allCategories,
-  }) {
-    for (final childRef in container.children) {
-      final childNode = file.nodes[childRef.nodeIndex];
-
-      if (_entryTags.contains(childNode.tagName)) {
-        final entry = _bindEntry(
-          node: childNode,
-          file: file,
-          resolvedRefIndex: resolvedRefIndex,
-          nodeLookup: nodeLookup,
-          diagnostics: diagnostics,
-        );
-        if (entry != null) {
-          allEntries.add(entry);
-          _collectNestedEntities(entry, allEntries, allProfiles, allCategories);
-        }
-      } else if (_entryLinkTags.contains(childNode.tagName)) {
-        final entry = _resolveEntryLink(
-          linkNode: childNode,
-          file: file,
-          resolvedRefIndex: resolvedRefIndex,
-          nodeLookup: nodeLookup,
-          diagnostics: diagnostics,
-        );
-        if (entry != null) {
-          allEntries.add(entry);
-        }
-      }
-    }
-  }
-
-  /// Binds profiles from a root-level profile container.
-  void _bindRootProfileContainer({
-    required WrappedNode container,
-    required WrappedFile file,
-    required List<BoundProfile> allProfiles,
-  }) {
-    for (final childRef in container.children) {
-      final childNode = file.nodes[childRef.nodeIndex];
-
-      if (_profileTags.contains(childNode.tagName)) {
-        final profile = _bindProfile(node: childNode, file: file);
-        if (profile != null) {
-          allProfiles.add(profile);
-        }
-      }
-    }
-  }
-
-  /// Binds categories from a root-level category container.
-  void _bindRootCategoryContainer({
-    required WrappedNode container,
-    required WrappedFile file,
-    required List<BoundCategory> allCategories,
-  }) {
-    for (final childRef in container.children) {
-      final childNode = file.nodes[childRef.nodeIndex];
-
-      if (_categoryTags.contains(childNode.tagName)) {
-        final category = _bindCategory(node: childNode, file: file);
-        if (category != null) {
-          allCategories.add(category);
-        }
-      }
-    }
   }
 
   /// Binds children within a container element.
@@ -777,14 +706,6 @@ class BindService {
       sourceFileId: file.fileId,
       sourceNode: node.ref,
     );
-  }
-
-  /// Helper to find file by ID.
-  WrappedFile? _findFileById(String fileId, List<WrappedFile> files) {
-    for (final file in files) {
-      if (file.fileId == fileId) return file;
-    }
-    return null;
   }
 
   /// Collects nested entities from a bound entry into flat lists.
