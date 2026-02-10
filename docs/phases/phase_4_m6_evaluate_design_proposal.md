@@ -1,4 +1,4 @@
-# Phase 4 — M6 Evaluate Design Proposal
+# Phase 4 — M6 Evaluate Design Proposal (Revised)
 
 ## Status
 
@@ -7,7 +7,16 @@
 - Phase 1C (M3 Wrap): **FROZEN** (2026-02-04)
 - Phase 2 (M4 Link): **FROZEN** (2026-02-05)
 - Phase 3 (M5 Bind): **FROZEN** (2026-02-10)
-- Phase 4 (M6 Evaluate): **PROPOSAL** — awaiting approval
+- Phase 4 (M6 Evaluate): **PROPOSAL** — revision 2, awaiting approval
+
+---
+
+## Revision History
+
+| Rev | Date | Changes |
+|-----|------|---------|
+| 1 | 2026-02-10 | Initial proposal |
+| 2 | 2026-02-10 | Addressed senior review: removed concrete roster types, fixed determinism, clarified boundaries |
 
 ---
 
@@ -16,7 +25,7 @@
 M5 Bind produces a BoundPackBundle containing:
 - Typed entities (BoundEntry, BoundProfile, BoundCategory, BoundCost, BoundConstraint)
 - Query surface for lookups
-- Resolved cross-file references
+- Reference targets identified by M4/M5 where possible; unresolved remains diagnostic
 - BindDiagnostics for semantic issues
 
 M5 explicitly **stores but does NOT evaluate** constraints. Constraint evaluation requires roster state:
@@ -24,72 +33,71 @@ M5 explicitly **stores but does NOT evaluate** constraints. Constraint evaluatio
 - "max 3" requires knowing current selection count
 - Scope-based constraints require traversing the selection hierarchy
 
-**M6 Evaluate** takes a BoundPackBundle plus roster state and produces an EvaluationResult containing:
-- Evaluated constraints with outcomes (satisfied/violated)
-- Violations with details (current value vs required value)
-- Summary statistics (pass/fail counts, severity breakdown)
-- Evaluation diagnostics for non-fatal issues
+**M6 Evaluate** is a pure, deterministic evaluator that consumes:
+- (A) A bound definition graph (BoundPackBundle from M5)
+- (B) A minimal selection snapshot (roster state via contract, not concrete type)
+
+And produces:
+- (1) A stable evaluation report (strictly deterministic)
+- (2) Optional runtime telemetry (non-deterministic, explicitly excluded from equality)
 
 ---
 
 ## Inputs
 
-- `BoundPackBundle` (from M5 Bind)
-- `RosterState` — user's current selections and quantities
+### Input A: BoundPackBundle (from M5 Bind)
 
-### RosterState Structure
+Frozen M5 output. M6 reads but never modifies.
 
-RosterState represents the user's army/roster composition:
+### Input B: Selection Snapshot Contract
 
-```dart
-class RosterState {
-  /// All selections in the roster, keyed by selection ID.
-  final Map<String, RosterSelection> selections;
+M6 requires a roster snapshot that can answer specific operations. **The concrete roster model is NOT defined here** — that belongs to a separate module or downstream phase.
 
-  /// The entry ID of the roster root (force/army).
-  final String rootEntryId;
+**Required Operations (contract, not types):**
 
-  /// Point limit for the roster (if applicable).
-  final int? pointLimit;
+| Operation | Returns | Purpose |
+|-----------|---------|---------|
+| `orderedSelections()` | Ordered list of selection instances | Root-first DFS traversal |
+| `entryIdFor(selectionId)` | Entry ID | Map selection to bound entry |
+| `parentOf(selectionId)` | Parent selection ID or null | Hierarchy traversal |
+| `childrenOf(selectionId)` | Ordered list of child selection IDs | Subtree traversal |
+| `countFor(selectionId)` | Integer count | How many of this entry selected |
+| `isForceRoot(selectionId)` | Boolean | Force boundary detection |
 
-  /// Timestamp when roster was created/modified.
-  final DateTime modifiedAt;
-}
+**Why contract, not concrete types:**
+- Keeps M6 isolated from UX and persistence decisions
+- Prevents names drift when roster modeling changes
+- Still deterministic if snapshot provides ordered children
+- Follows names-first discipline (input names not approved in this phase)
 
-class RosterSelection {
-  /// Unique ID for this selection instance.
-  final String selectionId;
-
-  /// The bound entry this selection is based on.
-  final String entryId;
-
-  /// Number of this entry selected.
-  final int count;
-
-  /// Parent selection ID (null for root).
-  final String? parentSelectionId;
-
-  /// Child selections.
-  final List<String> childSelectionIds;
-
-  /// Selected category IDs for this selection.
-  final List<String> categoryIds;
-}
-```
-
-**Note:** RosterState is a proposed input structure. The exact shape may be refined during approval. M6 does not persist roster state; it evaluates a snapshot.
+**Determinism requirement:** The snapshot MUST provide children in a stable, deterministic order.
 
 ---
 
 ## Outputs
 
-- `EvaluationResult` — complete M6 output containing:
-  - All constraint evaluations with outcomes
-  - All violations detected
-  - Summary and statistics
-  - Evaluation diagnostics for non-fatal issues
-  - Reference to source BoundPackBundle
-  - Provenance chain preserved (M6 → M5 → M4 → M3 → M2 → M1)
+### Output Layer 1: EvaluationReport (Strictly Deterministic)
+
+The primary output. Two evaluations of the same inputs MUST produce identical reports.
+
+Contains:
+- All boundary evaluations with outcomes
+- All violations detected
+- Summary counts
+- Warnings and notices
+- Reference to source BoundPackBundle
+- Provenance chain preserved (M6 → M5 → M4 → M3 → M2 → M1)
+
+### Output Layer 2: EvaluationTelemetry (Non-Deterministic, Excluded)
+
+Optional instrumentation data. **Explicitly excluded from determinism contract.**
+
+Contains:
+- `evaluationDuration` — runtime measurement
+- Memory usage (if tracked)
+- Other performance metrics
+
+**Rule:** EvaluationTelemetry MUST NOT be included in equality checks or determinism comparisons.
 
 ---
 
@@ -102,17 +110,108 @@ M6 MUST NOT:
 3. **No network** — M6 is offline; network operations remain in M1
 4. **No roster mutation** — M6 evaluates roster state; it does NOT modify it
 5. **No modifier evaluation** — M6 evaluates constraints; modifier logic is separate (M7+)
-6. **No list building** — M6 evaluates; army construction UX is downstream
-7. **No cost calculation** — M6 reads costs; cost aggregation is separate
-8. **No XML access** — M6 reads BoundPackBundle, never touches WrappedNode/XML
+6. **No condition evaluation** — Conditional constraints deferred (M7+)
+7. **No list building** — M6 evaluates; army construction UX is downstream
+8. **No cost calculation** — M6 reads costs; cost aggregation is separate
+9. **No XML access** — M6 reads BoundPackBundle, never touches WrappedNode/XML
+10. **No roster model definition** — M6 consumes a snapshot contract, not a concrete model
+
+---
+
+## Boundary Evaluation Model
+
+### Core Concept: Evaluation Unit
+
+The evaluation unit is:
+
+**(constraint, boundary instance)**
+
+This means the same constraint can legitimately produce multiple evaluations if there are multiple boundary instances.
+
+### Scope Definitions (Mandatory)
+
+| Scope | Boundary Instance | Definition |
+|-------|-------------------|------------|
+| `self` | Current selection instance | The single selection being evaluated |
+| `parent` | Parent selection instance | `parentOf(selectionId)` — immediate parent |
+| `force` | Force-root selection instance | Nearest ancestor where `isForceRoot(selectionId) == true` |
+| `roster` | Roster-root boundary (single) | The entire snapshot — one boundary instance |
+
+### Force Scope Handling
+
+If `isForceRoot` cannot be determined from the snapshot (operation returns false for all):
+- Emit warning: `UNDEFINED_FORCE_BOUNDARY`
+- Set outcome: `notApplicable`
+- Do NOT throw EvaluateFailure
+
+### Multiplicity Rule (Mandatory)
+
+**ConstraintEvaluation is emitted per (constraint, boundary instance).**
+
+Example: If a constraint has scope=`self` and the user has 3 instances of the same entry in different parents:
+- M6 produces 3 ConstraintEvaluation records (one per selection instance)
+- Each has its own `affectedSelectionId`
+- Each has its own `actualValue` (the count for that instance)
+
+If you want aggregated evaluation, that is a different scope (e.g., `roster`).
+
+---
+
+## Precomputed Count Tables
+
+### Concept
+
+Instead of computing counts repeatedly during constraint traversal, M6 builds deterministic count tables in a single traversal pass.
+
+### Algorithm
+
+```
+For each selection instance (in orderedSelections order):
+  increment count in SELF boundary (this selection)
+  increment count in PARENT boundary (if parent exists)
+  increment count in FORCE boundary (if force root exists)
+  increment count in ROSTER boundary
+```
+
+### Benefits
+
+- **Speed:** O(1) lookup for any constraint evaluation
+- **Determinism:** Tables built in single traversal order
+- **Simplicity:** Constraint evaluation becomes pure comparison
+
+### Deferred: Conditions and Modifiers
+
+Condition and modifier logic would affect:
+- Whether a selection is included in a count table
+- What the `requiredValue` becomes after modification
+
+These are explicitly deferred to M7+.
+
+---
+
+## Deterministic Evaluation Ordering (Mandatory)
+
+### Traversal Order
+
+1. **Selection traversal:** Root-first DFS following `childrenOf(selectionId)` in list order
+2. **Constraint traversal:** Within a selection, constraints evaluated in stored order (as they appear in BoundEntry.constraints)
+3. **Emission order:** Boundary evaluations emitted in traversal order
+
+### Map Iteration Rule
+
+**Never iterate a Map without sorting keys.**
+
+If any map is used internally, keys MUST be sorted before iteration to ensure deterministic output.
+
+### Warning/Notice Ordering
+
+Warnings and notices are emitted in evaluation order and grouped by code. Within a code group, order matches emission order.
 
 ---
 
 ## Constraint Evaluation Model
 
 ### Constraint Types
-
-BattleScribe constraints use these types:
 
 | Type | Meaning | Evaluation |
 |------|---------|------------|
@@ -121,23 +220,10 @@ BattleScribe constraints use these types:
 
 ### Constraint Fields
 
-The `field` attribute specifies what is being counted:
-
 | Field | What is counted |
 |-------|----------------|
-| `selections` | Number of this entry selected |
-| `forces` | Number of force selections |
-
-### Constraint Scope
-
-The `scope` attribute defines the boundary for counting:
-
-| Scope | Boundary |
-|-------|----------|
-| `self` | This entry only |
-| `parent` | Parent entry |
-| `force` | Containing force |
-| `roster` | Entire roster |
+| `selections` | Number of this entry selected in boundary |
+| `forces` | Number of force selections in boundary |
 
 ### Evaluation Outcomes
 
@@ -152,7 +238,7 @@ enum ConstraintEvaluationOutcome {
   /// Constraint does not apply in current context.
   notApplicable,
 
-  /// Evaluation failed due to error.
+  /// Evaluation failed due to error (unknown type, etc).
   error,
 }
 ```
@@ -161,39 +247,49 @@ enum ConstraintEvaluationOutcome {
 
 ## Core Types
 
-### EvaluationResult
-**File:** `models/evaluation_result.dart`
+### EvaluationReport
+**File:** `models/evaluation_report.dart`
 
-Complete M6 output.
+Strictly deterministic M6 output.
 
 **Fields:**
 - `String packId`
 - `DateTime evaluatedAt` — derived from `boundBundle.boundAt` (deterministic)
-- `List<ConstraintEvaluation> constraintEvaluations` — all evaluated constraints
-- `EvaluationSummary summary` — aggregate pass/fail counts
-- `EvaluationStatistics statistics` — quantitative metrics
+- `List<ConstraintEvaluation> constraintEvaluations` — all boundary evaluations
+- `EvaluationSummary summary` — aggregate counts
 - `List<EvaluationWarning> warnings` — non-fatal issues
+- `List<EvaluationNotice> notices` — informational messages
 - `BoundPackBundle boundBundle` — reference to M5 input (immutable)
 
-**Rules:**
-- One-to-one correspondence with input BoundPackBundle + RosterState
-- Does not modify bound entities or roster state
-- Preserves provenance chain (M6 → M5 → M4 → M3 → M2 → M1)
+**Excluded from this type:** Any telemetry/timing data.
+
+---
+
+### EvaluationTelemetry
+**File:** `models/evaluation_telemetry.dart`
+
+Non-deterministic instrumentation data.
+
+**Fields:**
+- `Duration evaluationDuration` — runtime measurement
+
+**Rule:** This type is explicitly excluded from equality/determinism checks. It is optional instrumentation only.
 
 ---
 
 ### ConstraintEvaluation
 **File:** `models/constraint_evaluation.dart`
 
-Result of evaluating a single constraint.
+Result of evaluating a single (constraint, boundary instance) pair.
 
 **Fields:**
-- `String constraintId` — ID of the BoundConstraint (if present)
+- `String? constraintId` — ID of the BoundConstraint (if present)
 - `ConstraintEvaluationOutcome outcome` — evaluation result
 - `ConstraintViolation? violation` — details if violated
 - `EvaluationScope scope` — boundary used for evaluation
+- `String boundarySelectionId` — the selection instance defining the boundary
 - `EvaluationSourceRef sourceRef` — reference to source constraint
-- `int actualValue` — the computed value from roster state
+- `int actualValue` — the computed value from count table
 - `int requiredValue` — the constraint's required value
 - `String constraintType` — min, max, etc.
 
@@ -208,7 +304,7 @@ Enum representing constraint evaluation result.
 - `satisfied` — constraint requirements met
 - `violated` — constraint requirements NOT met
 - `notApplicable` — constraint does not apply in context
-- `error` — evaluation failed
+- `error` — evaluation failed (unknown type, etc.)
 
 ---
 
@@ -219,10 +315,10 @@ Details of a constraint violation.
 
 **Fields:**
 - `String constraintType` — min, max, etc.
-- `int actualValue` — current count from roster
+- `int actualValue` — current count from boundary
 - `int requiredValue` — constraint's required value
 - `String affectedEntryId` — the entry with the violation
-- `String? affectedSelectionId` — the selection instance (if applicable)
+- `String boundarySelectionId` — the boundary instance
 - `EvaluationScope scope` — boundary where violation occurred
 - `String message` — human-readable violation description
 
@@ -234,25 +330,14 @@ Details of a constraint violation.
 Aggregate summary of all evaluations.
 
 **Fields:**
-- `int totalConstraints` — total constraints evaluated
-- `int satisfiedCount` — constraints that passed
-- `int violatedCount` — constraints that failed
-- `int notApplicableCount` — constraints that didn't apply
-- `int errorCount` — constraints that failed to evaluate
-- `bool isValid` — true if violatedCount == 0
+- `int totalEvaluations` — total boundary evaluations performed
+- `int satisfiedCount` — evaluations that passed
+- `int violatedCount` — evaluations that failed
+- `int notApplicableCount` — evaluations that didn't apply
+- `int errorCount` — evaluations that failed to evaluate
+- `bool hasViolations` — true if violatedCount > 0
 
----
-
-### EvaluationStatistics
-**File:** `models/evaluation_statistics.dart`
-
-Quantitative metrics from evaluation.
-
-**Fields:**
-- `int entriesEvaluated` — number of entries processed
-- `int constraintsEvaluated` — number of constraints evaluated
-- `int violationsFound` — total violations detected
-- `Duration evaluationTime` — time taken to evaluate
+**Note on `hasViolations`:** This is a mechanical check (`violatedCount > 0`). It does NOT imply roster legality; only constraint violation presence. The name avoids "valid/invalid" judgment vocabulary.
 
 ---
 
@@ -266,14 +351,15 @@ Non-fatal issue detected during evaluation.
 - `String message` — human-readable description
 - `EvaluationSourceRef? sourceRef` — source of warning
 
-**Warning Codes (initial set):**
+**Warning Codes (closed set):**
 
-| Code | Condition |
-|------|-----------|
-| `UNKNOWN_CONSTRAINT_TYPE` | Constraint type not recognized |
-| `UNKNOWN_CONSTRAINT_FIELD` | Constraint field not recognized |
-| `UNKNOWN_CONSTRAINT_SCOPE` | Constraint scope not recognized |
-| `MISSING_ENTRY_REFERENCE` | Selection references entry not in bundle |
+| Code | Condition | Behavior |
+|------|-----------|----------|
+| `UNKNOWN_CONSTRAINT_TYPE` | Constraint type not recognized | outcome = error |
+| `UNKNOWN_CONSTRAINT_FIELD` | Constraint field not recognized | outcome = error |
+| `UNKNOWN_CONSTRAINT_SCOPE` | Constraint scope not recognized | outcome = error |
+| `UNDEFINED_FORCE_BOUNDARY` | Force scope requested but no force root found | outcome = notApplicable |
+| `MISSING_ENTRY_REFERENCE` | Selection references entry not in bundle | Skip selection |
 
 ---
 
@@ -287,12 +373,12 @@ Informational message from evaluation.
 - `String message` — human-readable description
 - `EvaluationSourceRef? sourceRef` — source of notice
 
-**Notice Codes (initial set):**
+**Notice Codes (closed set):**
 
-| Code | Condition |
-|------|-----------|
-| `CONSTRAINT_SKIPPED` | Constraint skipped due to condition |
-| `EMPTY_ROSTER` | Roster has no selections to evaluate |
+| Code | Condition | Behavior |
+|------|-----------|----------|
+| `CONSTRAINT_SKIPPED` | Constraint skipped (condition not met, deferred) | outcome = notApplicable |
+| `EMPTY_SNAPSHOT` | Snapshot has no selections | No evaluations performed |
 
 ---
 
@@ -303,45 +389,20 @@ Defines the boundary of evaluation.
 
 **Fields:**
 - `String scopeType` — self, parent, force, roster
-- `String? boundaryEntryId` — the entry defining the boundary
-- `String? boundarySelectionId` — the selection defining the boundary
-
----
-
-### EvaluationApplicability
-**File:** `models/evaluation_applicability.dart`
-
-Determines whether a constraint applies.
-
-**Fields:**
-- `bool applies` — whether constraint should be evaluated
-- `String? reason` — why it doesn't apply (if applies == false)
+- `String? boundarySelectionId` — the selection defining the boundary (null for roster)
 
 ---
 
 ### EvaluationSourceRef
 **File:** `models/evaluation_source_ref.dart`
 
-Reference to source definition.
+Reference to source definition for traceability.
 
 **Fields:**
 - `String sourceFileId` — file containing source
 - `String? entryId` — entry containing constraint
 - `String? constraintId` — the constraint ID (if present)
 - `NodeRef? sourceNode` — node reference for traceability
-
----
-
-### EvaluationContext
-**File:** `models/evaluation_context.dart`
-
-Runtime state during evaluation.
-
-**Fields:**
-- `String currentEntryId` — entry being evaluated
-- `String? currentSelectionId` — selection being evaluated
-- `Map<String, int> countsByScope` — precomputed counts per scope
-- `List<String> ancestorEntryIds` — ancestor chain for scope resolution
 
 ---
 
@@ -355,35 +416,62 @@ Fatal exception for M6 failures.
 - `String? entryId`
 - `String? details`
 
-**Fatality Policy:**
+### EvaluateFailure Invariants (Enumerated)
 
-EvaluateFailure is thrown ONLY for:
-1. **Corrupted M5 input** — BoundPackBundle violates frozen M5 contracts
-2. **Internal invariant violation** — M6 implementation bug
+EvaluateFailure is thrown ONLY for these specific invariant violations:
 
-EvaluateFailure is NOT thrown for:
-- Unknown constraint types → warning
-- Missing entry references → warning
-- Constraint evaluation errors → outcome = error
+| Invariant | Condition |
+|-----------|-----------|
+| `NULL_PROVENANCE` | Required provenance pointers missing (boundBundle.linkedBundle, etc.) |
+| `CYCLE_DETECTED` | Cycle in selection hierarchy (parentOf chain) |
+| `MISSING_CHILDREN_ORDER` | childrenOf returns unordered/non-deterministic collection |
+| `INTERNAL_ASSERTION` | M6 implementation bug (defensive checks) |
+
+**EvaluateFailure is NOT thrown for:**
+- Unknown constraint types → warning, outcome = error
+- Missing entry references → warning, skip selection
+- Undefined force boundary → warning, outcome = notApplicable
+- Any expected data gap from upstream
 
 **In normal operation, no EvaluateFailure is thrown.**
 
 ---
 
-## Phase Isolation Rules
+## Reserved Types (M7+)
 
-### Diagnostic Code Isolation (MANDATORY)
+The following types were approved in vocabulary but are **reserved for future phases**:
 
-M6 diagnostic codes (warnings, notices) MUST NOT reuse M5 diagnostic code names or meanings.
+| Type | Phase | Reason |
+|------|-------|--------|
+| `RuleEvaluation` | M7+ | Rule evaluation deferred |
+| `RuleEvaluationOutcome` | M7+ | Rule evaluation deferred |
+| `RuleViolation` | M7+ | Rule evaluation deferred |
+| `EvaluationApplicability` | M7+ | Condition evaluation deferred |
+| `EvaluationContext` | M7+ | Complex context deferred |
 
-| Module | Diagnostic Pattern |
-|--------|-------------------|
+These names are reserved. M6 does NOT produce these types.
+
+---
+
+## Phase Isolation Rules (Mandatory)
+
+### Terminology Isolation
+
+M6 uses **warnings/notices**, NOT "diagnostics":
+
+| Module | Terminology |
+|--------|-------------|
+| M5 Bind | BindDiagnostic |
+| M6 Evaluate | EvaluationWarning, EvaluationNotice |
+
+### Code Pattern Isolation
+
+| Module | Code Patterns |
+|--------|---------------|
 | M5 Bind | `UNRESOLVED_*`, `SHADOWED_*`, `INVALID_*` |
-| M6 Evaluate | `UNKNOWN_*`, `MISSING_*`, `CONSTRAINT_*`, `EMPTY_*` |
+| M6 Evaluate | `UNKNOWN_*`, `UNDEFINED_*`, `MISSING_*`, `CONSTRAINT_*`, `EMPTY_*` |
 
-### Failure Type Isolation (MANDATORY)
-
-Each module has its own failure exception:
+### Failure Type Isolation
 
 | Module | Failure Type |
 |--------|-------------|
@@ -401,18 +489,16 @@ Each module has its own failure exception:
 
 ### Public Exports (barrel only)
 - `services/evaluate_service.dart`
-- `models/evaluation_result.dart`
+- `models/evaluation_report.dart`
+- `models/evaluation_telemetry.dart`
 - `models/constraint_evaluation.dart`
 - `models/constraint_evaluation_outcome.dart`
 - `models/constraint_violation.dart`
 - `models/evaluation_summary.dart`
-- `models/evaluation_statistics.dart`
 - `models/evaluation_warning.dart`
 - `models/evaluation_notice.dart`
 - `models/evaluation_scope.dart`
-- `models/evaluation_applicability.dart`
 - `models/evaluation_source_ref.dart`
-- `models/evaluation_context.dart`
 - `models/evaluate_failure.dart`
 
 ### File Layout
@@ -420,18 +506,16 @@ Each module has its own failure exception:
 lib/modules/m6_evaluate/
 ├── m6_evaluate.dart
 ├── models/
-│   ├── evaluation_result.dart
+│   ├── evaluation_report.dart
+│   ├── evaluation_telemetry.dart
 │   ├── constraint_evaluation.dart
 │   ├── constraint_evaluation_outcome.dart
 │   ├── constraint_violation.dart
 │   ├── evaluation_summary.dart
-│   ├── evaluation_statistics.dart
 │   ├── evaluation_warning.dart
 │   ├── evaluation_notice.dart
 │   ├── evaluation_scope.dart
-│   ├── evaluation_applicability.dart
 │   ├── evaluation_source_ref.dart
-│   ├── evaluation_context.dart
 │   └── evaluate_failure.dart
 └── services/
     └── evaluate_service.dart
@@ -446,43 +530,57 @@ lib/modules/m6_evaluate/
 
 **Method:**
 ```dart
-Future<EvaluationResult> evaluateRoster({
+/// Evaluates constraints against a selection snapshot.
+///
+/// Returns (EvaluationReport, EvaluationTelemetry?) where:
+/// - EvaluationReport is strictly deterministic
+/// - EvaluationTelemetry is optional, non-deterministic instrumentation
+(EvaluationReport, EvaluationTelemetry?) evaluateConstraints({
   required BoundPackBundle boundBundle,
-  required RosterState rosterState,
-}) async
+  required SelectionSnapshot snapshot,
+})
 ```
 
-**Behavior:**
-1. Validate inputs (throw EvaluateFailure if corrupted)
-2. Build evaluation context with precomputed counts
-3. For each selection in roster:
-   a. Find corresponding BoundEntry
-   b. For each constraint on the entry:
+**Algorithm:**
+1. Validate invariants (throw EvaluateFailure if violated)
+2. Build count tables in single traversal pass
+3. For each selection in `snapshot.orderedSelections()`:
+   a. Find corresponding BoundEntry via `snapshot.entryIdFor(selectionId)`
+   b. For each constraint on the entry (in stored order):
       - Determine scope boundary
-      - Compute actual value from roster state
-      - Compare against constraint value
-      - Record ConstraintEvaluation with outcome
+      - Lookup actualValue from count table
+      - Compare against requiredValue
+      - Emit ConstraintEvaluation
 4. Build EvaluationSummary from all evaluations
-5. Compute EvaluationStatistics
-6. Return EvaluationResult
+5. Return (EvaluationReport, optional telemetry)
 
 ---
 
-## Determinism Contract
+## Determinism Contract (Enforceable)
 
-M6 guarantees:
-- Same BoundPackBundle + same RosterState → identical EvaluationResult
-- Evaluation ordering matches entry binding order → constraint order
-- No dependence on runtime hash ordering
-- Warning/notice ordering is deterministic
+### Strict Guarantee
 
-### evaluatedAt Determinism Rule (MANDATORY)
+Same `BoundPackBundle` + same `SelectionSnapshot` → identical `EvaluationReport`
 
-`evaluatedAt` must be derived from upstream immutable input, never wall-clock time.
+### What is Deterministic
 
-**Required:** `evaluatedAt = boundBundle.boundAt`
+- `evaluatedAt` timestamp (derived from `boundBundle.boundAt`)
+- All `constraintEvaluations` (order and content)
+- `summary` counts
+- `warnings` and `notices` (order and content)
 
-**Forbidden:** `evaluatedAt = DateTime.now()`
+### What is NOT Deterministic (Explicitly Excluded)
+
+- `EvaluationTelemetry.evaluationDuration`
+- Any future instrumentation metrics
+
+### Enforcement
+
+`EvaluationTelemetry` is a separate type. It MUST NOT be included in:
+- `EvaluationReport` fields
+- Equality comparisons
+- Hash code calculations
+- Serialization for determinism tests
 
 ---
 
@@ -494,106 +592,74 @@ M6 guarantees:
 - max constraint with count > value → violated
 - max constraint with count <= value → satisfied
 
+### Boundary Evaluation (Multiplicity)
+- Same entry selected 3 times with scope=self → 3 evaluations
+- Scope=roster with multiple selections → 1 evaluation
+- Scope=force with 2 force roots → 2 evaluations
+
 ### Scope Resolution
-- self scope counts only current entry
-- parent scope counts in parent context
-- force scope counts across force
-- roster scope counts across all selections
+- self scope: counts only current selection
+- parent scope: counts in parent boundary
+- force scope: counts in force-root boundary
+- roster scope: counts across all selections
+- undefined force root → warning + notApplicable
 
 ### Summary Accuracy
-- isValid == true when violatedCount == 0
+- hasViolations == true when violatedCount > 0
 - Counts match individual evaluations
 
 ### Warning Generation
 - Unknown constraint type → UNKNOWN_CONSTRAINT_TYPE warning
 - Missing entry reference → MISSING_ENTRY_REFERENCE warning
+- Undefined force boundary → UNDEFINED_FORCE_BOUNDARY warning
 
 ### Determinism
-- Evaluating same input twice yields identical output
+- Evaluating same input twice yields identical EvaluationReport
+- EvaluationTelemetry may differ (explicitly allowed)
 
 ### No-Failure Policy
 - Unknown constraint type does NOT throw EvaluateFailure
 - Missing entry reference does NOT throw EvaluateFailure
+- Undefined force boundary does NOT throw EvaluateFailure
+
+### EvaluateFailure Invariants
+- Null provenance → EvaluateFailure with NULL_PROVENANCE
+- Cycle in selection hierarchy → EvaluateFailure with CYCLE_DETECTED
 
 ---
 
-## Open Questions (require SME decision)
+## Resolved Questions
 
-### Q1: Rule Evaluation
-
-M5 deferred binding `rule` elements. Should M6 evaluate rules, or are rules deferred to a future phase?
-
-**Options:**
-- A: M6 evaluates rules (add RuleEvaluation, RuleViolation, etc.)
-- B: Rules deferred to M7 (M6 focuses on constraints only)
-
-**Recommendation:** Option B — keep M6 focused on constraints. Add rule evaluation in a future phase with explicit scope.
-
----
-
-### Q2: Condition Evaluation
-
-BattleScribe constraints can have conditions (e.g., "only apply if X is selected"). Should M6 evaluate conditions?
-
-**Options:**
-- A: M6 evaluates conditions (constraint skipped if condition false)
-- B: M6 ignores conditions (evaluate all constraints regardless)
-- C: M6 defers condition evaluation to M7+ (return notApplicable for conditional constraints)
-
-**Recommendation:** Option C — conditions require complex evaluation logic. Defer to future phase.
-
----
-
-### Q3: Modifier Application
-
-Modifiers can change constraint values dynamically. Should M6 apply modifiers before evaluation?
-
-**Options:**
-- A: M6 applies modifiers (constraints evaluated with modified values)
-- B: M6 uses raw constraint values (modifiers applied elsewhere)
-
-**Recommendation:** Option B — modifier application is complex and deserves its own module.
-
----
-
-## Glossary Additions Required (if approved)
-
-Already added to `/docs/glossary.md`:
-- **Evaluate Failure** — Fatal exception for M6 corruption
-- **Evaluation Result** — Complete M6 output with evaluated roster state
-- **Rule Evaluation** — Result of evaluating a single rule
-- **Rule Evaluation Outcome** — Enum for rule result
-- **Rule Violation** — Specific rule violation details
-- **Constraint Evaluation** — Result of evaluating a single constraint
-- **Constraint Evaluation Outcome** — Enum for constraint result
-- **Constraint Violation** — Specific constraint violation details
-- **Evaluation Summary** — Aggregate summary of evaluations
-- **Evaluation Statistics** — Quantitative metrics from evaluation
-- **Evaluation Notice** — Informational message
-- **Evaluation Warning** — Non-fatal issue
-- **Evaluation Scope** — Boundary of evaluation
-- **Evaluation Applicability** — Whether rule/constraint applies
-- **Evaluation Source Ref** — Reference to source definition
-- **Evaluation Context** — Runtime state during evaluation
+| Question | Resolution |
+|----------|------------|
+| Rule evaluation? | Deferred to M7. RuleEvaluation types reserved, not produced. |
+| Condition evaluation? | Deferred to M7. Conditional constraints get outcome=notApplicable. |
+| Modifier application? | Deferred to M7. M6 uses raw constraint values. |
+| Roster model? | M6 defines contract (operations), not concrete types. |
+| evaluationTime? | Moved to separate EvaluationTelemetry, excluded from determinism. |
+| isValid naming? | Renamed to hasViolations, defined mechanically. |
 
 ---
 
 ## Approval Checklist
 
 - [ ] Problem statement approved
-- [ ] Input/Output contract approved
-- [ ] RosterState structure approved (or alternative proposed)
+- [ ] Input contract approved (snapshot operations, not concrete types)
+- [ ] Output layering approved (deterministic report + optional telemetry)
 - [ ] Non-goals approved
-- [ ] Constraint evaluation model approved (types, fields, scopes, outcomes)
+- [ ] Boundary evaluation model approved (constraint, boundary instance)
+- [ ] Scope definitions approved (self, parent, force, roster)
+- [ ] Multiplicity rule approved
+- [ ] Precomputed count tables approved
+- [ ] Deterministic ordering rules approved
 - [ ] Core type names approved
-- [ ] EvaluateFailure fatality policy approved
-- [ ] Phase isolation rules approved (diagnostic codes, failure types)
-- [ ] Module layout approved
+- [ ] EvaluateFailure invariants approved (enumerated list)
+- [ ] Phase isolation rules approved (warnings/notices, not diagnostics)
+- [ ] Reserved types acknowledged (RuleEvaluation, etc. → M7)
 - [ ] EvaluateService signature approved
-- [ ] Determinism contract approved (evaluatedAt derivation)
+- [ ] Determinism contract approved (telemetry excluded)
 - [ ] Warning codes approved
 - [ ] Notice codes approved
-- [ ] Open questions resolved (Q1: rules, Q2: conditions, Q3: modifiers)
 - [ ] Required tests approved
 
 **NO CODE UNTIL APPROVAL.**
