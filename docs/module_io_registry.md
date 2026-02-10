@@ -159,11 +159,11 @@ Non-fatal diagnostics chosen over throwing:
 
 ---
 
-## M5 Bind (Phase 3) — PROPOSAL
+## M5 Bind (Phase 3) — FROZEN
 
 Converts LinkedPackBundle into typed, queryable entities with resolved cross-file references.
 
-**Status:** PROPOSAL — awaiting approval. No implementation until approved.
+**Status:** FROZEN (2026-02-10). Bug fixes only with explicit approval.
 
 ### Inputs
 - LinkedPackBundle (from M4 Link)
@@ -187,11 +187,11 @@ Converts LinkedPackBundle into typed, queryable entities with resolved cross-fil
 
 ### Behavior
 - Traverses all files in file resolution order
-- Binds selectionEntry/selectionEntryGroup → BoundEntry
-- Binds profile → BoundProfile
-- Binds categoryEntry → BoundCategory
+- Entry-root detection: binds entries whose parent is not an entry tag (container-agnostic)
+- Profile/category-root detection: binds those without entry ancestor
 - Follows entryLinks, infoLinks, categoryLinks using M4's ResolvedRefs
 - Applies shadowing policy: first-match-wins by file order
+- Uses linkedBundle.linkedAt for deterministic boundAt timestamp
 - Builds query indices for O(1) lookups
 
 ### Query Surface
@@ -210,7 +210,7 @@ First-match-wins based on file resolution order:
 
 When ID matches multiple targets: use first, emit SHADOWED_DEFINITION diagnostic.
 
-### Diagnostic Codes (Proposed)
+### Diagnostic Codes
 - UNRESOLVED_ENTRY_LINK: entryLink target not found
 - UNRESOLVED_INFO_LINK: infoLink target not found
 - UNRESOLVED_CATEGORY_LINK: categoryLink target not found
