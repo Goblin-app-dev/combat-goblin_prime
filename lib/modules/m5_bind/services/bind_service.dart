@@ -58,36 +58,44 @@ class BindService {
     final files = _filesInResolutionOrder(linkedBundle.wrappedBundle);
 
     for (final file in files) {
-      // Process nodes in node order (already M3 traversal order)
-      for (final node in file.nodes) {
-        // Bind top-level entries (not nested - we'll handle nesting recursively)
-        if (_entryTags.contains(node.tagName) && node.parent == null) {
-          final entry = _bindEntry(
-            node: node,
+      // Find root node (the one with parent == null, depth == 0)
+      final rootNode = file.nodes.firstWhere(
+        (n) => n.parent == null,
+        orElse: () => file.nodes.first,
+      );
+
+      // Process root-level containers in document order
+      for (final containerRef in rootNode.children) {
+        final container = file.nodes[containerRef.nodeIndex];
+
+        // Entry containers at root level
+        if (_rootEntryContainers.contains(container.tagName)) {
+          _bindRootEntryContainer(
+            container: container,
             file: file,
             resolvedRefIndex: resolvedRefIndex,
             nodeLookup: nodeLookup,
             diagnostics: diagnostics,
+            allEntries: allEntries,
+            allProfiles: allProfiles,
+            allCategories: allCategories,
           );
-          if (entry != null) {
-            allEntries.add(entry);
-            // Collect nested entities
-            _collectNestedEntities(entry, allEntries, allProfiles, allCategories);
-          }
         }
-        // Bind top-level profiles (standalone, not nested in entry)
-        else if (_profileTags.contains(node.tagName) && node.parent == null) {
-          final profile = _bindProfile(node: node, file: file);
-          if (profile != null) {
-            allProfiles.add(profile);
-          }
+        // Profile containers at root level
+        else if (_rootProfileContainers.contains(container.tagName)) {
+          _bindRootProfileContainer(
+            container: container,
+            file: file,
+            allProfiles: allProfiles,
+          );
         }
-        // Bind top-level categories (standalone definitions)
-        else if (_categoryTags.contains(node.tagName) && node.parent == null) {
-          final category = _bindCategory(node: node, file: file);
-          if (category != null) {
-            allCategories.add(category);
-          }
+        // Category containers at root level
+        else if (_rootCategoryContainers.contains(container.tagName)) {
+          _bindRootCategoryContainer(
+            container: container,
+            file: file,
+            allCategories: allCategories,
+          );
         }
       }
     }
@@ -288,6 +296,103 @@ class BindService {
       'constraints',
       'categories',
     }.contains(tagName);
+  }
+
+  /// Root-level containers that hold top-level entries.
+  static const _rootEntryContainers = {
+    'selectionEntries',
+    'sharedSelectionEntries',
+    'selectionEntryGroups',
+    'sharedSelectionEntryGroups',
+    'entryLinks',
+  };
+
+  /// Root-level containers that hold top-level profiles.
+  static const _rootProfileContainers = {
+    'profiles',
+    'sharedProfiles',
+  };
+
+  /// Root-level containers that hold top-level categories.
+  static const _rootCategoryContainers = {
+    'categoryEntries',
+  };
+
+  /// Binds entries from a root-level entry container.
+  void _bindRootEntryContainer({
+    required WrappedNode container,
+    required WrappedFile file,
+    required Map<(String, int), ResolvedRef> resolvedRefIndex,
+    required Map<(String, int), WrappedNode> nodeLookup,
+    required List<BindDiagnostic> diagnostics,
+    required List<BoundEntry> allEntries,
+    required List<BoundProfile> allProfiles,
+    required List<BoundCategory> allCategories,
+  }) {
+    for (final childRef in container.children) {
+      final childNode = file.nodes[childRef.nodeIndex];
+
+      if (_entryTags.contains(childNode.tagName)) {
+        final entry = _bindEntry(
+          node: childNode,
+          file: file,
+          resolvedRefIndex: resolvedRefIndex,
+          nodeLookup: nodeLookup,
+          diagnostics: diagnostics,
+        );
+        if (entry != null) {
+          allEntries.add(entry);
+          _collectNestedEntities(entry, allEntries, allProfiles, allCategories);
+        }
+      } else if (_entryLinkTags.contains(childNode.tagName)) {
+        final entry = _resolveEntryLink(
+          linkNode: childNode,
+          file: file,
+          resolvedRefIndex: resolvedRefIndex,
+          nodeLookup: nodeLookup,
+          diagnostics: diagnostics,
+        );
+        if (entry != null) {
+          allEntries.add(entry);
+        }
+      }
+    }
+  }
+
+  /// Binds profiles from a root-level profile container.
+  void _bindRootProfileContainer({
+    required WrappedNode container,
+    required WrappedFile file,
+    required List<BoundProfile> allProfiles,
+  }) {
+    for (final childRef in container.children) {
+      final childNode = file.nodes[childRef.nodeIndex];
+
+      if (_profileTags.contains(childNode.tagName)) {
+        final profile = _bindProfile(node: childNode, file: file);
+        if (profile != null) {
+          allProfiles.add(profile);
+        }
+      }
+    }
+  }
+
+  /// Binds categories from a root-level category container.
+  void _bindRootCategoryContainer({
+    required WrappedNode container,
+    required WrappedFile file,
+    required List<BoundCategory> allCategories,
+  }) {
+    for (final childRef in container.children) {
+      final childNode = file.nodes[childRef.nodeIndex];
+
+      if (_categoryTags.contains(childNode.tagName)) {
+        final category = _bindCategory(node: childNode, file: file);
+        if (category != null) {
+          allCategories.add(category);
+        }
+      }
+    }
   }
 
   /// Binds children within a container element.
