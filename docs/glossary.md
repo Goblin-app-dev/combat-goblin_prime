@@ -89,6 +89,36 @@ Complete M4 output for a pack: SymbolTable + resolved references + diagnostics +
 ## Link Service
 Service that performs cross-file reference resolution. Converts WrappedPackBundle to LinkedPackBundle. Resolves only targetId on link elements (catalogueLink, entryLink, infoLink, categoryLink).
 
+## Bound Pack Bundle
+Complete M5 output containing bound entities (entries, profiles, categories) with query surface for lookups and navigation. Preserves provenance chain (M5 → M4 → M3 → M2 → M1). Produced by M5 Bind (BindService).
+
+## Bound Entry
+Entry with resolved children, profiles, categories, costs, and constraints. Represents selectionEntry or selectionEntryGroup with all links followed. Includes isGroup and isHidden flags, plus sourceFileId/sourceNode for provenance.
+
+## Bound Profile
+Profile with characteristics and type reference. Extracted from profile elements with ordered name-value characteristic pairs. Includes typeId/typeName (may be null if type not found) and provenance.
+
+## Bound Category
+Category definition with primary flag. Represents categoryEntry or resolved categoryLink. Includes isPrimary flag and provenance.
+
+## Bound Cost
+Cost value with type reference. Extracted from cost elements. Contains typeId, typeName (may be null), numeric value, and provenance.
+
+## Bound Constraint
+Constraint data (NOT evaluated). Captures raw constraint fields (type, field, scope, value) without evaluation. Evaluation requires roster state (deferred to M6+).
+
+## Bind Diagnostic
+Non-fatal semantic issue detected during M5 Bind. Closed code set: UNRESOLVED_ENTRY_LINK, UNRESOLVED_INFO_LINK, UNRESOLVED_CATEGORY_LINK, SHADOWED_DEFINITION. Always accumulated; never thrown.
+
+## Bind Failure
+Exception thrown by M5 Bind only for corrupted M4 input or internal bugs. In normal operation, no BindFailure is thrown. Semantic issues are reported via BindDiagnostic instead.
+
+## Bind Service
+Service that performs entity binding. Converts LinkedPackBundle to BoundPackBundle. Uses entry-root detection (container-agnostic) to identify top-level entries.
+
+## Entry-Root Detection
+M5 binding strategy where an entry is considered a "root" if its parent node is not an eligible entry tag. Container-agnostic: works with any schema variant without maintaining container tag lists.
+
 ---
 
 Any concept used in code must appear here first.

@@ -76,3 +76,21 @@ No silent renames are permitted.
 - New name: AcquireService.buildBundle(..., source)
 - Reason: Add SourceLocator parameter to track upstream source for update checking.
 - Approval reference: User approval (Phase 1A workflow enhancement)
+
+## 2026-02-10
+- Old name: N/A
+- New name: BoundPackBundle, BoundEntry, BoundProfile, BoundCategory, BoundCost, BoundConstraint
+- Reason: New M5 Bind entity types for typed interpretation of linked pack data.
+- Approval reference: Phase 3 M5 Bind approved names proposal
+
+## 2026-02-10
+- Old name: N/A
+- New name: BindDiagnostic, BindFailure
+- Reason: New M5 Bind diagnostic and error types.
+- Approval reference: Phase 3 M5 Bind approved names proposal
+
+## 2026-02-10
+- Old name: N/A
+- New name: BindService
+- Reason: New M5 Bind service for entity binding with entry-root detection.
+- Approval reference: Phase 3 M5 Bind approved names proposal

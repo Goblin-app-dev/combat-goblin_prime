@@ -6,7 +6,7 @@
 - Phase 1B (M2 Parse): **FROZEN**
 - Phase 1C (M3 Wrap): **FROZEN** (2026-02-04)
 - Phase 2 (M4 Link): **FROZEN** (2026-02-05)
-- Phase 3 (M5 Bind): **PROPOSED** — awaiting approval
+- Phase 3 (M5 Bind): **FROZEN** (2026-02-10)
 
 ---
 
