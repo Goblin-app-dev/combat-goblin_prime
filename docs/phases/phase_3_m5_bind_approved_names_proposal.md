@@ -382,6 +382,18 @@ When M4's ResolvedRef contains multiple targets:
 
 ---
 
+## Entry Root Definition (MANDATORY)
+
+A **bindable entry root** is any node where:
+1. The node's `tagName` is in the eligible entry set (`selectionEntry`, `selectionEntryGroup`)
+2. The node does NOT have an ancestor with an eligible entry tag
+
+This definition is **container-agnostic**: it does not enumerate container tags (`selectionEntries`, `sharedSelectionEntries`, etc.). The rule depends only on the entry tag set, making it robust across schema variants.
+
+**Profile/Category Root:** Similarly, profiles and categories are bound at "root level" only if they have no entry ancestor. Nested profiles/categories are collected via entry binding.
+
+---
+
 ## Determinism Contract
 
 M5 guarantees:
@@ -390,6 +402,16 @@ M5 guarantees:
 - Query results ordered deterministically
 - No hash-map iteration leaks
 - Stable diagnostic ordering
+
+### boundAt Determinism Rule (MANDATORY)
+
+`boundAt` must be derived from upstream immutable input, never wall-clock time.
+
+**Required:** `boundAt = linkedBundle.linkedAt`
+
+**Forbidden:** `boundAt = DateTime.now()`
+
+This ensures identical input always produces identical output, enabling reliable determinism tests and reproducible debugging.
 
 ---
 
