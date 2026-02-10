@@ -94,3 +94,33 @@ No silent renames are permitted.
 - New name: BindService
 - Reason: New M5 Bind service for entity binding with entry-root detection.
 - Approval reference: Phase 3 M5 Bind approved names proposal
+
+## 2026-02-10
+- Old name: N/A
+- New name: EvaluateFailure
+- Reason: New M6 Evaluate fatal exception for corrupted input or internal bugs. Parallels BindFailure/LinkFailure pattern.
+- Approval reference: Phase 4 M6 Evaluate approved output vocabulary
+
+## 2026-02-10
+- Old name: N/A
+- New name: EvaluationResult, RuleEvaluation, RuleEvaluationOutcome, RuleViolation, ConstraintEvaluation, ConstraintEvaluationOutcome, ConstraintViolation
+- Reason: New M6 Evaluate core entity types for rule and constraint evaluation output.
+- Approval reference: Phase 4 M6 Evaluate approved output vocabulary
+
+## 2026-02-10
+- Old name: N/A
+- New name: EvaluationSummary, EvaluationStatistics
+- Reason: New M6 Evaluate aggregate summary and metrics types.
+- Approval reference: Phase 4 M6 Evaluate approved output vocabulary
+
+## 2026-02-10
+- Old name: N/A
+- New name: EvaluationNotice, EvaluationWarning
+- Reason: New M6 Evaluate diagnostic types for non-fatal issues.
+- Approval reference: Phase 4 M6 Evaluate approved output vocabulary
+
+## 2026-02-10
+- Old name: N/A
+- New name: EvaluationScope, EvaluationApplicability, EvaluationSourceRef, EvaluationContext
+- Reason: New M6 Evaluate supporting types for scope, applicability, provenance, and runtime context.
+- Approval reference: Phase 4 M6 Evaluate approved output vocabulary
