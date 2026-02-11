@@ -170,6 +170,21 @@ Runtime state available during evaluation: roster selections, active modifiers, 
 ## Selection Snapshot
 Contract interface for roster state input to M6. Defines required operations (orderedSelections, entryIdFor, parentOf, childrenOf, countFor, isForceRoot) but not concrete types. Implementation is outside M6 scope.
 
+## Bound Rule (PROPOSAL — M7)
+Game rule definition with name, description, and provenance. Represents `rule` elements from BSData. Contains id, name, description text, publicationId, page, hidden flag, and source provenance. **Proposed for M7 Rules; not yet approved.**
+
+## Extended Bound Pack Bundle (PROPOSAL — M7)
+M7 output extending M5's BoundPackBundle with bound rules. Maintains M5 output unchanged while adding rule-specific content. Contains rule list, query surface, and rule diagnostics. **Proposed for M7 Rules; not yet approved.**
+
+## Rules Diagnostic (PROPOSAL — M7)
+Non-fatal semantic issue during M7 rule binding. Closed code set: UNRESOLVED_RULE_LINK, SHADOWED_RULE_DEFINITION, EMPTY_RULE_DESCRIPTION. Always accumulated; never thrown. **Proposed for M7 Rules; not yet approved.**
+
+## Rules Failure (PROPOSAL — M7)
+Exception thrown by M7 Rules only for corrupted M5 input or internal bugs. In normal operation, no RulesFailure is thrown. Semantic issues are reported via RulesDiagnostic instead. **Proposed for M7 Rules; not yet approved.**
+
+## Rules Service (PROPOSAL — M7)
+Service that binds rule elements. Converts BoundPackBundle to ExtendedBoundPackBundle. Uses same shadowing policy as M5. **Proposed for M7 Rules; not yet approved.**
+
 ---
 
 Any concept used in code must appear here first.

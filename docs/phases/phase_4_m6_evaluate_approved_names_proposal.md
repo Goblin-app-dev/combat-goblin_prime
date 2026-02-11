@@ -7,7 +7,7 @@
 - Phase 1C (M3 Wrap): **FROZEN** (2026-02-04)
 - Phase 2 (M4 Link): **FROZEN** (2026-02-05)
 - Phase 3 (M5 Bind): **FROZEN** (2026-02-10)
-- Phase 4 (M6 Evaluate): **PROPOSAL** — revision 3, awaiting approval
+- Phase 4 (M6 Evaluate): **FROZEN** (2026-02-11)
 
 ---
 
@@ -66,6 +66,7 @@ And produces:
 - Barrel: `lib/modules/m6_evaluate/m6_evaluate.dart`
 
 ### Public Exports (barrel only)
+- `contracts/selection_snapshot.dart`
 - `services/evaluate_service.dart`
 - `models/evaluation_report.dart`
 - `models/evaluation_telemetry.dart`
@@ -83,6 +84,8 @@ And produces:
 ```
 lib/modules/m6_evaluate/
 ├── m6_evaluate.dart
+├── contracts/
+│   └── selection_snapshot.dart
 ├── models/
 │   ├── evaluation_report.dart
 │   ├── evaluation_telemetry.dart

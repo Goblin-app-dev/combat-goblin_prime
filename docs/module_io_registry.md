@@ -229,6 +229,86 @@ Constraint evaluation requires roster state (deferred to M6+).
 
 ---
 
+## M6 Evaluate (Phase 4) — FROZEN
+
+Evaluates constraints against selection snapshot to determine satisfaction/violation.
+
+**Status:** FROZEN (2026-02-11). Bug fixes only with explicit approval.
+
+### Inputs
+- BoundPackBundle (from M5 Bind)
+- SelectionSnapshot (contract interface defining roster state)
+
+### Outputs
+- EvaluationReport containing:
+  - List<ConstraintEvaluation> (all boundary evaluations)
+  - EvaluationSummary (aggregate counts)
+  - List<EvaluationWarning> (non-fatal issues)
+  - List<EvaluationNotice> (informational messages)
+  - boundBundle reference (unchanged)
+  - packId and evaluatedAt timestamp
+- EvaluationTelemetry (optional, non-deterministic instrumentation)
+
+### SelectionSnapshot Contract
+Abstract interface defining roster state operations:
+- orderedSelections() → List<String>
+- entryIdFor(selectionId) → String
+- parentOf(selectionId) → String?
+- childrenOf(selectionId) → List<String>
+- countFor(selectionId) → int
+- isForceRoot(selectionId) → bool
+
+M6 does NOT define a concrete roster model.
+
+### Behavior
+- Validates invariants (cycles, duplicate children, unknown children)
+- Builds precomputed count tables for O(1) lookup
+- Evaluates constraints in deterministic order (root-first DFS for selections, stored order for constraints)
+- Computes actual values based on scope (self, parent, force, roster)
+- Determines outcome (satisfied, violated, notApplicable, error)
+- Uses boundBundle.boundAt for deterministic evaluatedAt timestamp
+
+### Counting Semantics
+For field=selections: actualValue counts only selections whose entryId equals the constrained entry's ID.
+
+### Boundary Evaluation Model
+Same constraint evaluated once per (constraint, boundary instance) pair.
+- self scope: one evaluation per selection of the entry
+- parent scope: one evaluation per selection's parent boundary
+- force scope: one evaluation per force root
+- roster scope: one evaluation total
+
+### Warning Codes
+- UNKNOWN_CONSTRAINT_TYPE: constraint type not recognized
+- UNKNOWN_CONSTRAINT_FIELD: constraint field not recognized
+- UNKNOWN_CONSTRAINT_SCOPE: constraint scope not recognized
+- UNDEFINED_FORCE_BOUNDARY: force scope requested but no force root found
+- MISSING_ENTRY_REFERENCE: selection references entry not in bundle
+
+### Notice Codes
+- CONSTRAINT_SKIPPED: constraint skipped (condition not met, deferred)
+- EMPTY_SNAPSHOT: snapshot has no selections
+
+### Error Contracts
+- EvaluationWarning/EvaluationNotice for non-fatal issues
+- EvaluateFailure only for invariant violations:
+  - NULL_PROVENANCE: required provenance pointers missing
+  - CYCLE_DETECTED: cycle in selection hierarchy
+  - INVALID_CHILDREN_TYPE: childrenOf must return List
+  - DUPLICATE_CHILD_ID: childrenOf contains duplicate IDs
+  - UNKNOWN_CHILD_ID: childrenOf references unknown selection
+  - INTERNAL_ASSERTION: M6 implementation bug
+- In normal operation, no EvaluateFailure is thrown
+
+### Determinism Contract
+Same BoundPackBundle + same SelectionSnapshot → identical EvaluationReport.
+EvaluationTelemetry.evaluationDuration is explicitly excluded from determinism.
+
+### Scope Boundaries
+M6 MAY evaluate constraints. M6 MUST NOT evaluate rules (deferred to M7+).
+
+---
+
 ## Index Reader (Future — Phase 1B+)
 
 Reads and caches the upstream repository index for dependency resolution and update checking.
