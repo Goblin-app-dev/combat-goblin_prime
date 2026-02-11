@@ -7,7 +7,7 @@
 - Phase 1C (M3 Wrap): **FROZEN** (2026-02-04)
 - Phase 2 (M4 Link): **FROZEN** (2026-02-05)
 - Phase 3 (M5 Bind): **FROZEN** (2026-02-10)
-- Phase 4 (M6 Evaluate): **PROPOSAL** — revision 2, awaiting approval
+- Phase 4 (M6 Evaluate): **PROPOSAL** — revision 3, awaiting approval
 
 ---
 
@@ -17,6 +17,7 @@
 |-----|------|---------|
 | 1 | 2026-02-10 | Initial proposal |
 | 2 | 2026-02-10 | Addressed senior review: removed concrete roster types, fixed determinism, clarified boundaries |
+| 3 | 2026-02-11 | Final review fixes: enforceable invariants, counting semantics, subtree traversal, emission ordering |
 
 ---
 
@@ -53,7 +54,9 @@ Frozen M5 output. M6 reads but never modifies.
 
 M6 requires a roster snapshot that can answer specific operations. **The concrete roster model is NOT defined here** — that belongs to a separate module or downstream phase.
 
-**Required Operations (contract, not types):**
+**SelectionSnapshot** is a **contract interface**, not a concrete type. It defines the operations M6 requires, but the implementation is outside M6 scope. Any type that satisfies this contract can be used.
+
+**Required Operations (contract interface):**
 
 | Operation | Returns | Purpose |
 |-----------|---------|---------|
@@ -205,7 +208,7 @@ If any map is used internally, keys MUST be sorted before iteration to ensure de
 
 ### Warning/Notice Ordering
 
-Warnings and notices are emitted in evaluation order and grouped by code. Within a code group, order matches emission order.
+Warnings and notices are appended in **strict emission order** (simple list). No grouping or reordering. The order matches the order they were encountered during traversal.
 
 ---
 
@@ -224,6 +227,12 @@ Warnings and notices are emitted in evaluation order and grouped by code. Within
 |-------|----------------|
 | `selections` | Number of this entry selected in boundary |
 | `forces` | Number of force selections in boundary |
+
+### Counting Semantics (Mandatory)
+
+For `field=selections`, **actualValue counts only selections whose `entryId` equals the constrained entry's ID**, aggregated within the boundary instance.
+
+Example: If a constraint on entry "E1" has scope=`parent`, actualValue is the count of selections with `entryId="E1"` under that parent boundary — NOT the total count of all selections under the parent.
 
 ### Evaluation Outcomes
 
@@ -359,7 +368,17 @@ Non-fatal issue detected during evaluation.
 | `UNKNOWN_CONSTRAINT_FIELD` | Constraint field not recognized | outcome = error |
 | `UNKNOWN_CONSTRAINT_SCOPE` | Constraint scope not recognized | outcome = error |
 | `UNDEFINED_FORCE_BOUNDARY` | Force scope requested but no force root found | outcome = notApplicable |
-| `MISSING_ENTRY_REFERENCE` | Selection references entry not in bundle | Skip selection |
+| `MISSING_ENTRY_REFERENCE` | Selection references entry not in bundle | Skip selection's constraints, still traverse children |
+
+### Subtree Traversal on Missing Entry (Mandatory)
+
+When a selection has `MISSING_ENTRY_REFERENCE`:
+1. Emit warning
+2. Skip constraint evaluation for that selection (no BoundEntry to evaluate)
+3. **Still traverse children** — they may reference valid entries
+4. Children are evaluated normally if their entries exist
+
+This prevents partial corruption from hiding downstream evaluations.
 
 ---
 
@@ -424,8 +443,12 @@ EvaluateFailure is thrown ONLY for these specific invariant violations:
 |-----------|-----------|
 | `NULL_PROVENANCE` | Required provenance pointers missing (boundBundle.linkedBundle, etc.) |
 | `CYCLE_DETECTED` | Cycle in selection hierarchy (parentOf chain) |
-| `MISSING_CHILDREN_ORDER` | childrenOf returns unordered/non-deterministic collection |
+| `INVALID_CHILDREN_TYPE` | childrenOf must return a List (not Set or other unordered type) |
+| `DUPLICATE_CHILD_ID` | childrenOf contains duplicate selection IDs |
+| `UNKNOWN_CHILD_ID` | childrenOf references a selection ID not in orderedSelections |
 | `INTERNAL_ASSERTION` | M6 implementation bug (defensive checks) |
+
+**Note:** All invariants are enforceable and testable at runtime.
 
 **EvaluateFailure is NOT thrown for:**
 - Unknown constraint types → warning, outcome = error
@@ -582,6 +605,8 @@ Same `BoundPackBundle` + same `SelectionSnapshot` → identical `EvaluationRepor
 - Hash code calculations
 - Serialization for determinism tests
 
+**Determinism tests compare only the deterministic report; telemetry is ignored.**
+
 ---
 
 ## Required Tests (when approved for implementation)
@@ -625,6 +650,9 @@ Same `BoundPackBundle` + same `SelectionSnapshot` → identical `EvaluationRepor
 ### EvaluateFailure Invariants
 - Null provenance → EvaluateFailure with NULL_PROVENANCE
 - Cycle in selection hierarchy → EvaluateFailure with CYCLE_DETECTED
+- childrenOf returns Set instead of List → EvaluateFailure with INVALID_CHILDREN_TYPE
+- Duplicate child ID in childrenOf → EvaluateFailure with DUPLICATE_CHILD_ID
+- Unknown child ID in childrenOf → EvaluateFailure with UNKNOWN_CHILD_ID
 
 ---
 
@@ -638,6 +666,46 @@ Same `BoundPackBundle` + same `SelectionSnapshot` → identical `EvaluationRepor
 | Roster model? | M6 defines contract (operations), not concrete types. |
 | evaluationTime? | Moved to separate EvaluationTelemetry, excluded from determinism. |
 | isValid naming? | Renamed to hasViolations, defined mechanically. |
+
+---
+
+## M6 Pre-Flight Confirmation (2026-02-11)
+
+### BoundConstraint Contract Verified
+
+M5's `BoundConstraint` (frozen) has the required fields:
+- `type` (String) — min, max
+- `field` (String) — selections, forces
+- `scope` (String) — self, parent, force, roster
+- `value` (int) — constraint value
+- `id` (String?) — optional constraint ID
+- `sourceFileId` (String) — provenance
+- `sourceNode` (NodeRef) — provenance
+
+M6 codes against this contract.
+
+### SelectionSnapshot Contract Location
+
+**Chosen:** Option A — `lib/modules/m6_evaluate/contracts/selection_snapshot.dart`
+
+Rationale:
+- Evaluator-owned contract ("what M6 needs")
+- Keeps contract close to determinism/ordering rules
+- Avoids shared module dumping ground
+
+Exported publicly; treated as stable API.
+
+### Empty Snapshot Semantics
+
+When `orderedSelections()` returns empty list:
+1. Emit `EMPTY_SNAPSHOT` notice
+2. Return EvaluationReport with:
+   - `constraintEvaluations = []`
+   - `hasViolations = false`
+   - All summary counts = 0
+   - Deterministic `evaluatedAt`
+
+**Rule:** M6 does not evaluate any entry constraints unless a corresponding selection instance exists in the snapshot.
 
 ---
 

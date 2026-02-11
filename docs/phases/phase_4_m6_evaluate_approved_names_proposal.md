@@ -7,7 +7,7 @@
 - Phase 1C (M3 Wrap): **FROZEN** (2026-02-04)
 - Phase 2 (M4 Link): **FROZEN** (2026-02-05)
 - Phase 3 (M5 Bind): **FROZEN** (2026-02-10)
-- Phase 4 (M6 Evaluate): **PROPOSAL** — revision 2, awaiting approval
+- Phase 4 (M6 Evaluate): **PROPOSAL** — revision 3, awaiting approval
 
 ---
 
@@ -17,6 +17,7 @@
 |-----|------|---------|
 | 1 | 2026-02-10 | Initial proposal |
 | 2 | 2026-02-10 | Addressed review: EvaluationResult→EvaluationReport, added EvaluationTelemetry, isValid→hasViolations, rule types reserved for M7 |
+| 3 | 2026-02-11 | Final review: enforceable invariants, counting semantics, subtree traversal, emission ordering, SelectionSnapshot as contract interface |
 
 ---
 
@@ -267,13 +268,15 @@ Fatal exception for M6 failures.
 - `String? entryId`
 - `String? details`
 
-**EvaluateFailure Invariants (enumerated):**
+**EvaluateFailure Invariants (enumerated, all enforceable):**
 
 | Invariant | Condition |
 |-----------|-----------|
 | `NULL_PROVENANCE` | Required provenance pointers missing |
 | `CYCLE_DETECTED` | Cycle in selection hierarchy |
-| `MISSING_CHILDREN_ORDER` | childrenOf returns non-deterministic collection |
+| `INVALID_CHILDREN_TYPE` | childrenOf must return a List (not Set) |
+| `DUPLICATE_CHILD_ID` | childrenOf contains duplicate selection IDs |
+| `UNKNOWN_CHILD_ID` | childrenOf references unknown selection ID |
 | `INTERNAL_ASSERTION` | M6 implementation bug |
 
 **In normal operation, no EvaluateFailure is thrown.**
@@ -356,10 +359,13 @@ Same `BoundPackBundle` + same `SelectionSnapshot` → identical `EvaluationRepor
 
 ## Glossary Terms
 
-Added to `/docs/glossary.md` (2026-02-10). Update required for:
-- `EvaluationResult` → renamed to `EvaluationReport`
-- Added: `EvaluationTelemetry`
-- `isValid` → renamed to `hasViolations`
+Updated in `/docs/glossary.md` (2026-02-11):
+- `EvaluationResult` → renamed to `EvaluationReport` ✓
+- `EvaluationStatistics` → renamed to `EvaluationTelemetry` ✓
+- `isValid` → renamed to `hasViolations` ✓
+- Rule types marked as RESERVED for M7+ ✓
+- Added `SelectionSnapshot` (contract interface) ✓
+- Updated EvaluateFailure invariants ✓
 
 ---
 

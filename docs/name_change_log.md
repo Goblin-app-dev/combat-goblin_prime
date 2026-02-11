@@ -124,3 +124,21 @@ No silent renames are permitted.
 - New name: EvaluationScope, EvaluationApplicability, EvaluationSourceRef, EvaluationContext
 - Reason: New M6 Evaluate supporting types for scope, applicability, provenance, and runtime context.
 - Approval reference: Phase 4 M6 Evaluate approved output vocabulary
+
+## 2026-02-11
+- Old name: EvaluationResult
+- New name: EvaluationReport
+- Reason: Rename for clarity. "Report" better communicates this is the deterministic output document, distinct from telemetry.
+- Approval reference: Phase 4 M6 Evaluate design proposal revision 3
+
+## 2026-02-11
+- Old name: EvaluationStatistics
+- New name: EvaluationTelemetry
+- Reason: Renamed and repurposed. Telemetry is explicitly non-deterministic instrumentation data (timing, etc.), excluded from equality comparisons.
+- Approval reference: Phase 4 M6 Evaluate design proposal revision 3
+
+## 2026-02-11
+- Old name: RuleEvaluation, RuleEvaluationOutcome, RuleViolation, EvaluationApplicability, EvaluationContext
+- New name: (same, but status changed to RESERVED for M7+)
+- Reason: Rule evaluation deferred to M7. These names are approved but M6 does NOT produce these types.
+- Approval reference: Phase 4 M6 Evaluate design proposal revision 3
