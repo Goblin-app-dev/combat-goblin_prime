@@ -669,6 +669,46 @@ Same `BoundPackBundle` + same `SelectionSnapshot` → identical `EvaluationRepor
 
 ---
 
+## M6 Pre-Flight Confirmation (2026-02-11)
+
+### BoundConstraint Contract Verified
+
+M5's `BoundConstraint` (frozen) has the required fields:
+- `type` (String) — min, max
+- `field` (String) — selections, forces
+- `scope` (String) — self, parent, force, roster
+- `value` (int) — constraint value
+- `id` (String?) — optional constraint ID
+- `sourceFileId` (String) — provenance
+- `sourceNode` (NodeRef) — provenance
+
+M6 codes against this contract.
+
+### SelectionSnapshot Contract Location
+
+**Chosen:** Option A — `lib/modules/m6_evaluate/contracts/selection_snapshot.dart`
+
+Rationale:
+- Evaluator-owned contract ("what M6 needs")
+- Keeps contract close to determinism/ordering rules
+- Avoids shared module dumping ground
+
+Exported publicly; treated as stable API.
+
+### Empty Snapshot Semantics
+
+When `orderedSelections()` returns empty list:
+1. Emit `EMPTY_SNAPSHOT` notice
+2. Return EvaluationReport with:
+   - `constraintEvaluations = []`
+   - `hasViolations = false`
+   - All summary counts = 0
+   - Deterministic `evaluatedAt`
+
+**Rule:** M6 does not evaluate any entry constraints unless a corresponding selection instance exists in the snapshot.
+
+---
+
 ## Approval Checklist
 
 - [ ] Problem statement approved
