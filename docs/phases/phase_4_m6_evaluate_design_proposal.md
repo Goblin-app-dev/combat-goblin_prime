@@ -7,7 +7,7 @@
 - Phase 1C (M3 Wrap): **FROZEN** (2026-02-04)
 - Phase 2 (M4 Link): **FROZEN** (2026-02-05)
 - Phase 3 (M5 Bind): **FROZEN** (2026-02-10)
-- Phase 4 (M6 Evaluate): **PROPOSAL** — revision 3, awaiting approval
+- Phase 4 (M6 Evaluate): **FROZEN** (2026-02-11)
 
 ---
 
