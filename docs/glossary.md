@@ -120,22 +120,22 @@ Service that performs entity binding. Converts LinkedPackBundle to BoundPackBund
 M5 binding strategy where an entry is considered a "root" if its parent node is not an eligible entry tag. Container-agnostic: works with any schema variant without maintaining container tag lists.
 
 ## Evaluate Failure
-Exception thrown by M6 Evaluate only for corrupted M5 input or internal bugs. In normal operation, no EvaluateFailure is thrown. Semantic issues are reported via diagnostics instead. Parallels BindFailure/LinkFailure pattern.
+Exception thrown by M6 Evaluate only for enumerated invariant violations (NULL_PROVENANCE, CYCLE_DETECTED, INVALID_CHILDREN_TYPE, DUPLICATE_CHILD_ID, UNKNOWN_CHILD_ID, INTERNAL_ASSERTION). In normal operation, no EvaluateFailure is thrown. Semantic issues are reported via warnings/notices instead. Parallels BindFailure/LinkFailure pattern.
 
-## Evaluation Result
-Top-level M6 output containing evaluated roster state with all rules and constraints processed. Preserves provenance chain (M6 → M5 → M4 → M3 → M2 → M1). Produced by M6 Evaluate.
+## Evaluation Report
+Strictly deterministic top-level M6 output containing evaluated constraint state. Preserves provenance chain (M6 → M5 → M4 → M3 → M2 → M1). Excludes telemetry data. Renamed from EvaluationResult for clarity.
 
-## Rule Evaluation
-Result of evaluating a single rule against roster state. Contains outcome (RuleEvaluationOutcome) and any violations detected.
+## Rule Evaluation (RESERVED — M7+)
+Result of evaluating a single rule against roster state. Contains outcome (RuleEvaluationOutcome) and any violations detected. **Reserved for M7+; M6 does NOT produce this type.**
 
-## Rule Evaluation Outcome
-Enum representing the result of a rule evaluation: PASSED, FAILED, SKIPPED (not applicable), ERROR (evaluation failed).
+## Rule Evaluation Outcome (RESERVED — M7+)
+Enum representing the result of a rule evaluation: PASSED, FAILED, SKIPPED (not applicable), ERROR (evaluation failed). **Reserved for M7+; M6 does NOT produce this type.**
 
-## Rule Violation
-Specific violation of a rule. Contains violation details, severity, affected entities, and remediation hints.
+## Rule Violation (RESERVED — M7+)
+Specific violation of a rule. Contains violation details, severity, affected entities, and remediation hints. **Reserved for M7+; M6 does NOT produce this type.**
 
 ## Constraint Evaluation
-Result of evaluating a single constraint against roster state. Contains outcome (ConstraintEvaluationOutcome) and any violations detected.
+Result of evaluating a single (constraint, boundary instance) pair. Emitted per boundary instance, so the same constraint may produce multiple evaluations. Contains outcome (ConstraintEvaluationOutcome), actualValue, requiredValue, and violation details if violated.
 
 ## Constraint Evaluation Outcome
 Enum representing the result of a constraint evaluation: SATISFIED, VIOLATED, NOT_APPLICABLE, ERROR.
@@ -144,10 +144,10 @@ Enum representing the result of a constraint evaluation: SATISFIED, VIOLATED, NO
 Specific violation of a constraint. Contains violation details, current value, required value, and affected entities.
 
 ## Evaluation Summary
-Aggregate summary of all evaluations for a roster. Contains pass/fail counts, severity breakdown, and overall validity status.
+Aggregate summary of all evaluations for a roster. Contains pass/fail counts (totalEvaluations, satisfiedCount, violatedCount, notApplicableCount, errorCount) and hasViolations boolean (mechanical check: violatedCount > 0). Does NOT imply roster legality.
 
-## Evaluation Statistics
-Quantitative metrics from evaluation: total rules evaluated, constraints checked, violations found, evaluation time, etc.
+## Evaluation Telemetry
+Non-deterministic instrumentation data from evaluation. Contains evaluationDuration (runtime measurement). Explicitly excluded from determinism contract and equality comparisons. Renamed from EvaluationStatistics.
 
 ## Evaluation Notice
 Informational message from evaluation that does not affect validity. Used for deprecation warnings, optimization hints, etc.
@@ -158,14 +158,17 @@ Non-fatal issue detected during evaluation that may affect roster validity but d
 ## Evaluation Scope
 Defines the boundary of what is being evaluated: full roster, specific selection, or subset. Controls evaluation depth and breadth.
 
-## Evaluation Applicability
-Determines whether a rule or constraint applies to a given context. Based on scope, conditions, and selection state.
+## Evaluation Applicability (RESERVED — M7+)
+Determines whether a rule or constraint applies to a given context. Based on scope, conditions, and selection state. **Reserved for M7+; M6 does NOT produce this type.**
 
 ## Evaluation Source Ref
 Reference to the source definition (rule, constraint, modifier) that produced an evaluation result. Enables traceability from result to source.
 
-## Evaluation Context
-Runtime state available during evaluation: roster selections, active modifiers, resolved values, parent context.
+## Evaluation Context (RESERVED — M7+)
+Runtime state available during evaluation: roster selections, active modifiers, resolved values, parent context. **Reserved for M7+; M6 does NOT produce this type.**
+
+## Selection Snapshot
+Contract interface for roster state input to M6. Defines required operations (orderedSelections, entryIdFor, parentOf, childrenOf, countFor, isForceRoot) but not concrete types. Implementation is outside M6 scope.
 
 ---
 
