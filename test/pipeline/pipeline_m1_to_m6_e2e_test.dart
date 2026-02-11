@@ -58,11 +58,11 @@ class DeterministicSnapshot implements SelectionSnapshot {
   /// Creates a deterministic roster snapshot with multiple selections.
   ///
   /// Structure:
-  /// - 1 force root entry (first by ID sort)
+  /// - 1 force root entry (first entry with profiles that have characteristics)
   /// - Up to [maxChildren] child selections under the root
-  /// - Each child is a distinct entry (sorted by ID)
+  /// - Each child is a distinct entry with profiles+characteristics
   ///
-  /// This simulates a realistic roster with a detachment and units.
+  /// This simulates a realistic roster with actual unit stats.
   factory DeterministicSnapshot.roster(
     BoundPackBundle bundle, {
     int maxChildren = 5,
@@ -75,9 +75,17 @@ class DeterministicSnapshot implements SelectionSnapshot {
     final sortedEntries = bundle.entries.toList()
       ..sort((a, b) => a.id.compareTo(b.id));
 
-    // First entry is force root
-    final rootEntry = sortedEntries.first;
-    final childEntries = sortedEntries.skip(1).take(maxChildren).toList();
+    // Filter to entries that have at least one profile with characteristics
+    final entriesWithStats = sortedEntries.where((e) {
+      return e.profiles.any((p) => p.characteristics.isNotEmpty);
+    }).toList();
+
+    // Fall back to all entries if none have stats
+    final candidates = entriesWithStats.isNotEmpty ? entriesWithStats : sortedEntries;
+
+    // First entry with stats is force root
+    final rootEntry = candidates.first;
+    final childEntries = candidates.skip(1).take(maxChildren).toList();
 
     // Build child selection IDs
     final childIds = <String>[];
@@ -360,41 +368,20 @@ const _mainStatProfileKeywords = ['unit', 'model', 'character'];
 /// Keywords for identifying weapon profiles (case-insensitive).
 const _weaponProfileKeywords = ['weapon', 'ranged', 'melee'];
 
-/// Finds the main stat profile for an entry using heuristics.
+/// Finds the first profile with characteristics for an entry.
+/// Uses simple "first profile with characteristics wins" rule.
 /// Returns null if no suitable profile found.
 BoundProfile? _findMainStatProfile(BoundEntry entry) {
   if (entry.profiles.isEmpty) return null;
 
-  // First pass: look for profile with type matching keywords
+  // First pass: find first profile with any characteristics
   for (final profile in entry.profiles) {
-    final typeLower = (profile.typeName ?? '').toLowerCase();
-    for (final keyword in _mainStatProfileKeywords) {
-      if (typeLower.contains(keyword)) {
-        return profile;
-      }
-    }
-  }
-
-  // Second pass: look for profile name matching entry name
-  for (final profile in entry.profiles) {
-    if (profile.name.toLowerCase() == entry.name.toLowerCase()) {
+    if (profile.characteristics.isNotEmpty) {
       return profile;
     }
   }
 
-  // Third pass: look for any profile that is NOT a weapon
-  for (final profile in entry.profiles) {
-    final typeLower = (profile.typeName ?? '').toLowerCase();
-    final nameLower = profile.name.toLowerCase();
-    final isWeapon = _weaponProfileKeywords.any(
-      (kw) => typeLower.contains(kw) || nameLower.contains(kw),
-    );
-    if (!isWeapon) {
-      return profile;
-    }
-  }
-
-  // Fallback: first profile
+  // Fallback: first profile (even if no characteristics)
   return entry.profiles.first;
 }
 
@@ -441,7 +428,7 @@ void _printUnitCard({
   final entry = bundle.entryById(entryId);
 
   if (entry == null) {
-    print('$prefix[$cardNumber] UNKNOWN ENTRY (id=$entryId)');
+    print('$prefix[$cardNumber] UNKNOWN ENTRY (selId=$selectionId, entryId=$entryId)');
     return;
   }
 
@@ -449,12 +436,32 @@ void _printUnitCard({
   final countSuffix = count > 1 ? ' x$count' : '';
   final forceRootMarker = snapshot.isForceRoot(selectionId) ? ' [ROOT]' : '';
 
+  // Print entry name with IDs for debugging
   print('$prefix[$cardNumber] ${entry.name}$countSuffix$forceRootMarker');
+  print('$prefix    (selId=$selectionId, entryId=${_truncate(entryId, 24)})');
 
-  // Main stat profile
+  // Debug: show profile counts
+  final profileCount = entry.profiles.length;
+  final profilesWithChars = entry.profiles.where((p) => p.characteristics.isNotEmpty).length;
+  print('$prefix    Profiles: $profileCount total, $profilesWithChars with characteristics');
+
+  // Debug: show first 3 profiles
+  for (var i = 0; i < entry.profiles.length && i < 3; i++) {
+    final p = entry.profiles[i];
+    print('$prefix      [$i] type="${p.typeName ?? '(none)'}" name="${p.name}" chars=${p.characteristics.length}');
+  }
+  if (entry.profiles.length > 3) {
+    print('$prefix      ... and ${entry.profiles.length - 3} more profiles');
+  }
+
+  // Main stat profile (first with characteristics)
   final mainProfile = _findMainStatProfile(entry);
-  if (mainProfile != null) {
+  if (mainProfile != null && mainProfile.characteristics.isNotEmpty) {
     print('$prefix    Stats: ${_formatStatLine(mainProfile)}');
+  } else if (mainProfile != null) {
+    print('$prefix    Stats: (profile exists but no characteristics)');
+  } else {
+    print('$prefix    Stats: (no profiles)');
   }
 
   // Weapon profiles
@@ -495,6 +502,20 @@ void _printRosterSection({
   print('ROSTER-STYLE OUTPUT');
   print('=' * 70);
 
+  // Bundle-level summary
+  final totalEntries = bundle.entries.length;
+  final entriesWithProfiles = bundle.entries.where((e) => e.profiles.isNotEmpty).length;
+  final entriesWithStats = bundle.entries.where((e) =>
+      e.profiles.any((p) => p.characteristics.isNotEmpty)).length;
+  final totalProfiles = bundle.profiles.length;
+
+  print('');
+  print('--- BUNDLE SUMMARY ---');
+  print('Total entries: $totalEntries');
+  print('Entries with profiles: $entriesWithProfiles');
+  print('Entries with characteristics: $entriesWithStats');
+  print('Total profiles in bundle: $totalProfiles');
+
   final selections = snapshot.orderedSelections();
   if (selections.isEmpty) {
     print('(empty roster - no selections)');
@@ -511,6 +532,7 @@ void _printRosterSection({
   }
 
   print('');
+  print('--- SNAPSHOT ---');
   print('Total selections: ${selections.length}');
   print('Root selections: ${rootSelections.length}');
   print('');
