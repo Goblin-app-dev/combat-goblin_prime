@@ -197,6 +197,17 @@ class EvaluateService {
         checkSelection(selectionId);
       }
     }
+
+    // Check for orphaned cycles (selections with parents but not reachable from roots)
+    for (final selectionId in selections) {
+      if (!visited.contains(selectionId)) {
+        // This selection is part of an orphaned cycle
+        throw EvaluateFailure(
+          invariant: EvaluateFailure.invariantCycleDetected,
+          message: 'Orphaned cycle detected: $selectionId is not reachable from any root',
+        );
+      }
+    }
   }
 
   /// Builds count tables for O(1) lookup during constraint evaluation.
@@ -246,9 +257,19 @@ class EvaluateService {
   }
 
   /// Finds the force root for a selection, or null if none exists.
+  ///
+  /// Note: Cycle protection is included even though _validateInvariants
+  /// should have already checked for cycles. This is a defensive measure.
   String? _findForceRoot(SelectionSnapshot snapshot, String selectionId) {
     var current = selectionId;
+    final visited = <String>{};
     while (true) {
+      if (visited.contains(current)) {
+        // Cycle detected - should not happen if validation passed
+        return null;
+      }
+      visited.add(current);
+
       if (snapshot.isForceRoot(current)) {
         return current;
       }
