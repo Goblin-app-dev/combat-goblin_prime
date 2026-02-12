@@ -185,6 +185,24 @@ Exception thrown by M7 Rules only for corrupted M5 input or internal bugs. In no
 ## Rules Service (PROPOSAL — M7)
 Service that binds rule elements. Converts BoundPackBundle to ExtendedBoundPackBundle. Uses same shadowing policy as M5. **Proposed for M7 Rules; not yet approved.**
 
+## Applicability Result (PROPOSAL — M7 Applicability)
+M7 output indicating whether conditions are met for a conditional element. Contains applicable flag, human-readable reason when not applicable, individual condition results, and optional group result. Deterministic given same inputs. **Proposed for M7 Applicability; not yet approved.**
+
+## Condition Evaluation (PROPOSAL — M7 Applicability)
+Result of evaluating a single condition element against roster state. Contains condition type, field, scope, required/actual values, satisfied flag, and provenance. Computed via SelectionSnapshot queries. **Proposed for M7 Applicability; not yet approved.**
+
+## Condition Group Evaluation (PROPOSAL — M7 Applicability)
+Result of evaluating an AND/OR condition group. Contains group type, nested condition results, nested group results, and satisfied flag. AND groups require all satisfied; OR groups require at least one. **Proposed for M7 Applicability; not yet approved.**
+
+## Applicability Diagnostic (PROPOSAL — M7 Applicability)
+Non-fatal issue detected during M7 Applicability evaluation. Closed code set: UNKNOWN_CONDITION_TYPE, UNKNOWN_SCOPE, UNKNOWN_FIELD, UNRESOLVED_CHILD_ID. Always accumulated; never thrown. **Proposed for M7 Applicability; not yet approved.**
+
+## Applicability Failure (PROPOSAL — M7 Applicability)
+Exception thrown by M7 Applicability only for corrupted M5 input or internal bugs. In normal operation, no ApplicabilityFailure is thrown. Semantic issues are reported via ApplicabilityDiagnostic instead. **Proposed for M7 Applicability; not yet approved.**
+
+## Applicability Service (PROPOSAL — M7 Applicability)
+Service that evaluates conditions against roster state. Takes conditionSource node, SelectionSnapshot, BoundPackBundle, and contextSelectionId. Returns ApplicabilityResult. Used by M6 to determine if constraints apply. **Proposed for M7 Applicability; not yet approved.**
+
 ---
 
 Any concept used in code must appear here first.
