@@ -189,7 +189,7 @@ Service that binds rule elements. Converts BoundPackBundle to ExtendedBoundPackB
 Tri-state enum representing condition evaluation outcome: `applies` (conditions true or no conditions), `skipped` (conditions evaluated false), `unknown` (cannot determine due to missing data, unsupported operator, or unresolved reference). Replaces boolean applicability.
 
 ## Applicability Result (M7 Applicability)
-M7 output containing tri-state applicability, deterministic reason, leaf condition results, optional group result, and index-ready provenance (sourceFileId, sourceNode). Deterministic given same inputs.
+M7 output containing tri-state applicability, deterministic reason, leaf condition results, optional group result, per-result diagnostics, and index-ready provenance (sourceFileId, sourceNode). Diagnostics attached to result (not mutable service state) for voice/search context. Deterministic given same inputs.
 
 ## Condition Evaluation (M7 Applicability)
 Result of evaluating a single condition element against roster state. Contains condition type, field (keyword or costTypeId), scope (keyword or categoryId/entryId), required/actual values, tri-state result, includeChildSelections/Forces flags, reasonCode, and provenance. Unknown field/scope/type produces state=unknown, not skipped.

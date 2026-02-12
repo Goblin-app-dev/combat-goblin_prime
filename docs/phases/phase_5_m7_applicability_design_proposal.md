@@ -8,7 +8,7 @@
 - Phase 2 (M4 Link): **FROZEN** (2026-02-05)
 - Phase 3 (M5 Bind): **FROZEN** (2026-02-10)
 - Phase 4 (M6 Evaluate): **FROZEN** (2026-02-11)
-- Phase 5 (M7 Applicability): **APPROVED** — revision 3 (2026-02-12)
+- Phase 5 (M7 Applicability): **FROZEN** (2026-02-12)
 
 ---
 

@@ -309,11 +309,11 @@ M6 MAY evaluate constraints. M6 MUST NOT evaluate rules (deferred to M7+).
 
 ---
 
-## M7 Applicability (Phase 5) — APPROVED Rev 2
+## M7 Applicability (Phase 5) — FROZEN
 
 Evaluates conditions to determine whether constraints, modifiers, and other conditional elements apply to the current roster state. Returns tri-state applicability (applies/skipped/unknown).
 
-**Status:** APPROVED — revision 2 (2026-02-12).
+**Status:** FROZEN (2026-02-12). Bug fixes only with explicit approval.
 
 ### Inputs
 - BoundPackBundle (from M5 Bind)
@@ -329,8 +329,8 @@ Evaluates conditions to determine whether constraints, modifiers, and other cond
   - String? reason (human-readable explanation, deterministic)
   - List<ConditionEvaluation> conditionResults (leaf evaluations in XML order)
   - ConditionGroupEvaluation? groupResult (if conditions grouped)
+  - List<ApplicabilityDiagnostic> diagnostics (per-result, for voice/search)
   - Provenance identity (sourceFileId, sourceNode, targetId)
-- List<ApplicabilityDiagnostic> (non-fatal issues)
 
 ### Behavior
 - Finds `<conditions>` or `<conditionGroups>` children of source node
