@@ -407,21 +407,68 @@ const _mainStatProfileKeywords = ['unit', 'model', 'character'];
 /// Keywords for identifying weapon profiles (case-insensitive).
 const _weaponProfileKeywords = ['weapon', 'ranged', 'melee'];
 
-/// Finds the first profile with characteristics for an entry.
-/// Uses simple "first profile with characteristics wins" rule.
-/// Returns null if no suitable profile found.
+/// Canonical stat characteristic names (uppercase for comparison).
+const _unitStatKeys = {'M', 'T', 'W'};
+
+/// Helper to get uppercase characteristic names from a profile.
+Set<String> _getCharNames(BoundProfile profile) {
+  return profile.characteristics.map((c) => c.name.toUpperCase()).toSet();
+}
+
+/// Finds the main stat profile for an entry using priority order.
+///
+/// Priority (deterministic, no semantics):
+/// 1. Profiles where typeName == "Unit" (case-insensitive)
+/// 2. Profiles where characteristics contain all of M, T, W
+/// 3. Profiles where characteristics contain any of M, T, W
+/// 4. First profile with any characteristics
+/// 5. First profile (even if no characteristics)
+///
+/// Tie-break: stable sort by (profileId, profileName).
 BoundProfile? _findMainStatProfile(BoundEntry entry) {
   if (entry.profiles.isEmpty) return null;
 
-  // First pass: find first profile with any characteristics
-  for (final profile in entry.profiles) {
+  // Sort profiles deterministically for tie-breaking
+  final sortedProfiles = entry.profiles.toList()
+    ..sort((a, b) {
+      final idCmp = a.id.compareTo(b.id);
+      if (idCmp != 0) return idCmp;
+      return a.name.compareTo(b.name);
+    });
+
+  // Priority 1: typeName == "Unit" (case-insensitive)
+  for (final profile in sortedProfiles) {
+    final typeLower = (profile.typeName ?? '').toLowerCase();
+    if (typeLower == 'unit') {
+      return profile;
+    }
+  }
+
+  // Priority 2: profiles with ALL of M, T, W
+  for (final profile in sortedProfiles) {
+    final charNames = _getCharNames(profile);
+    if (_unitStatKeys.every((k) => charNames.contains(k))) {
+      return profile;
+    }
+  }
+
+  // Priority 3: profiles with ANY of M, T, W
+  for (final profile in sortedProfiles) {
+    final charNames = _getCharNames(profile);
+    if (_unitStatKeys.any((k) => charNames.contains(k))) {
+      return profile;
+    }
+  }
+
+  // Priority 4: first profile with any characteristics
+  for (final profile in sortedProfiles) {
     if (profile.characteristics.isNotEmpty) {
       return profile;
     }
   }
 
-  // Fallback: first profile (even if no characteristics)
-  return entry.profiles.first;
+  // Priority 5: first profile (even if no characteristics)
+  return sortedProfiles.first;
 }
 
 /// Gets weapon profiles for an entry.
@@ -788,6 +835,37 @@ void main() {
         final entry = pipelineResult.boundBundle.entryById(entryId);
         expect(entry, isNotNull, reason: 'Entry $entryId should exist');
       }
+
+      // Regression guard: at least one unit card should have typeName="Unit" with M/T/W
+      var foundUnitProfile = false;
+      for (final selId in selections) {
+        final entryId = snapshot.entryIdFor(selId);
+        final entry = pipelineResult.boundBundle.entryById(entryId);
+        if (entry == null) continue;
+
+        final mainProfile = _findMainStatProfile(entry);
+        if (mainProfile == null) continue;
+
+        final typeLower = (mainProfile.typeName ?? '').toLowerCase();
+        final charNames = _getCharNames(mainProfile);
+        final hasUnitStats = charNames.contains('M') &&
+            charNames.contains('T') &&
+            charNames.contains('W');
+
+        if (typeLower == 'unit' && hasUnitStats) {
+          foundUnitProfile = true;
+          print('[E2E] Unit profile found: ${entry.name} -> ${mainProfile.name}');
+          print('[E2E]   typeName: ${mainProfile.typeName}');
+          print('[E2E]   stats: ${mainProfile.characteristics.map((c) => '${c.name}:${c.value}').join(' | ')}');
+          break;
+        }
+      }
+
+      expect(
+        foundUnitProfile,
+        isTrue,
+        reason: 'At least one selection should have a Unit profile with M/T/W stats',
+      );
 
       print('[E2E] Roster-style output test passed');
     });
