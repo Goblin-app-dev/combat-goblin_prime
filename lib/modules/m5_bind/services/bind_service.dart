@@ -53,6 +53,9 @@ class BindService {
     // Build node lookup for quick access
     final nodeLookup = _buildNodeLookup(linkedBundle.wrappedBundle);
 
+    // Build file lookup for characteristic extraction (fileId → WrappedFile)
+    final fileLookup = _buildFileLookup(linkedBundle.wrappedBundle);
+
     // Collect all bound entities in binding order
     final allEntries = <BoundEntry>[];
     final allProfiles = <BoundProfile>[];
@@ -73,6 +76,7 @@ class BindService {
               file: file,
               resolvedRefIndex: resolvedRefIndex,
               nodeLookup: nodeLookup,
+              fileLookup: fileLookup,
               diagnostics: diagnostics,
             );
             if (entry != null) {
@@ -167,12 +171,22 @@ class BindService {
     return lookup;
   }
 
+  /// Builds lookup from fileId to WrappedFile.
+  Map<String, WrappedFile> _buildFileLookup(WrappedPackBundle bundle) {
+    final lookup = <String, WrappedFile>{};
+    for (final file in _filesInResolutionOrder(bundle)) {
+      lookup[file.fileId] = file;
+    }
+    return lookup;
+  }
+
   /// Binds an entry node (selectionEntry or selectionEntryGroup).
   BoundEntry? _bindEntry({
     required WrappedNode node,
     required WrappedFile file,
     required Map<(String, int), ResolvedRef> resolvedRefIndex,
     required Map<(String, int), WrappedNode> nodeLookup,
+    required Map<String, WrappedFile> fileLookup,
     required List<BindDiagnostic> diagnostics,
   }) {
     // Verify eligibility
@@ -204,6 +218,7 @@ class BindService {
           file: file,
           resolvedRefIndex: resolvedRefIndex,
           nodeLookup: nodeLookup,
+          fileLookup: fileLookup,
           diagnostics: diagnostics,
         );
         if (childEntry != null) {
@@ -237,6 +252,7 @@ class BindService {
           file: file,
           resolvedRefIndex: resolvedRefIndex,
           nodeLookup: nodeLookup,
+          fileLookup: fileLookup,
           diagnostics: diagnostics,
         );
         if (resolved != null) {
@@ -284,6 +300,7 @@ class BindService {
           file: file,
           resolvedRefIndex: resolvedRefIndex,
           nodeLookup: nodeLookup,
+          fileLookup: fileLookup,
           diagnostics: diagnostics,
           children: children,
           profiles: profiles,
@@ -330,6 +347,7 @@ class BindService {
     required WrappedFile file,
     required Map<(String, int), ResolvedRef> resolvedRefIndex,
     required Map<(String, int), WrappedNode> nodeLookup,
+    required Map<String, WrappedFile> fileLookup,
     required List<BindDiagnostic> diagnostics,
     required List<BoundEntry> children,
     required List<BoundProfile> profiles,
@@ -346,6 +364,7 @@ class BindService {
           file: file,
           resolvedRefIndex: resolvedRefIndex,
           nodeLookup: nodeLookup,
+          fileLookup: fileLookup,
           diagnostics: diagnostics,
         );
         if (entry != null) children.add(entry);
@@ -367,6 +386,7 @@ class BindService {
           file: file,
           resolvedRefIndex: resolvedRefIndex,
           nodeLookup: nodeLookup,
+          fileLookup: fileLookup,
           diagnostics: diagnostics,
         );
         if (profile != null) profiles.add(profile);
@@ -475,6 +495,7 @@ class BindService {
     required WrappedFile file,
     required Map<(String, int), ResolvedRef> resolvedRefIndex,
     required Map<(String, int), WrappedNode> nodeLookup,
+    required Map<String, WrappedFile> fileLookup,
     required List<BindDiagnostic> diagnostics,
   }) {
     final resolvedRef = resolvedRefIndex[(file.fileId, linkNode.ref.nodeIndex)];
@@ -531,7 +552,20 @@ class BindService {
       ));
     }
 
-    return _bindProfileFromNode(selectedNode, selectedFileId!);
+    // Resolve file for characteristic extraction
+    final targetFile = fileLookup[selectedFileId!];
+    if (targetFile == null) {
+      diagnostics.add(BindDiagnostic(
+        code: BindDiagnosticCode.unresolvedInfoLink,
+        message: 'infoLink target file not found: $selectedFileId',
+        sourceFileId: file.fileId,
+        sourceNode: linkNode.ref,
+        targetId: linkNode.attributes['targetId'],
+      ));
+      return null;
+    }
+
+    return _bindProfileFromNode(selectedNode, targetFile);
   }
 
   /// Resolves a categoryLink to its target category.
@@ -614,21 +648,32 @@ class BindService {
     required WrappedFile file,
   }) {
     if (!_profileTags.contains(node.tagName)) return null;
-    return _bindProfileFromNode(node, file.fileId);
+    return _bindProfileFromNode(node, file);
   }
 
-  /// Binds a profile from a node with known fileId.
-  BoundProfile _bindProfileFromNode(WrappedNode node, String fileId) {
+  /// Binds a profile from a node with access to file for child node resolution.
+  BoundProfile _bindProfileFromNode(WrappedNode node, WrappedFile file) {
     final id = node.attributes['id'] ?? '';
     final name = node.attributes['name'] ?? '';
     final typeId = node.attributes['typeId'];
     final typeName = node.attributes['typeName'];
 
     // Extract characteristics from nested characteristic elements
+    // Structure: <profile><characteristics><characteristic name="M">6"</characteristic>...
     final characteristics = <({String name, String value})>[];
     for (final childRef in node.children) {
-      // We need the file to look up nodes, but for profiles we just check children
-      // This is a simplified approach - in a full impl we'd pass the file
+      final childNode = file.nodeAt(childRef);
+      if (childNode.tagName == 'characteristics') {
+        // Found characteristics container, extract individual characteristics
+        for (final charRef in childNode.children) {
+          final charNode = file.nodeAt(charRef);
+          if (charNode.tagName == 'characteristic') {
+            final charName = charNode.attributes['name'] ?? '';
+            final charValue = charNode.textContent ?? '';
+            characteristics.add((name: charName, value: charValue));
+          }
+        }
+      }
     }
 
     return BoundProfile(
@@ -637,7 +682,7 @@ class BindService {
       typeId: typeId,
       typeName: typeName,
       characteristics: characteristics,
-      sourceFileId: fileId,
+      sourceFileId: file.fileId,
       sourceNode: node.ref,
     );
   }

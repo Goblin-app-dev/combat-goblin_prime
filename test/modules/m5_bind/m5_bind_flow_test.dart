@@ -164,5 +164,95 @@ void main() {
       expect(empty.isEmpty, isTrue);
       print('[M5 TEST] entriesInCategory returns empty for non-existent category');
     });
+
+    test('characteristics binding: profiles have non-empty characteristics', () async {
+      final bindService = BindService();
+      final boundBundle =
+          await bindService.bindBundle(linkedBundle: linkedBundle);
+
+      // Count profiles with characteristics
+      final profilesWithChars = boundBundle.profiles
+          .where((p) => p.characteristics.isNotEmpty)
+          .toList();
+
+      print('[M5 TEST] Total profiles: ${boundBundle.profiles.length}');
+      print('[M5 TEST] Profiles with characteristics: ${profilesWithChars.length}');
+
+      // Must have at least some profiles with characteristics
+      expect(
+        profilesWithChars.isNotEmpty,
+        isTrue,
+        reason: 'M5 should bind profiles with non-empty characteristics',
+      );
+
+      // Print a few examples for verification
+      for (final p in profilesWithChars.take(5)) {
+        print('[M5 TEST]   Profile: ${p.name} (type=${p.typeName})');
+        for (final c in p.characteristics.take(6)) {
+          print('[M5 TEST]     ${c.name}: ${c.value}');
+        }
+        if (p.characteristics.length > 6) {
+          print('[M5 TEST]     ... and ${p.characteristics.length - 6} more');
+        }
+      }
+
+      // Verify at least one profile has M/T/W-style stats (unit profile)
+      final unitLikeProfiles = profilesWithChars.where((p) {
+        final charNames = p.characteristics.map((c) => c.name.toUpperCase()).toSet();
+        return charNames.contains('M') || charNames.contains('T') || charNames.contains('W');
+      }).toList();
+
+      print('[M5 TEST] Profiles with M/T/W stats: ${unitLikeProfiles.length}');
+
+      // This is informational - not all fixtures may have unit profiles
+      if (unitLikeProfiles.isNotEmpty) {
+        final sample = unitLikeProfiles.first;
+        print('[M5 TEST] Sample unit profile: ${sample.name}');
+        for (final c in sample.characteristics) {
+          print('[M5 TEST]   ${c.name}: ${c.value}');
+        }
+      }
+    });
+
+    test('characteristics determinism: same order on repeated bind', () async {
+      final bindService = BindService();
+      final bundle1 = await bindService.bindBundle(linkedBundle: linkedBundle);
+      final bundle2 = await bindService.bindBundle(linkedBundle: linkedBundle);
+
+      // Take first few profiles with characteristics and compare
+      final profiles1 = bundle1.profiles
+          .where((p) => p.characteristics.isNotEmpty)
+          .take(10)
+          .toList();
+      final profiles2 = bundle2.profiles
+          .where((p) => p.characteristics.isNotEmpty)
+          .take(10)
+          .toList();
+
+      expect(profiles1.length, profiles2.length);
+
+      for (var i = 0; i < profiles1.length; i++) {
+        expect(profiles1[i].id, profiles2[i].id);
+        expect(profiles1[i].name, profiles2[i].name);
+        expect(
+          profiles1[i].characteristics.length,
+          profiles2[i].characteristics.length,
+        );
+
+        // Verify characteristics are in same order
+        for (var j = 0; j < profiles1[i].characteristics.length; j++) {
+          expect(
+            profiles1[i].characteristics[j].name,
+            profiles2[i].characteristics[j].name,
+          );
+          expect(
+            profiles1[i].characteristics[j].value,
+            profiles2[i].characteristics[j].value,
+          );
+        }
+      }
+
+      print('[M5 TEST] Characteristics determinism verified');
+    });
   });
 }
