@@ -265,6 +265,59 @@ Orchestrator guarantees:
 
 ---
 
+## Diagnostic Architecture (Structured Separation)
+
+ViewBundle uses **structured separation** for diagnostics, NOT a merged flat list:
+
+### Access Paths
+
+| Access Path | Contains | Scope |
+|-------------|----------|-------|
+| `ViewBundle.diagnostics` | M6 + M7 + M8 + Orchestrator | Runtime evaluation diagnostics |
+| `ViewBundle.boundBundle.diagnostics` | M5 | Compile-time binding diagnostics |
+
+### What This Means
+
+- **M5 binder diagnostics** (e.g., `UNRESOLVED_INFO_LINK`) are NOT merged into `ViewBundle.diagnostics`
+- Access M5 diagnostics via `viewBundle.boundBundle.diagnostics`
+- **Runtime diagnostics** (M6/M7/M8) flow through `ViewBundle.diagnostics` with source attribution
+
+### Preserved vs Aggregated
+
+| Module | Preserved Where | Aggregated In |
+|--------|-----------------|---------------|
+| M5 Bind | `boundBundle.diagnostics` | Not in `diagnostics` |
+| M6 Evaluate | `evaluationReport.warnings` | `diagnostics` (source=M6) |
+| M7 Applicability | `applicabilityResults[].diagnostics` | `diagnostics` (source=M7) |
+| M8 Modifiers | `modifierResults[].diagnostics` | `diagnostics` (source=M8) |
+| Orchestrator | — | `diagnostics` (source=ORCHESTRATOR) |
+
+### Ordering Guarantees
+
+Within `ViewBundle.diagnostics`:
+1. M6 diagnostics first (from constraint evaluation)
+2. M7 diagnostics per-selection (evaluation order)
+3. M8 diagnostics per-selection (evaluation order)
+4. Orchestrator diagnostics last
+
+### Code Preservation
+
+Diagnostic codes are **never normalized or transformed**:
+- M6 codes: `UNKNOWN_CONSTRAINT_FIELD`, etc. (preserved exactly)
+- M7 codes: `UNKNOWN_CONDITION_TYPE`, `SNAPSHOT_DATA_GAP_COSTS`, etc.
+- M8 codes: `UNKNOWN_MODIFIER_FIELD`, `UNSUPPORTED_TARGET_SCOPE`, etc.
+- Orchestrator codes: `SELECTION_NOT_IN_BUNDLE`, `EVALUATION_ORDER_VIOLATION`
+
+### Test Coverage (Verified)
+
+Smoke test confirms:
+- M5: 3,757 `UNRESOLVED_INFO_LINK` preserved in `boundBundle.diagnostics`
+- M6: 3+ `UNKNOWN_CONSTRAINT_FIELD` flow through to `ViewBundle.diagnostics`
+- M8: 12+ `UNKNOWN_MODIFIER_FIELD` flow through to `ViewBundle.diagnostics`
+- Source attribution retained for all diagnostics
+
+---
+
 ## Required Tests
 
 ### Structural Invariants (MANDATORY)
