@@ -85,7 +85,7 @@ class OrchestratorService {
     final diagnostics = <OrchestratorDiagnostic>[];
 
     // Step 1: Run M6 constraint evaluation
-    final evaluationReport = _evaluateService.evaluateConstraints(
+    final (evaluationReport, _) = _evaluateService.evaluateConstraints(
       boundBundle: boundBundle,
       snapshot: snapshot,
     );
@@ -96,9 +96,9 @@ class OrchestratorService {
         source: DiagnosticSource.m6,
         code: warning.code,
         message: warning.message,
-        sourceFileId: warning.sourceFileId,
-        sourceNode: warning.sourceNode,
-        targetId: warning.targetId,
+        sourceFileId: warning.sourceRef?.sourceFileId ?? '',
+        sourceNode: warning.sourceRef?.sourceNode,
+        targetId: warning.sourceRef?.entryId,
       ));
     }
 
