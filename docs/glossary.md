@@ -185,26 +185,26 @@ Exception thrown by M7 Rules only for corrupted M5 input or internal bugs. In no
 ## Rules Service (PROPOSAL — M7)
 Service that binds rule elements. Converts BoundPackBundle to ExtendedBoundPackBundle. Uses same shadowing policy as M5. **Proposed for M7 Rules; not yet approved.**
 
-## Applicability State (PROPOSAL — M7 Applicability Rev 2)
-Tri-state enum representing condition evaluation outcome: `applies` (conditions true or no conditions), `skipped` (conditions evaluated false), `unknown` (cannot determine due to missing data, unsupported operator, or unresolved reference). Replaces boolean applicability. **Proposed for M7 Applicability Rev 2; not yet approved.**
+## Applicability State (M7 Applicability)
+Tri-state enum representing condition evaluation outcome: `applies` (conditions true or no conditions), `skipped` (conditions evaluated false), `unknown` (cannot determine due to missing data, unsupported operator, or unresolved reference). Replaces boolean applicability.
 
-## Applicability Result (PROPOSAL — M7 Applicability Rev 2)
-M7 output containing tri-state applicability, deterministic reason, leaf condition results, optional group result, and index-ready provenance (sourceFileId, sourceNode). Deterministic given same inputs. **Proposed for M7 Applicability Rev 2; not yet approved.**
+## Applicability Result (M7 Applicability)
+M7 output containing tri-state applicability, deterministic reason, leaf condition results, optional group result, and index-ready provenance (sourceFileId, sourceNode). Deterministic given same inputs.
 
-## Condition Evaluation (PROPOSAL — M7 Applicability Rev 2)
-Result of evaluating a single condition element against roster state. Contains condition type, field (keyword or costTypeId), scope (keyword or categoryId/entryId), required/actual values, tri-state result, includeChildSelections/Forces flags, reasonCode, and provenance. Unknown field/scope/type produces state=unknown, not skipped. **Proposed for M7 Applicability Rev 2; not yet approved.**
+## Condition Evaluation (M7 Applicability)
+Result of evaluating a single condition element against roster state. Contains condition type, field (keyword or costTypeId), scope (keyword or categoryId/entryId), required/actual values, tri-state result, includeChildSelections/Forces flags, reasonCode, and provenance. Unknown field/scope/type produces state=unknown, not skipped.
 
-## Condition Group Evaluation (PROPOSAL — M7 Applicability Rev 2)
-Result of evaluating an AND/OR condition group with unknown-aware logic. AND: any skipped → skipped, else any unknown → unknown, else applies. OR: any applies → applies, else any unknown → unknown, else skipped. Prevents "unknown treated as false" errors. **Proposed for M7 Applicability Rev 2; not yet approved.**
+## Condition Group Evaluation (M7 Applicability)
+Result of evaluating an AND/OR condition group with unknown-aware logic. AND: any skipped → skipped, else any unknown → unknown, else applies. OR: any applies → applies, else any unknown → unknown, else skipped. Prevents "unknown treated as false" errors.
 
-## Applicability Diagnostic (PROPOSAL — M7 Applicability Rev 2)
-Non-fatal issue detected during M7 Applicability evaluation. Closed code set: UNKNOWN_CONDITION_TYPE, UNKNOWN_CONDITION_SCOPE_KEYWORD, UNKNOWN_CONDITION_FIELD_KEYWORD, UNRESOLVED_CONDITION_SCOPE_ID, UNRESOLVED_CONDITION_FIELD_ID, UNRESOLVED_CHILD_ID, SNAPSHOT_DATA_GAP_COSTS, SNAPSHOT_DATA_GAP_CHILD_SEMANTICS, SNAPSHOT_DATA_GAP_CATEGORIES, SNAPSHOT_DATA_GAP_FORCE_BOUNDARY. Always accumulated; never thrown. **Proposed for M7 Applicability Rev 2; not yet approved.**
+## Applicability Diagnostic (M7 Applicability)
+Non-fatal issue detected during M7 Applicability evaluation. Closed code set: UNKNOWN_CONDITION_TYPE, UNKNOWN_CONDITION_SCOPE_KEYWORD, UNKNOWN_CONDITION_FIELD_KEYWORD, UNRESOLVED_CONDITION_SCOPE_ID, UNRESOLVED_CONDITION_FIELD_ID, UNRESOLVED_CHILD_ID, SNAPSHOT_DATA_GAP_COSTS, SNAPSHOT_DATA_GAP_CHILD_SEMANTICS, SNAPSHOT_DATA_GAP_CATEGORIES, SNAPSHOT_DATA_GAP_FORCE_BOUNDARY. Always accumulated; never thrown.
 
-## Applicability Failure (PROPOSAL — M7 Applicability Rev 2)
-Exception thrown by M7 Applicability only for corrupted M5 input or internal bugs. In normal operation, no ApplicabilityFailure is thrown. Unknown types/scopes/fields produce state=unknown with diagnostics, not exceptions. **Proposed for M7 Applicability Rev 2; not yet approved.**
+## Applicability Failure (M7 Applicability)
+Exception thrown by M7 Applicability only for corrupted M5 input or internal bugs. In normal operation, no ApplicabilityFailure is thrown. Unknown types/scopes/fields produce state=unknown with diagnostics, not exceptions.
 
-## Applicability Service (PROPOSAL — M7 Applicability Rev 2)
-Service that evaluates conditions against roster state. Provides evaluate() for single-source and evaluateMany() for bulk evaluation. Takes conditionSource node, sourceFileId, sourceNode, SelectionSnapshot, BoundPackBundle, and contextSelectionId. Returns ApplicabilityResult with tri-state outcome. Does not modify M6. **Proposed for M7 Applicability Rev 2; not yet approved.**
+## Applicability Service (M7 Applicability)
+Service that evaluates conditions against roster state. Provides evaluate() for single-source and evaluateMany() for bulk evaluation. Takes conditionSource node, sourceFileId, sourceNode, SelectionSnapshot, BoundPackBundle, and contextSelectionId. Returns ApplicabilityResult with tri-state outcome. Does not modify M6.
 
 ---
 

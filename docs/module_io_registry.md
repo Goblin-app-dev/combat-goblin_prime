@@ -309,11 +309,11 @@ M6 MAY evaluate constraints. M6 MUST NOT evaluate rules (deferred to M7+).
 
 ---
 
-## M7 Applicability (Phase 5) — PROPOSAL Rev 2
+## M7 Applicability (Phase 5) — APPROVED Rev 2
 
 Evaluates conditions to determine whether constraints, modifiers, and other conditional elements apply to the current roster state. Returns tri-state applicability (applies/skipped/unknown).
 
-**Status:** PROPOSAL — revision 2, awaiting approval.
+**Status:** APPROVED — revision 2 (2026-02-12).
 
 ### Inputs
 - BoundPackBundle (from M5 Bind)
