@@ -142,3 +142,27 @@ No silent renames are permitted.
 - New name: (same, but status changed to RESERVED for M7+)
 - Reason: Rule evaluation deferred to M7. These names are approved but M6 does NOT produce these types.
 - Approval reference: Phase 4 M6 Evaluate design proposal revision 3
+
+## 2026-02-12 (PROPOSAL — M7 Applicability Rev 2)
+- Old name: N/A
+- New name: ApplicabilityState, ApplicabilityResult, ConditionEvaluation, ConditionGroupEvaluation
+- Reason: New M7 Applicability core types for tri-state condition evaluation (applies/skipped/unknown).
+- Approval reference: Phase 5 M7 Applicability design proposal Rev 2 (awaiting approval)
+
+## 2026-02-12 (PROPOSAL — M7 Applicability Rev 2)
+- Old name: N/A
+- New name: ApplicabilityDiagnostic, ApplicabilityFailure
+- Reason: New M7 Applicability diagnostic and error types.
+- Approval reference: Phase 5 M7 Applicability design proposal Rev 2 (awaiting approval)
+
+## 2026-02-12 (PROPOSAL — M7 Applicability Rev 2)
+- Old name: N/A
+- New name: ApplicabilityService
+- Reason: New M7 Applicability service with evaluate() and evaluateMany() methods.
+- Approval reference: Phase 5 M7 Applicability design proposal Rev 2 (awaiting approval)
+
+## 2026-02-12 (PROPOSAL — M7 Applicability Rev 2)
+- Old name: N/A
+- New name: UNKNOWN_CONDITION_TYPE, UNKNOWN_CONDITION_SCOPE_KEYWORD, UNKNOWN_CONDITION_FIELD_KEYWORD, UNRESOLVED_CONDITION_SCOPE_ID, UNRESOLVED_CONDITION_FIELD_ID, UNRESOLVED_CHILD_ID, SNAPSHOT_DATA_GAP_COSTS, SNAPSHOT_DATA_GAP_CHILD_SEMANTICS, SNAPSHOT_DATA_GAP_CATEGORIES, SNAPSHOT_DATA_GAP_FORCE_BOUNDARY
+- Reason: New M7 Applicability diagnostic codes (10 codes total).
+- Approval reference: Phase 5 M7 Applicability design proposal Rev 2 (awaiting approval)
