@@ -206,6 +206,30 @@ Exception thrown by M7 Applicability only for corrupted M5 input or internal bug
 ## Applicability Service (M7 Applicability)
 Service that evaluates conditions against roster state. Provides evaluate() for single-source and evaluateMany() for bulk evaluation. Takes conditionSource node, sourceFileId, sourceNode, SelectionSnapshot, BoundPackBundle, and contextSelectionId. Returns ApplicabilityResult with tri-state outcome. Does not modify M6.
 
+## Modifier Value (M8 Modifiers — PROPOSED)
+Type-safe variant wrapper for modifier values. Sealed class with subtypes: IntModifierValue, DoubleModifierValue, StringModifierValue, BoolModifierValue. Replaces `dynamic` with explicit type discrimination. **Proposed for M8 Modifiers; not yet approved.**
+
+## Field Kind (M8 Modifiers — PROPOSED)
+Enum disambiguating field namespace for modifier targets: `characteristic` (profile field), `cost` (cost type field), `constraint` (constraint value field), `metadata` (entry metadata). Resolves ambiguity when field strings could belong to multiple namespaces. **Proposed for M8 Modifiers; not yet approved.**
+
+## Modifier Target Ref (M8 Modifiers — PROPOSED)
+Reference to a modifier target with field namespace disambiguation. Contains targetId, field, fieldKind, optional scope, and provenance (sourceFileId, sourceNode). Combines targetId + field + fieldKind for unambiguous reference. **Proposed for M8 Modifiers; not yet approved.**
+
+## Modifier Operation (M8 Modifiers — PROPOSED)
+Single modifier operation with parsed data. Contains operationType (set, increment, decrement, append), target (ModifierTargetRef), value (ModifierValue), isApplicable flag (derived from M7), reasonSkipped, and provenance. Operations with isApplicable=false are recorded but not applied. **Proposed for M8 Modifiers; not yet approved.**
+
+## Modifier Result (M8 Modifiers — PROPOSED)
+M8 output containing base value, effective value, applied operations, skipped operations, diagnostics, and provenance. Deterministic: same inputs yield identical result. Operations applied in XML traversal order. Skipped operations preserved for transparency. **Proposed for M8 Modifiers; not yet approved.**
+
+## Modifier Diagnostic (M8 Modifiers — PROPOSED)
+Non-fatal issue during M8 Modifiers processing. Closed code set: UNKNOWN_MODIFIER_TYPE, UNKNOWN_MODIFIER_FIELD, UNKNOWN_MODIFIER_SCOPE, UNRESOLVED_MODIFIER_TARGET, INCOMPATIBLE_VALUE_TYPE, UNSUPPORTED_TARGET_KIND, UNSUPPORTED_TARGET_SCOPE. Always accumulated; never thrown. **Proposed for M8 Modifiers; not yet approved.**
+
+## Modifier Failure (M8 Modifiers — PROPOSED)
+Exception thrown by M8 Modifiers only for corrupted M5 input or internal bugs. In normal operation, no ModifierFailure is thrown. Unknown types/fields/scopes produce diagnostics and skip operations, not exceptions. **Proposed for M8 Modifiers; not yet approved.**
+
+## Modifier Service (M8 Modifiers — PROPOSED)
+Service that applies modifiers to produce effective values. Provides applyModifiers() for single-target and applyModifiersMany() for bulk application. Takes modifierSource node, BoundPackBundle, SelectionSnapshot, contextSelectionId, and ApplicabilityService. Returns ModifierResult with base/effective values and operations. **Proposed for M8 Modifiers; not yet approved.**
+
 ---
 
 Any concept used in code must appear here first.
