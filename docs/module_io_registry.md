@@ -309,6 +309,75 @@ M6 MAY evaluate constraints. M6 MUST NOT evaluate rules (deferred to M7+).
 
 ---
 
+## M7 Applicability (Phase 5) — PROPOSAL
+
+Evaluates conditions to determine whether constraints, modifiers, and other conditional elements apply to the current roster state.
+
+**Status:** PROPOSAL — revision 1, awaiting approval.
+
+### Inputs
+- BoundPackBundle (from M5 Bind)
+- SelectionSnapshot (same contract as M6)
+- WrappedNode conditionSource (node containing conditions)
+- String contextSelectionId (scope resolution anchor)
+
+### Outputs
+- ApplicabilityResult containing:
+  - bool applicable (true if conditions met or no conditions)
+  - String? reason (human-readable explanation when not applicable)
+  - List<ConditionEvaluation> (individual condition results)
+  - ConditionGroupEvaluation? groupResult (if conditions grouped)
+- List<ApplicabilityDiagnostic> (non-fatal issues)
+
+### Behavior
+- Finds `<conditions>` or `<conditionGroups>` children of source node
+- If no conditions found → return applicable=true
+- Evaluates each condition against snapshot
+- Applies AND/OR logic for condition groups
+- Returns ApplicabilityResult with all evaluations
+
+### Condition Types (Closed Set)
+- atLeast: actual >= required
+- atMost: actual <= required
+- greaterThan: actual > required
+- lessThan: actual < required
+- equalTo: actual == required
+- notEqualTo: actual != required
+- instanceOf: entry is instance of type
+
+### Scope Values (Closed Set)
+- self: current selection
+- parent: parent selection
+- ancestor: any ancestor selection
+- roster: entire roster
+- force: current force
+- primary-category: selections with primary category
+- primary-catalogue: selections from catalogue
+
+### Field Values (Closed Set)
+- selections: count of selections matching criteria
+- forces: count of forces matching criteria
+
+### Diagnostic Codes
+- UNKNOWN_CONDITION_TYPE: condition type not recognized
+- UNKNOWN_SCOPE: scope value not recognized
+- UNKNOWN_FIELD: field value not recognized
+- UNRESOLVED_CHILD_ID: childId not found in bundle
+
+### Error Contracts
+- ApplicabilityDiagnostic for semantic issues (non-fatal)
+- ApplicabilityFailure only for corrupted M5 input or internal bugs
+- In normal operation, no ApplicabilityFailure is thrown
+
+### Determinism Contract
+Same inputs → identical ApplicabilityResult.
+Condition evaluation order matches XML traversal.
+
+### Scope Boundaries
+M7 MAY evaluate conditions. M7 MUST NOT evaluate constraints (M6's job) or apply modifiers (M8+ concern).
+
+---
+
 ## Index Reader (Future — Phase 1B+)
 
 Reads and caches the upstream repository index for dependency resolution and update checking.
