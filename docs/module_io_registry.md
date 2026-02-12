@@ -309,11 +309,11 @@ M6 MAY evaluate constraints. M6 MUST NOT evaluate rules (deferred to M7+).
 
 ---
 
-## M7 Applicability (Phase 5) — APPROVED Rev 2
+## M7 Applicability (Phase 5) — FROZEN
 
 Evaluates conditions to determine whether constraints, modifiers, and other conditional elements apply to the current roster state. Returns tri-state applicability (applies/skipped/unknown).
 
-**Status:** APPROVED — revision 2 (2026-02-12).
+**Status:** FROZEN (2026-02-12). Bug fixes only with explicit approval.
 
 ### Inputs
 - BoundPackBundle (from M5 Bind)
@@ -329,8 +329,8 @@ Evaluates conditions to determine whether constraints, modifiers, and other cond
   - String? reason (human-readable explanation, deterministic)
   - List<ConditionEvaluation> conditionResults (leaf evaluations in XML order)
   - ConditionGroupEvaluation? groupResult (if conditions grouped)
+  - List<ApplicabilityDiagnostic> diagnostics (per-result, for voice/search)
   - Provenance identity (sourceFileId, sourceNode, targetId)
-- List<ApplicabilityDiagnostic> (non-fatal issues)
 
 ### Behavior
 - Finds `<conditions>` or `<conditionGroups>` children of source node
@@ -397,6 +397,79 @@ evaluateMany preserves input order.
 
 ### Scope Boundaries
 M7 MAY evaluate conditions. M7 MUST NOT evaluate constraints (M6's job) or apply modifiers (M8+ concern).
+
+---
+
+## M8 Modifiers (Phase 6) — PROPOSED
+
+Applies modifier operations to produce effective values for entry characteristics, costs, constraints, and other modifiable fields.
+
+**Status:** PROPOSED (2026-02-12). Pending approval.
+
+### Inputs
+- BoundPackBundle (from M5 Bind)
+- SelectionSnapshot (same contract as M6/M7)
+- WrappedNode modifierSource (node containing modifiers)
+- String sourceFileId (provenance, index-ready)
+- NodeRef sourceNode (provenance, index-ready)
+- String contextSelectionId (context for condition evaluation)
+- ApplicabilityService (M7 service for condition evaluation)
+
+### Outputs
+- ModifierResult containing:
+  - ModifierTargetRef target (what was modified)
+  - ModifierValue? baseValue (value before modifiers)
+  - ModifierValue? effectiveValue (value after modifiers)
+  - List<ModifierOperation> appliedOperations (operations that were applied)
+  - List<ModifierOperation> skippedOperations (operations skipped, not applicable)
+  - List<ModifierDiagnostic> diagnostics (issues encountered)
+  - Provenance identity (sourceFileId, sourceNode)
+
+### Behavior
+- Finds `<modifier>` or `<modifiers>` children of source node
+- For each modifier, checks applicability via M7
+- If applicable, applies operation to target
+- Returns ModifierResult with all operations
+
+### Modifier Types (Initial Set)
+- set: Replace value with modifier value
+- increment: Add modifier value to current value
+- decrement: Subtract modifier value from current value
+- append: Append string to current value
+
+### Field Kind Disambiguation
+ModifierTargetRef includes FieldKind enum to resolve ambiguity:
+- characteristic: Profile characteristic field
+- cost: Cost type field
+- constraint: Constraint value field
+- metadata: Entry metadata (name, hidden, etc.)
+
+### Diagnostic Codes
+- UNKNOWN_MODIFIER_TYPE: Modifier type not recognized
+- UNKNOWN_MODIFIER_FIELD: Field not recognized
+- UNKNOWN_MODIFIER_SCOPE: Scope keyword not recognized
+- UNRESOLVED_MODIFIER_TARGET: Target ID not found in bundle
+- INCOMPATIBLE_VALUE_TYPE: Value type incompatible with field
+- UNSUPPORTED_TARGET_KIND: Target kind not supported for operation
+- UNSUPPORTED_TARGET_SCOPE: Scope not supported for target kind
+
+### Error Contracts
+- ModifierDiagnostic for semantic issues (non-fatal)
+- ModifierFailure only for corrupted M5 input or internal bugs
+- Unknown type/field/scope → diagnostic, operation skipped (NOT exception)
+- In normal operation, no ModifierFailure is thrown
+
+### Service Methods
+- applyModifiers(): single-target application
+- applyModifiersMany(): bulk application preserving input order
+
+### Determinism Contract
+Same inputs → identical ModifierResult.
+Modifier application order matches XML traversal.
+applyModifiersMany preserves input order.
+
+### Scope Boundaries
+M8 MAY apply modifiers. M8 MUST NOT evaluate constraints (M6's job) or evaluate conditions (M7's job).
 
 ---
 

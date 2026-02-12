@@ -166,3 +166,45 @@ No silent renames are permitted.
 - New name: UNKNOWN_CONDITION_TYPE, UNKNOWN_CONDITION_SCOPE_KEYWORD, UNKNOWN_CONDITION_FIELD_KEYWORD, UNRESOLVED_CONDITION_SCOPE_ID, UNRESOLVED_CONDITION_FIELD_ID, UNRESOLVED_CHILD_ID, SNAPSHOT_DATA_GAP_COSTS, SNAPSHOT_DATA_GAP_CHILD_SEMANTICS, SNAPSHOT_DATA_GAP_CATEGORIES, SNAPSHOT_DATA_GAP_FORCE_BOUNDARY
 - Reason: New M7 Applicability diagnostic codes (10 codes total).
 - Approval reference: Phase 5 M7 Applicability design proposal Rev 2 (approved 2026-02-12)
+
+## 2026-02-12 (M7 Applicability Rev 3 — Implementation Fixes)
+- Old name: ApplicabilityResult (without diagnostics field)
+- New name: ApplicabilityResult.diagnostics
+- Reason: Attach diagnostics per-result instead of mutable service state. Enables callers (voice/search) to access diagnostics without depending on service internal state.
+- Approval reference: Phase 5 M7 Applicability implementation review fixes (2026-02-12)
+
+## 2026-02-12 (M8 Modifiers Rev 2 — PROPOSED)
+- Old name: N/A
+- New name: ModifierValue, IntModifierValue, DoubleModifierValue, StringModifierValue, BoolModifierValue
+- Reason: New M8 Modifiers type-safe variant wrapper for modifier values. Replaces dynamic with explicit type discrimination.
+- Approval reference: Phase 6 M8 Modifiers names proposal Rev 2 (pending approval)
+
+## 2026-02-12 (M8 Modifiers Rev 2 — PROPOSED)
+- Old name: N/A
+- New name: FieldKind
+- Reason: New M8 enum disambiguating field namespace (characteristic, cost, constraint, metadata) for modifier targets.
+- Approval reference: Phase 6 M8 Modifiers names proposal Rev 2 (pending approval)
+
+## 2026-02-12 (M8 Modifiers Rev 2 — PROPOSED)
+- Old name: N/A
+- New name: ModifierTargetRef
+- Reason: New M8 reference type for modifier targets with field namespace disambiguation (targetId + field + fieldKind).
+- Approval reference: Phase 6 M8 Modifiers names proposal Rev 2 (pending approval)
+
+## 2026-02-12 (M8 Modifiers Rev 2 — PROPOSED)
+- Old name: N/A
+- New name: ModifierOperation, ModifierResult, ModifierDiagnostic, ModifierFailure
+- Reason: New M8 Modifiers core types for operation representation, result output, diagnostics, and fatal exceptions.
+- Approval reference: Phase 6 M8 Modifiers names proposal Rev 2 (pending approval)
+
+## 2026-02-12 (M8 Modifiers Rev 2 — PROPOSED)
+- Old name: N/A
+- New name: ModifierService
+- Reason: New M8 Modifiers service with applyModifiers() and applyModifiersMany() methods.
+- Approval reference: Phase 6 M8 Modifiers names proposal Rev 2 (pending approval)
+
+## 2026-02-12 (M8 Modifiers Rev 2 — PROPOSED)
+- Old name: N/A
+- New name: UNKNOWN_MODIFIER_TYPE, UNKNOWN_MODIFIER_FIELD, UNKNOWN_MODIFIER_SCOPE, UNRESOLVED_MODIFIER_TARGET, INCOMPATIBLE_VALUE_TYPE, UNSUPPORTED_TARGET_KIND, UNSUPPORTED_TARGET_SCOPE
+- Reason: New M8 Modifiers diagnostic codes (7 codes total).
+- Approval reference: Phase 6 M8 Modifiers names proposal Rev 2 (pending approval)

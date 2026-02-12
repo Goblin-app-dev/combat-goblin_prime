@@ -48,9 +48,41 @@ class ApplicabilityService {
   /// Accumulated diagnostics during evaluation.
   final List<ApplicabilityDiagnostic> _diagnostics = [];
 
+  /// Cached cost type IDs from game system (lazy-built).
+  Set<String>? _knownCostTypeIds;
+
   /// Returns diagnostics from the last evaluation.
   List<ApplicabilityDiagnostic> get diagnostics =>
       List.unmodifiable(_diagnostics);
+
+  /// Builds set of known cost type IDs from game system.
+  Set<String> _getKnownCostTypeIds(BoundPackBundle boundBundle) {
+    if (_knownCostTypeIds != null) return _knownCostTypeIds!;
+
+    final costTypeIds = <String>{};
+    final gameSystem = boundBundle.linkedBundle.wrappedBundle.gameSystem;
+
+    // Find costTypes container in game system root children
+    for (final childRef in gameSystem.root.children) {
+      final childNode = gameSystem.nodeAt(childRef);
+      if (childNode.tagName == 'costTypes') {
+        // Iterate costType children
+        for (final costTypeRef in childNode.children) {
+          final costTypeNode = gameSystem.nodeAt(costTypeRef);
+          if (costTypeNode.tagName == 'costType') {
+            final id = costTypeNode.attributes['id'];
+            if (id != null && id.isNotEmpty) {
+              costTypeIds.add(id);
+            }
+          }
+        }
+        break;
+      }
+    }
+
+    _knownCostTypeIds = costTypeIds;
+    return costTypeIds;
+  }
 
   /// Evaluates conditions for a single source node.
   ///
@@ -443,10 +475,10 @@ class ApplicabilityService {
       return _FieldResolution(isUnknown: false);
     }
 
-    // Fix 3: Distinguish ID-like fields (assumed cost types) from garbage
-    // BSD cost type IDs look like GUIDs (e.g., "points", "e356-c769-5920-6e14")
-    // If it looks like an ID, assume it's a cost type and report snapshot gap
-    if (_looksLikeId(field)) {
+    // Rev-2 compliant: Check if field is a known cost type ID in the bundle
+    final knownCostTypes = _getKnownCostTypeIds(boundBundle);
+    if (knownCostTypes.contains(field)) {
+      // Valid cost type ID, but snapshot doesn't support cost evaluation yet
       _diagnostics.add(ApplicabilityDiagnostic(
         code: ApplicabilityDiagnosticCode.snapshotDataGapCosts,
         message: 'Cost field "$field" requested but snapshot lacks cost data',
@@ -460,7 +492,7 @@ class ApplicabilityService {
       );
     }
 
-    // Not a keyword and not ID-like → unresolved field ID (garbage/typo)
+    // Not a keyword and not a known cost type → unresolved field ID
     _diagnostics.add(ApplicabilityDiagnostic(
       code: ApplicabilityDiagnosticCode.unresolvedConditionFieldId,
       message: 'Unresolved field ID: $field (not a keyword or known cost type)',

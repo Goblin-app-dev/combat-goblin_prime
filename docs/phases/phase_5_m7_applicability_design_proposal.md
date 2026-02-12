@@ -8,7 +8,7 @@
 - Phase 2 (M4 Link): **FROZEN** (2026-02-05)
 - Phase 3 (M5 Bind): **FROZEN** (2026-02-10)
 - Phase 4 (M6 Evaluate): **FROZEN** (2026-02-11)
-- Phase 5 (M7 Applicability): **APPROVED** — revision 2 (2026-02-12)
+- Phase 5 (M7 Applicability): **FROZEN** (2026-02-12)
 
 ---
 
@@ -18,6 +18,8 @@
 |-----|------|---------|
 | 1 | 2026-02-12 | Initial proposal |
 | 2 | 2026-02-12 | Fixture-aligned condition coverage; tri-state applicability; child-inclusion semantics; ID-based field/scope resolution; unknown-aware group logic; index-ready identities; bulk-friendly API contract |
+| 3 | 2026-02-12 | Implementation review fixes: (A) diagnostics attached per-result, (B) includeChildForces returns unknown, (C) field ID-like detection, (D) multiple groups combined as implicit AND, (E) deep hashCode, (F) scope ID-like detection |
+| 3.1 | 2026-02-12 | Field resolution now uses actual cost type registry lookup from game system (replaces heuristic ID-like detection) |
 
 ---
 
@@ -150,6 +152,7 @@ Complete applicability evaluation for a given conditional source node and contex
 - `String? reason` — deterministic explanation (non-judgmental)
 - `List<ConditionEvaluation> conditionResults` — leaf results in XML traversal order
 - `ConditionGroupEvaluation? groupResult` — top-level group (if present)
+- `List<ApplicabilityDiagnostic> diagnostics` — attached per-result for voice/search context (Rev 3)
 - **Provenance identity (index-ready):**
   - `String sourceFileId`
   - `NodeRef sourceNode`
@@ -158,6 +161,7 @@ Complete applicability evaluation for a given conditional source node and contex
 **Determinism:**
 - Leaf ordering preserves XML traversal order.
 - Reason text is deterministic (constructed from parsed condition data).
+- Diagnostics attached to result, not mutable service state (Rev 3).
 
 ---
 

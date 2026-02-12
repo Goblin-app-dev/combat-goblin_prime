@@ -1,4 +1,4 @@
-# Phase 5 — M7 Applicability Approved Names (Rev 2)
+# Phase 5 — M7 Applicability Approved Names (Rev 3.1)
 
 ## Status
 
@@ -8,7 +8,7 @@
 - Phase 2 (M4 Link): **FROZEN** (2026-02-05)
 - Phase 3 (M5 Bind): **FROZEN** (2026-02-10)
 - Phase 4 (M6 Evaluate): **FROZEN** (2026-02-11)
-- Phase 5 (M7 Applicability): **APPROVED** — revision 2 (2026-02-12)
+- Phase 5 (M7 Applicability): **FROZEN** (2026-02-12)
 
 ---
 
@@ -100,6 +100,7 @@ Complete applicability evaluation result.
 - `String? reason` — human-readable explanation (deterministic)
 - `List<ConditionEvaluation> conditionResults` — leaf condition evaluations
 - `ConditionGroupEvaluation? groupResult` — top-level group result (if conditions grouped)
+- `List<ApplicabilityDiagnostic> diagnostics` — attached per-result for voice/search context (Rev 3)
 - `String sourceFileId` — provenance (index-ready)
 - `NodeRef sourceNode` — provenance (index-ready)
 - `String? targetId` — optional referenced id
@@ -107,6 +108,7 @@ Complete applicability evaluation result.
 **Rules:**
 - Results are deterministic given same inputs
 - Reason text is constructed from condition data (not random)
+- Diagnostics attached to result, not mutable service state (Rev 3)
 - No wall-clock dependence
 
 ---
