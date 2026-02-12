@@ -77,12 +77,13 @@ class ApplicabilityService {
       return ApplicabilityResult.applies(
         sourceFileId: sourceFileId,
         sourceNode: sourceNode,
+        diagnostics: List.unmodifiable(_diagnostics),
       );
     }
 
     // Find conditions or conditionGroups children
     final conditionResults = <ConditionEvaluation>[];
-    ConditionGroupEvaluation? groupResult;
+    final topLevelGroups = <ConditionGroupEvaluation>[];
 
     for (final childRef in conditionSource.children) {
       final childNode = wrappedFile.nodeAt(childRef);
@@ -103,11 +104,11 @@ class ApplicabilityService {
           }
         }
       } else if (childNode.tagName == 'conditionGroups') {
-        // Process condition groups container
+        // Fix 4: Collect ALL condition groups (not just last)
         for (final groupRef in childNode.children) {
           final groupNode = wrappedFile.nodeAt(groupRef);
           if (groupNode.tagName == 'conditionGroup') {
-            groupResult = _evaluateConditionGroup(
+            final groupEval = _evaluateConditionGroup(
               groupNode: groupNode,
               wrappedFile: wrappedFile,
               snapshot: snapshot,
@@ -115,9 +116,29 @@ class ApplicabilityService {
               contextSelectionId: contextSelectionId,
               conditionResults: conditionResults,
             );
+            topLevelGroups.add(groupEval);
           }
         }
       }
+    }
+
+    // Fix 4: Combine multiple top-level groups as implicit AND
+    ConditionGroupEvaluation? groupResult;
+    if (topLevelGroups.length == 1) {
+      groupResult = topLevelGroups.first;
+    } else if (topLevelGroups.length > 1) {
+      // Multiple groups → combine as implicit AND
+      final combinedState = ConditionGroupEvaluation.computeGroupState(
+        groupType: 'and',
+        conditions: const [],
+        nestedGroups: topLevelGroups,
+      );
+      groupResult = ConditionGroupEvaluation(
+        groupType: 'and',
+        conditions: const [],
+        nestedGroups: topLevelGroups,
+        state: combinedState,
+      );
     }
 
     // No conditions found → applies
@@ -125,6 +146,7 @@ class ApplicabilityService {
       return ApplicabilityResult.applies(
         sourceFileId: sourceFileId,
         sourceNode: sourceNode,
+        diagnostics: List.unmodifiable(_diagnostics),
       );
     }
 
@@ -157,6 +179,7 @@ class ApplicabilityService {
       groupResult: groupResult,
       sourceFileId: sourceFileId,
       sourceNode: sourceNode,
+      diagnostics: List.unmodifiable(_diagnostics),
     );
   }
 
@@ -297,6 +320,30 @@ class ApplicabilityService {
       }
     }
 
+    // Fix 2: includeChildForces requires force-subtree semantics not yet supported
+    if (field.toLowerCase() == 'forces' && includeChildForces) {
+      _diagnostics.add(ApplicabilityDiagnostic(
+        code: ApplicabilityDiagnosticCode.snapshotDataGapChildSemantics,
+        message: 'includeChildForces=true requires force-subtree semantics not yet supported',
+        sourceFileId: wrappedFile.fileId,
+        sourceNode: condNode.ref,
+      ));
+      return ConditionEvaluation(
+        conditionType: conditionType,
+        field: field,
+        scope: scope,
+        childId: childId,
+        requiredValue: requiredValue,
+        actualValue: null,
+        state: ApplicabilityState.unknown,
+        includeChildSelections: includeChildSelections,
+        includeChildForces: includeChildForces,
+        reasonCode: 'SNAPSHOT_DATA_GAP_CHILD_SEMANTICS',
+        sourceFileId: wrappedFile.fileId,
+        sourceNode: condNode.ref,
+      );
+    }
+
     // Compute actual value
     final actualValue = _computeActualValue(
       field: field,
@@ -396,18 +443,34 @@ class ApplicabilityService {
       return _FieldResolution(isUnknown: false);
     }
 
-    // Check if it's a cost type ID (not implemented in snapshot yet)
-    // For now, treat non-keyword fields as unknown with SNAPSHOT_DATA_GAP_COSTS
+    // Fix 3: Distinguish ID-like fields (assumed cost types) from garbage
+    // BSD cost type IDs look like GUIDs (e.g., "points", "e356-c769-5920-6e14")
+    // If it looks like an ID, assume it's a cost type and report snapshot gap
+    if (_looksLikeId(field)) {
+      _diagnostics.add(ApplicabilityDiagnostic(
+        code: ApplicabilityDiagnosticCode.snapshotDataGapCosts,
+        message: 'Cost field "$field" requested but snapshot lacks cost data',
+        sourceFileId: wrappedFile.fileId,
+        sourceNode: condNode.ref,
+        targetId: field,
+      ));
+      return _FieldResolution(
+        isUnknown: true,
+        reasonCode: 'SNAPSHOT_DATA_GAP_COSTS',
+      );
+    }
+
+    // Not a keyword and not ID-like → unresolved field ID (garbage/typo)
     _diagnostics.add(ApplicabilityDiagnostic(
-      code: ApplicabilityDiagnosticCode.snapshotDataGapCosts,
-      message: 'Cost field "$field" requested but snapshot lacks cost data',
+      code: ApplicabilityDiagnosticCode.unresolvedConditionFieldId,
+      message: 'Unresolved field ID: $field (not a keyword or known cost type)',
       sourceFileId: wrappedFile.fileId,
       sourceNode: condNode.ref,
       targetId: field,
     ));
     return _FieldResolution(
       isUnknown: true,
-      reasonCode: 'SNAPSHOT_DATA_GAP_COSTS',
+      reasonCode: 'UNRESOLVED_CONDITION_FIELD_ID',
     );
   }
 
@@ -459,7 +522,23 @@ class ApplicabilityService {
       );
     }
 
-    // Truly unknown scope
+    // Fix 6: Differentiate ID-like unknown scopes from unknown keywords
+    if (_looksLikeId(scope)) {
+      // Looks like an ID (GUID-ish) but not found in bundle
+      _diagnostics.add(ApplicabilityDiagnostic(
+        code: ApplicabilityDiagnosticCode.unresolvedConditionScopeId,
+        message: 'Unresolved scope ID: $scope (not found in bundle)',
+        sourceFileId: wrappedFile.fileId,
+        sourceNode: condNode.ref,
+        targetId: scope,
+      ));
+      return _ScopeResolution(
+        isUnknown: true,
+        reasonCode: 'UNRESOLVED_CONDITION_SCOPE_ID',
+      );
+    }
+
+    // Truly unknown scope keyword
     _diagnostics.add(ApplicabilityDiagnostic(
       code: ApplicabilityDiagnosticCode.unknownConditionScopeKeyword,
       message: 'Unknown scope keyword: $scope',
@@ -471,6 +550,20 @@ class ApplicabilityService {
       isUnknown: true,
       reasonCode: 'UNKNOWN_CONDITION_SCOPE_KEYWORD',
     );
+  }
+
+  /// Detects if a string looks like an ID (GUID-like pattern).
+  ///
+  /// BSD IDs typically contain hyphens and hex characters.
+  bool _looksLikeId(String value) {
+    // Check for GUID-like patterns: contains hyphens and primarily hex chars
+    if (!value.contains('-')) return false;
+    // BSD IDs are typically like: "xxxx-xxxx-xxxx-xxxx"
+    final parts = value.split('-');
+    if (parts.length < 2) return false;
+    // Check if parts look like hex segments
+    final hexPattern = RegExp(r'^[0-9a-fA-F]+$');
+    return parts.every((part) => part.isNotEmpty && hexPattern.hasMatch(part));
   }
 
   /// Computes the actual value for a condition.
