@@ -9,7 +9,7 @@
 - Phase 3 (M5 Bind): **FROZEN** (2026-02-10)
 - Phase 4 (M6 Evaluate): **FROZEN** (2026-02-11)
 - Phase 5 (M7 Applicability): **FROZEN** (2026-02-12)
-- Phase 6 (M8 Modifiers): **PROPOSED**
+- Phase 6 (M8 Modifiers): **FROZEN** (2026-02-12)
 
 ---
 
@@ -19,6 +19,7 @@
 |-----|------|---------|
 | 1 | 2026-02-12 | Initial names-only proposal |
 | 2 | 2026-02-12 | ModifierValue type-safe wrapper; ModifierTargetRef with FieldKind disambiguation; UNSUPPORTED_TARGET_SCOPE diagnostic |
+| 3 | 2026-02-12 | FROZEN after implementation and test verification (18/18 tests pass) |
 
 ---
 
@@ -377,17 +378,56 @@ Before implementation, add to `/docs/glossary.md`:
 
 ---
 
+## Frozen Invariants (M8 Modifiers)
+
+The following invariants are locked and must not change without a formal unfreeze:
+
+### Diagnostic Codes (Frozen Set — 7 codes)
+1. `UNKNOWN_MODIFIER_TYPE` — Modifier type not recognized
+2. `UNKNOWN_MODIFIER_FIELD` — Field not recognized
+3. `UNKNOWN_MODIFIER_SCOPE` — Scope keyword not recognized
+4. `UNRESOLVED_MODIFIER_TARGET` — Target ID not found in bundle
+5. `INCOMPATIBLE_VALUE_TYPE` — Value type incompatible with field
+6. `UNSUPPORTED_TARGET_KIND` — Target kind not supported for operation
+7. `UNSUPPORTED_TARGET_SCOPE` — Scope not supported for target kind
+
+### Determinism Guarantees
+- Same inputs → identical `ModifierResult`
+- Modifier application order matches XML traversal order
+- `applyModifiersMany` preserves input order exactly
+- No hash-map iteration leaks (all maps sorted before output)
+- No wall-clock or random dependence
+
+### No-Mutation Guarantee
+- M8 does NOT modify `BoundPackBundle` (read-only access)
+- M8 does NOT modify `SelectionSnapshot` (read-only access)
+- M8 produces new `ModifierResult` objects, never mutates inputs
+
+### Unknown Handling
+- Unknown applicability (M7 returns `unknown`) → `effectiveValue` is `null`, diagnostic emitted
+- Unknown modifier type → diagnostic emitted, operation skipped
+- Unknown field/scope → diagnostic emitted, operation skipped
+
+### Non-Goals (Explicitly Excluded)
+- M8 does NOT evaluate constraints (M6's job)
+- M8 does NOT evaluate conditions (M7's job)
+- M8 does NOT interpret rules or semantics
+- M8 does NOT persist data or make network calls
+- M8 does NOT produce UI elements
+
+---
+
 ## Approval Checklist
 
-- [ ] Module layout approved
-- [ ] Core model names approved (ModifierValue, FieldKind, ModifierTargetRef, ModifierOperation, ModifierResult, ModifierDiagnostic, ModifierFailure)
-- [ ] Service name approved (ModifierService)
-- [ ] Service methods approved (applyModifiers, applyModifiersMany)
-- [ ] Modifier types approved (set, increment, decrement, append)
-- [ ] Diagnostic codes approved (7 codes)
-- [ ] FieldKind enum approved (characteristic, cost, constraint, metadata)
-- [ ] ModifierValue sealed class approved (Int, Double, String, Bool variants)
-- [ ] Determinism contract approved
-- [ ] Glossary terms approved
+- [x] Module layout approved
+- [x] Core model names approved (ModifierValue, FieldKind, ModifierTargetRef, ModifierOperation, ModifierResult, ModifierDiagnostic, ModifierFailure)
+- [x] Service name approved (ModifierService)
+- [x] Service methods approved (applyModifiers, applyModifiersMany)
+- [x] Modifier types approved (set, increment, decrement, append)
+- [x] Diagnostic codes approved (7 codes)
+- [x] FieldKind enum approved (characteristic, cost, constraint, metadata)
+- [x] ModifierValue sealed class approved (Int, Double, String, Bool variants)
+- [x] Determinism contract approved
+- [x] Glossary terms approved
 
-**NO CODE UNTIL APPROVAL.**
+**FROZEN 2026-02-12. All 18 invariant tests pass.**

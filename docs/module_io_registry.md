@@ -400,11 +400,11 @@ M7 MAY evaluate conditions. M7 MUST NOT evaluate constraints (M6's job) or apply
 
 ---
 
-## M8 Modifiers (Phase 6) — PROPOSED
+## M8 Modifiers (Phase 6) — FROZEN
 
 Applies modifier operations to produce effective values for entry characteristics, costs, constraints, and other modifiable fields.
 
-**Status:** PROPOSED (2026-02-12). Pending approval.
+**Status:** FROZEN (2026-02-12). All 18 invariant tests pass.
 
 ### Inputs
 - BoundPackBundle (from M5 Bind)
@@ -470,6 +470,66 @@ applyModifiersMany preserves input order.
 
 ### Scope Boundaries
 M8 MAY apply modifiers. M8 MUST NOT evaluate constraints (M6's job) or evaluate conditions (M7's job).
+
+---
+
+## Orchestrator v1 — PROPOSED
+
+Single deterministic entrypoint that coordinates M6/M7/M8 evaluation to produce a unified ViewBundle.
+
+**Status:** PROPOSED (2026-02-12). Pending approval.
+
+### Design Pattern
+Orchestrator is a **coordinator** (not pure composer):
+- Takes frozen inputs (BoundPackBundle + SelectionSnapshot)
+- Internally calls M6 → M7 → M8 in fixed order
+- Returns complete ViewBundle with all results
+
+### Inputs
+- OrchestratorRequest containing:
+  - BoundPackBundle (from M5 Bind, read-only)
+  - SelectionSnapshot (current roster state, read-only)
+  - OrchestratorOptions (output configuration)
+
+### Outputs
+- ViewBundle containing:
+  - List<ViewSelection> selections (computed views)
+  - EvaluationReport (M6, preserved)
+  - List<ApplicabilityResult> (M7, preserved)
+  - List<ModifierResult> (M8, preserved)
+  - List<OrchestratorDiagnostic> (merged diagnostics)
+  - BoundPackBundle reference (for downstream lookups)
+
+### Behavior
+1. Validate inputs (check BoundPackBundle integrity)
+2. Call M6 evaluateConstraints() with snapshot
+3. For each selection in snapshot.orderedSelections():
+   a. Call M7 evaluate() for applicable conditions
+   b. Call M8 applyModifiers() for applicable modifiers
+   c. Build ViewSelection with computed values
+4. Aggregate all results into ViewBundle
+5. Merge diagnostics from M6/M7/M8
+
+### Diagnostic Codes
+- SELECTION_NOT_IN_BUNDLE: Selection references entry not in bundle
+- EVALUATION_ORDER_VIOLATION: Internal ordering invariant violated (fatal)
+
+### Error Contracts
+- OrchestratorDiagnostic for non-fatal issues
+- OrchestratorFailure only for corrupted M5 input or internal bugs
+- In normal operation, no OrchestratorFailure is thrown
+
+### Service Methods
+- buildViewBundle(OrchestratorRequest): returns ViewBundle
+
+### Determinism Contract
+- Same OrchestratorRequest → identical ViewBundle (except evaluatedAt)
+- Evaluation order: M6 → M7 → M8 (fixed)
+- Selection order: matches snapshot.orderedSelections() exactly
+- Diagnostic order: M6, then M7, then M8, then Orchestrator
+
+### Scope Boundaries
+Orchestrator MAY coordinate M6/M7/M8 calls. Orchestrator MUST NOT add semantic interpretation, modify inputs, persist data, or produce UI elements.
 
 ---
 
