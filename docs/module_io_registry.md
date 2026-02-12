@@ -309,69 +309,91 @@ M6 MAY evaluate constraints. M6 MUST NOT evaluate rules (deferred to M7+).
 
 ---
 
-## M7 Applicability (Phase 5) — PROPOSAL
+## M7 Applicability (Phase 5) — PROPOSAL Rev 2
 
-Evaluates conditions to determine whether constraints, modifiers, and other conditional elements apply to the current roster state.
+Evaluates conditions to determine whether constraints, modifiers, and other conditional elements apply to the current roster state. Returns tri-state applicability (applies/skipped/unknown).
 
-**Status:** PROPOSAL — revision 1, awaiting approval.
+**Status:** PROPOSAL — revision 2, awaiting approval.
 
 ### Inputs
 - BoundPackBundle (from M5 Bind)
 - SelectionSnapshot (same contract as M6)
 - WrappedNode conditionSource (node containing conditions)
+- String sourceFileId (provenance, index-ready)
+- NodeRef sourceNode (provenance, index-ready)
 - String contextSelectionId (scope resolution anchor)
 
 ### Outputs
 - ApplicabilityResult containing:
-  - bool applicable (true if conditions met or no conditions)
-  - String? reason (human-readable explanation when not applicable)
-  - List<ConditionEvaluation> (individual condition results)
+  - ApplicabilityState state (tri-state: applies, skipped, unknown)
+  - String? reason (human-readable explanation, deterministic)
+  - List<ConditionEvaluation> conditionResults (leaf evaluations in XML order)
   - ConditionGroupEvaluation? groupResult (if conditions grouped)
+  - Provenance identity (sourceFileId, sourceNode, targetId)
 - List<ApplicabilityDiagnostic> (non-fatal issues)
 
 ### Behavior
 - Finds `<conditions>` or `<conditionGroups>` children of source node
-- If no conditions found → return applicable=true
-- Evaluates each condition against snapshot
-- Applies AND/OR logic for condition groups
+- If no conditions found → return state=applies
+- Evaluates each condition against snapshot (tri-state per leaf)
+- Applies AND/OR logic for condition groups (unknown-aware)
 - Returns ApplicabilityResult with all evaluations
 
-### Condition Types (Closed Set)
+### Condition Types (Fixture-aligned)
 - atLeast: actual >= required
 - atMost: actual <= required
 - greaterThan: actual > required
 - lessThan: actual < required
 - equalTo: actual == required
 - notEqualTo: actual != required
-- instanceOf: entry is instance of type
+- instanceOf: membership/type test
+- notInstanceOf: negated membership/type test
 
-### Scope Values (Closed Set)
-- self: current selection
-- parent: parent selection
-- ancestor: any ancestor selection
-- roster: entire roster
-- force: current force
-- primary-category: selections with primary category
-- primary-catalogue: selections from catalogue
+### Scope Resolution (Keyword OR ID)
+**Keywords:** self, parent, ancestor, roster, force
+**ID-like:** categoryId (evaluate within category boundary), entryId (deferred semantics)
+Unknown scope → state=unknown with diagnostic
 
-### Field Values (Closed Set)
-- selections: count of selections matching criteria
-- forces: count of forces matching criteria
+### Field Resolution (Keyword OR ID)
+**Keywords:** selections, forces
+**ID-like:** costTypeId (sum costs of that type, if snapshot supports)
+Unknown field → state=unknown with diagnostic
+
+### Child Inclusion Semantics
+- includeChildSelections: true=subtree, false=direct-only
+- includeChildForces: true=nested forces, false=direct-only
+If snapshot cannot compute distinction → state=unknown
 
 ### Diagnostic Codes
-- UNKNOWN_CONDITION_TYPE: condition type not recognized
-- UNKNOWN_SCOPE: scope value not recognized
-- UNKNOWN_FIELD: field value not recognized
-- UNRESOLVED_CHILD_ID: childId not found in bundle
+- UNKNOWN_CONDITION_TYPE
+- UNKNOWN_CONDITION_SCOPE_KEYWORD
+- UNKNOWN_CONDITION_FIELD_KEYWORD
+- UNRESOLVED_CONDITION_SCOPE_ID
+- UNRESOLVED_CONDITION_FIELD_ID
+- UNRESOLVED_CHILD_ID
+- SNAPSHOT_DATA_GAP_COSTS
+- SNAPSHOT_DATA_GAP_CHILD_SEMANTICS
+- SNAPSHOT_DATA_GAP_CATEGORIES
+- SNAPSHOT_DATA_GAP_FORCE_BOUNDARY
+
+### Group Logic (Unknown-aware)
+**AND:** any skipped → skipped; else any unknown → unknown; else applies
+**OR:** any applies → applies; else any unknown → unknown; else skipped
 
 ### Error Contracts
 - ApplicabilityDiagnostic for semantic issues (non-fatal)
 - ApplicabilityFailure only for corrupted M5 input or internal bugs
+- Unknown type/scope/field → state=unknown with diagnostic, NOT exception
 - In normal operation, no ApplicabilityFailure is thrown
+
+### Service Methods
+- evaluate(): single-source evaluation
+- evaluateMany(): bulk evaluation preserving input order
 
 ### Determinism Contract
 Same inputs → identical ApplicabilityResult.
 Condition evaluation order matches XML traversal.
+evaluateMany preserves input order.
 
 ### Scope Boundaries
 M7 MAY evaluate conditions. M7 MUST NOT evaluate constraints (M6's job) or apply modifiers (M8+ concern).
