@@ -209,32 +209,32 @@ No silent renames are permitted.
 - Reason: New M8 Modifiers diagnostic codes (7 codes total).
 - Approval reference: Phase 6 M8 Modifiers names proposal Rev 2 (frozen 2026-02-12)
 
-## 2026-02-12 (Orchestrator v1 — PROPOSED)
+## 2026-02-12 (Orchestrator v1 — FROZEN)
 - Old name: N/A
 - New name: OrchestratorRequest, OrchestratorOptions
 - Reason: New Orchestrator input types for coordinator pattern.
-- Approval reference: Orchestrator v1 names proposal (pending approval)
+- Approval reference: Orchestrator v1 names proposal (frozen 2026-02-12)
 
-## 2026-02-12 (Orchestrator v1 — PROPOSED)
+## 2026-02-12 (Orchestrator v1 — FROZEN)
 - Old name: N/A
 - New name: ViewBundle, ViewSelection
 - Reason: New Orchestrator output types for unified view of evaluated roster.
-- Approval reference: Orchestrator v1 names proposal (pending approval)
+- Approval reference: Orchestrator v1 names proposal (frozen 2026-02-12)
 
-## 2026-02-12 (Orchestrator v1 — PROPOSED)
+## 2026-02-12 (Orchestrator v1 — FROZEN)
 - Old name: N/A
 - New name: OrchestratorDiagnostic, DiagnosticSource
 - Reason: New Orchestrator diagnostic wrapper with source module attribution.
-- Approval reference: Orchestrator v1 names proposal (pending approval)
+- Approval reference: Orchestrator v1 names proposal (frozen 2026-02-12)
 
-## 2026-02-12 (Orchestrator v1 — PROPOSED)
+## 2026-02-12 (Orchestrator v1 — FROZEN)
 - Old name: N/A
 - New name: OrchestratorService, OrchestratorFailure
 - Reason: New Orchestrator coordinator service and fatal exception type.
-- Approval reference: Orchestrator v1 names proposal (pending approval)
+- Approval reference: Orchestrator v1 names proposal (frozen 2026-02-12)
 
-## 2026-02-12 (Orchestrator v1 — PROPOSED)
+## 2026-02-12 (Orchestrator v1 — FROZEN)
 - Old name: N/A
 - New name: SELECTION_NOT_IN_BUNDLE, EVALUATION_ORDER_VIOLATION
 - Reason: New Orchestrator-specific diagnostic codes (2 codes total).
-- Approval reference: Orchestrator v1 names proposal (pending approval)
+- Approval reference: Orchestrator v1 names proposal (frozen 2026-02-12)

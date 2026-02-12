@@ -230,23 +230,23 @@ Exception thrown by M8 Modifiers only for corrupted M5 input or internal bugs. I
 ## Modifier Service (M8 Modifiers)
 Service that applies modifiers to produce effective values. Provides applyModifiers() for single-target and applyModifiersMany() for bulk application. Takes modifierSource node, BoundPackBundle, SelectionSnapshot, contextSelectionId, and ApplicabilityService. Returns ModifierResult with base/effective values and operations.
 
-## Orchestrator Request (Orchestrator — PROPOSED)
-Input bundle for orchestration containing BoundPackBundle, SelectionSnapshot, and OrchestratorOptions. Immutable input contract for OrchestratorService.buildViewBundle(). **Proposed for Orchestrator v1; not yet approved.**
+## Orchestrator Request (Orchestrator)
+Input bundle for orchestration containing BoundPackBundle, SelectionSnapshot, and OrchestratorOptions. Immutable input contract for OrchestratorService.buildViewBundle().
 
-## Orchestrator Options (Orchestrator — PROPOSED)
-Configuration for orchestration output verbosity. Controls whether skipped operations and all diagnostics are included. Does not change evaluation semantics. **Proposed for Orchestrator v1; not yet approved.**
+## Orchestrator Options (Orchestrator)
+Configuration for orchestration output verbosity. Controls whether skipped operations and all diagnostics are included. Does not change evaluation semantics.
 
-## View Bundle (Orchestrator — PROPOSED)
-Complete orchestrated output containing ViewSelections, EvaluationReport (M6), ApplicabilityResults (M7), ModifierResults (M8), and merged diagnostics. Deterministic: same inputs yield identical result. Selections ordered by snapshot.orderedSelections(). **Proposed for Orchestrator v1; not yet approved.**
+## View Bundle (Orchestrator)
+Complete orchestrated output containing ViewSelections, EvaluationReport (M6), ApplicabilityResults (M7), ModifierResults (M8), and merged diagnostics. Deterministic: same inputs yield identical result. Selections ordered by snapshot.orderedSelections(). Diagnostic architecture uses structured separation: ViewBundle.diagnostics contains M6/M7/M8/Orchestrator diagnostics; M5 diagnostics accessible via boundBundle.diagnostics.
 
-## View Selection (Orchestrator — PROPOSED)
-Computed view of single selection with all evaluations applied. Contains selectionId, entryId, boundEntry reference, appliedModifiers, applicabilityResults, effectiveValues map, and provenance. effectiveValues keyed by field name, sorted alphabetically for determinism. **Proposed for Orchestrator v1; not yet approved.**
+## View Selection (Orchestrator)
+Computed view of single selection with all evaluations applied. Contains selectionId, entryId, boundEntry reference, appliedModifiers, applicabilityResults, effectiveValues map, and provenance. effectiveValues keyed by field name, sorted alphabetically for determinism.
 
-## Orchestrator Diagnostic (Orchestrator — PROPOSED)
-Unified diagnostic wrapper with source module attribution (M6, M7, M8, or ORCHESTRATOR). Preserves original diagnostic codes unchanged. Orchestrator-specific codes: SELECTION_NOT_IN_BUNDLE, EVALUATION_ORDER_VIOLATION. **Proposed for Orchestrator v1; not yet approved.**
+## Orchestrator Diagnostic (Orchestrator)
+Unified diagnostic wrapper with source module attribution (M6, M7, M8, or ORCHESTRATOR). Preserves original diagnostic codes unchanged. Orchestrator-specific codes: SELECTION_NOT_IN_BUNDLE, EVALUATION_ORDER_VIOLATION.
 
-## Orchestrator Service (Orchestrator — PROPOSED)
-Coordinator service that calls M6/M7/M8 and produces ViewBundle. Single deterministic entrypoint. Evaluation order fixed: M6 → M7 → M8. Takes OrchestratorRequest, returns ViewBundle. **Proposed for Orchestrator v1; not yet approved.**
+## Orchestrator Service (Orchestrator)
+Coordinator service that calls M6/M7/M8 and produces ViewBundle. Single deterministic entrypoint. Evaluation order fixed: M6 → M7 → M8. Takes OrchestratorRequest, returns ViewBundle.
 
 ---
 

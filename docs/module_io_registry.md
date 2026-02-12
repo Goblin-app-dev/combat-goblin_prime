@@ -473,11 +473,11 @@ M8 MAY apply modifiers. M8 MUST NOT evaluate constraints (M6's job) or evaluate 
 
 ---
 
-## Orchestrator v1 — PROPOSED
+## Orchestrator v1 — FROZEN
 
 Single deterministic entrypoint that coordinates M6/M7/M8 evaluation to produce a unified ViewBundle.
 
-**Status:** PROPOSED (2026-02-12). Pending approval.
+**Status:** FROZEN (2026-02-12). All 12 smoke tests pass.
 
 ### Design Pattern
 Orchestrator is a **coordinator** (not pure composer):
