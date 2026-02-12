@@ -6,7 +6,13 @@
 - Phase 1B (M2 Parse): **FROZEN**
 - Phase 1C (M3 Wrap): **FROZEN** (2026-02-04)
 - Phase 2 (M4 Link): **FROZEN** (2026-02-05)
-- Phase 3 (M5 Bind): **PROPOSAL** — awaiting approval
+- Phase 3 (M5 Bind): **FROZEN** (2026-02-10)
+
+### Controlled Unfreeze History
+
+| Date | Change | Reason |
+|------|--------|--------|
+| 2026-02-12 | Bugfix: characteristic extraction in `_bindProfileFromNode` | Contract promised `BoundProfile.characteristics` but extraction loop was empty. Fixed by passing `WrappedFile` instead of `fileId` string to resolve child NodeRefs. No new types, no semantic changes. |
 
 ---
 
