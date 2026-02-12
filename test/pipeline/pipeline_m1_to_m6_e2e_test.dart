@@ -58,9 +58,9 @@ class DeterministicSnapshot implements SelectionSnapshot {
   /// Creates a deterministic roster snapshot with multiple selections.
   ///
   /// Structure:
-  /// - 1 force root entry (first entry with profiles that have characteristics)
+  /// - 1 force root entry (first UNIT entry with M/T/W-style stats)
   /// - Up to [maxChildren] child selections under the root
-  /// - Each child is a distinct entry with profiles+characteristics
+  /// - Each child is a distinct UNIT entry (not weapon/upgrade)
   ///
   /// This simulates a realistic roster with actual unit stats.
   factory DeterministicSnapshot.roster(
@@ -75,15 +75,54 @@ class DeterministicSnapshot implements SelectionSnapshot {
     final sortedEntries = bundle.entries.toList()
       ..sort((a, b) => a.id.compareTo(b.id));
 
-    // Filter to entries that have at least one profile with characteristics
+    // Helper to check if profile looks like a unit statline (has M, T, or W)
+    bool hasUnitStats(BoundEntry entry) {
+      for (final profile in entry.profiles) {
+        final charNames = profile.characteristics
+            .map((c) => c.name.toUpperCase())
+            .toSet();
+        // Unit profiles typically have M (Move), T (Toughness), W (Wounds)
+        if (charNames.contains('M') || charNames.contains('T') || charNames.contains('W')) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    // Helper to check if entry looks like a weapon (has Range, S, AP, D)
+    bool looksLikeWeapon(BoundEntry entry) {
+      for (final profile in entry.profiles) {
+        final charNames = profile.characteristics
+            .map((c) => c.name.toUpperCase())
+            .toSet();
+        // Weapon profiles typically have Range, S (Strength), AP, D (Damage)
+        if (charNames.contains('RANGE') && charNames.contains('AP')) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    // Filter to entries that:
+    // 1. Have unit-like stats (M/T/W)
+    // 2. Don't look like weapons (Range/AP)
+    final unitEntries = sortedEntries.where((e) {
+      return hasUnitStats(e) && !looksLikeWeapon(e);
+    }).toList();
+
+    // Fall back to entries with any characteristics if no unit-like entries found
     final entriesWithStats = sortedEntries.where((e) {
       return e.profiles.any((p) => p.characteristics.isNotEmpty);
     }).toList();
 
-    // Fall back to all entries if none have stats
-    final candidates = entriesWithStats.isNotEmpty ? entriesWithStats : sortedEntries;
+    // Choose candidates: prefer units, fall back to entries with stats, then all
+    final candidates = unitEntries.isNotEmpty
+        ? unitEntries
+        : entriesWithStats.isNotEmpty
+            ? entriesWithStats
+            : sortedEntries;
 
-    // First entry with stats is force root
+    // First entry is force root
     final rootEntry = candidates.first;
     final childEntries = candidates.skip(1).take(maxChildren).toList();
 
