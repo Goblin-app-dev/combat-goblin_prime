@@ -19,6 +19,7 @@
 | 1 | 2026-02-12 | Initial proposal |
 | 2 | 2026-02-12 | Fixture-aligned condition coverage; tri-state applicability; child-inclusion semantics; ID-based field/scope resolution; unknown-aware group logic; index-ready identities; bulk-friendly API contract |
 | 3 | 2026-02-12 | Implementation review fixes: (A) diagnostics attached per-result, (B) includeChildForces returns unknown, (C) field ID-like detection, (D) multiple groups combined as implicit AND, (E) deep hashCode, (F) scope ID-like detection |
+| 3.1 | 2026-02-12 | Field resolution now uses actual cost type registry lookup from game system (replaces heuristic ID-like detection) |
 
 ---
 
