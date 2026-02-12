@@ -238,3 +238,27 @@ No silent renames are permitted.
 - New name: SELECTION_NOT_IN_BUNDLE, EVALUATION_ORDER_VIOLATION
 - Reason: New Orchestrator-specific diagnostic codes (2 codes total).
 - Approval reference: Orchestrator v1 names proposal (frozen 2026-02-12)
+
+## 2026-02-12 (M9 Index-Core — PROPOSED)
+- Old name: N/A
+- New name: IndexBundle, UnitDoc, WeaponDoc, RuleDoc, CharacteristicDoc
+- Reason: New M9 Index-Core document types for search index.
+- Approval reference: M9 Index-Core names proposal Rev 1
+
+## 2026-02-12 (M9 Index-Core — PROPOSED)
+- Old name: N/A
+- New name: IndexDiagnostic
+- Reason: New M9 Index-Core diagnostic type.
+- Approval reference: M9 Index-Core names proposal Rev 1
+
+## 2026-02-12 (M9 Index-Core — PROPOSED)
+- Old name: N/A
+- New name: IndexService
+- Reason: New M9 Index-Core service for building search index.
+- Approval reference: M9 Index-Core names proposal Rev 1
+
+## 2026-02-12 (M9 Index-Core — PROPOSED)
+- Old name: N/A
+- New name: MISSING_NAME, DUPLICATE_DOC_KEY, UNKNOWN_PROFILE_TYPE, EMPTY_CHARACTERISTICS, TRUNCATED_DESCRIPTION
+- Reason: New M9 Index-Core diagnostic codes (5 codes total).
+- Approval reference: M9 Index-Core names proposal Rev 1

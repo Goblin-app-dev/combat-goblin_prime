@@ -533,6 +533,59 @@ Orchestrator MAY coordinate M6/M7/M8 calls. Orchestrator MUST NOT add semantic i
 
 ---
 
+## M9 Index-Core — PROPOSED
+
+Builds search index for player-facing queries (find unit, find weapon, what does rule X do).
+
+**Status:** PROPOSED (2026-02-12). Awaiting approval.
+
+### Inputs
+- BoundPackBundle (from M5 Bind, read-only)
+
+### Outputs
+- IndexBundle containing:
+  - List<UnitDoc> (indexed units with characteristics)
+  - List<WeaponDoc> (indexed weapons with stats)
+  - List<RuleDoc> (indexed rules with descriptions)
+  - Lookup maps (unitsByKey, unitsByName, weaponsByKey, etc.)
+  - List<IndexDiagnostic> (issues encountered)
+  - boundBundle reference (for provenance chain)
+  - packId and indexedAt timestamp
+
+### Behavior
+- Traverses BoundEntry roots and profiles
+- Classifies profiles by typeName to determine doc type
+- Builds UnitDoc for unit-type entries with profiles
+- Builds WeaponDoc for weapon-type profiles
+- Builds RuleDoc for rule elements (deduplicated)
+- Builds sorted lookup maps for deterministic queries
+- Uses lowercase normalization for name searches
+
+### Diagnostic Codes
+- MISSING_NAME: Entry/profile has empty or missing name
+- DUPLICATE_DOC_KEY: Same key encountered twice
+- UNKNOWN_PROFILE_TYPE: Profile typeName not recognized
+- EMPTY_CHARACTERISTICS: Unit/weapon has no characteristics
+- TRUNCATED_DESCRIPTION: Rule description exceeded max length
+
+### Error Contracts
+- IndexDiagnostic for indexing issues (non-fatal)
+- IndexFailure only for corrupted M5 input or internal bugs
+- In normal operation, no IndexFailure is thrown
+
+### Service Methods
+- buildIndex(BoundPackBundle): returns IndexBundle
+
+### Determinism Contract
+- Same BoundPackBundle → identical IndexBundle (except indexedAt)
+- All maps sorted alphabetically by key
+- Entry traversal matches boundBundle.rootEntries order
+
+### Scope Boundaries
+M9 MAY build search indices. M9 MUST NOT depend on M6/M7/M8 (v1), modify BoundPackBundle, persist index, or make network calls.
+
+---
+
 ## Index Reader (Future — Phase 1B+)
 
 Reads and caches the upstream repository index for dependency resolution and update checking.
