@@ -1,4 +1,4 @@
-# Phase 5 — M7 Applicability Design Proposal
+# Phase 5 — M7 Applicability Design Proposal (Rev 2)
 
 ## Status
 
@@ -8,7 +8,7 @@
 - Phase 2 (M4 Link): **FROZEN** (2026-02-05)
 - Phase 3 (M5 Bind): **FROZEN** (2026-02-10)
 - Phase 4 (M6 Evaluate): **FROZEN** (2026-02-11)
-- Phase 5 (M7 Applicability): **PROPOSAL** — revision 1, awaiting approval
+- Phase 5 (M7 Applicability): **APPROVED** — revision 2 (2026-02-12)
 
 ---
 
@@ -17,91 +17,97 @@
 | Rev | Date | Changes |
 |-----|------|---------|
 | 1 | 2026-02-12 | Initial proposal |
+| 2 | 2026-02-12 | Fixture-aligned condition coverage; tri-state applicability; child-inclusion semantics; ID-based field/scope resolution; unknown-aware group logic; index-ready identities; bulk-friendly API contract |
 
 ---
 
 ## Problem Statement
 
-M6 Evaluate currently evaluates ALL constraints on an entry, regardless of whether they apply to the current roster state. BSD data uses `<condition>` and `<conditionGroup>` elements to specify when constraints, modifiers, and rules should apply.
+M6 Evaluate evaluates constraints mechanically but does not determine whether constraints/modifiers/rules apply under BSD `<condition>` and `<conditionGroup>` gating.
 
-**Current behavior (M6):**
-```
-Constraint "max 1" → evaluated → violated/satisfied
-```
+This causes:
+- Noisy evaluation output
+- Incorrect user-facing explanations ("violated") when the constraint shouldn't apply
+- Poor voice/search quality (missing "why")
 
-**Desired behavior (M7):**
-```
-Constraint "max 1" with condition "if CHARACTER present"
-  → condition NOT met → NOT_APPLICABLE (with reason)
-  → condition MET → evaluated → violated/satisfied
-```
+**M7 Applicability** computes deterministic applicability for conditional elements against the current roster snapshot, producing truthful explanations:
+- **Skipped:** conditions evaluated false (we know it doesn't apply)
+- **Unknown:** conditions could not be evaluated (we don't know if it applies)
 
-This is critical for voice/search because:
-- Users don't want to hear about constraints that don't apply
-- "This limit doesn't apply because you don't have a CHARACTER" is more helpful than "limit violated"
-- Reduces noise in evaluation reports
-
-**M7 Applicability** evaluates conditions to determine whether constraints, modifiers, and other conditional elements apply to the current roster state.
+M7 is a standalone service. It does not modify frozen M6.
 
 ---
 
 ## Inputs
 
 ### Input A: BoundPackBundle (from M5 Bind)
-- Provides access to WrappedNodes via `linkedBundle.wrappedBundle`
-- Used to traverse condition elements
+- Read-only, frozen.
+- Provides lookups (entries, categories, cost types where available).
+- Provides provenance and access path to wrapped nodes (via linked bundle) when required to traverse condition XML structure.
 
 ### Input B: SelectionSnapshot (M6 contract)
-- Provides roster state for condition evaluation
-- Same contract M6 uses: orderedSelections(), entryIdFor(), countFor(), etc.
+- Read-only, deterministic snapshot operations.
+- Provides stable traversal and scope context for condition evaluation (ordered selections, ancestry, children, counts, force boundary detection).
+
+M7 does not define a roster model.
 
 ---
 
 ## Outputs
 
-### Output: ApplicabilityResult
+### Output: ApplicabilityResult (Tri-state)
 
-Result of evaluating whether a conditional element applies.
+Applicability is **not boolean**.
 
-**Fields:**
-- `bool applicable` — true if conditions are met (or no conditions present)
-- `String? reason` — human-readable explanation when not applicable
-- `List<ConditionEvaluation> conditionResults` — individual condition outcomes
+M7 distinguishes:
+- **applies:** conditions true (or no conditions present)
+- **skipped:** conditions false (constraint/modifier/rule should not apply)
+- **unknown:** cannot determine (unsupported operator/scope/field, missing target, snapshot data gap)
 
-**Usage:**
-```dart
-final result = applicabilityService.evaluate(
-  conditionSource: constraintNode,
-  snapshot: snapshot,
-  boundBundle: boundBundle,
-);
-
-if (!result.applicable) {
-  // Skip constraint evaluation, report as NOT_APPLICABLE
-  print('Skipped: ${result.reason}');
-}
-```
+ApplicabilityResult contains:
+- The final tri-state applicability
+- Deterministic reasons
+- Leaf and group evaluation details
+- Provenance identity (index-ready)
 
 ---
 
 ## Core Types
 
+### ApplicabilityState
+
+**File:** `models/applicability_result.dart` (or colocated enum file)
+
+```dart
+enum ApplicabilityState { applies, skipped, unknown }
+```
+
+---
+
 ### ConditionEvaluation
 
 **File:** `models/condition_evaluation.dart`
 
-Result of evaluating a single condition.
+Result of evaluating a single `<condition>` leaf.
 
 **Fields:**
-- `String conditionType` — atLeast, atMost, greaterThan, instanceOf, etc.
-- `String field` — selections, forces, costs
-- `String scope` — self, roster, ancestor, force, etc.
-- `String? childId` — entry ID being counted
+- `String conditionType` — atLeast, atMost, greaterThan, instanceOf, notInstanceOf, etc.
+- `String field` — keyword (selections, forces) OR id-like (e.g., costTypeId)
+- `String scope` — keyword OR id-like boundary reference (category/entry)
+- `String? childId` — entry/category/other referenced id (when present)
 - `int requiredValue` — threshold from condition
-- `int actualValue` — computed value from roster
-- `bool satisfied` — true if condition is met
-- `String sourceFileId` — provenance
-- `NodeRef sourceNode` — provenance
+- `int? actualValue` — computed value; null if unknown
+- `ApplicabilityState state` — applies/skipped/unknown for this leaf
+- `bool includeChildSelections`
+- `bool includeChildForces`
+- `String? reasonCode` — set when state is skipped/unknown (closed set codes below)
+- **Provenance:**
+  - `String sourceFileId`
+  - `NodeRef sourceNode`
+
+**Rules:**
+- Unknown field/scope/type/target must produce `state=unknown`, not "skipped".
+- `actualValue == null` whenever `state == unknown`.
 
 ---
 
@@ -109,17 +115,27 @@ Result of evaluating a single condition.
 
 **File:** `models/condition_group_evaluation.dart`
 
-Result of evaluating a condition group (AND/OR).
+Evaluates `<conditionGroup type="and|or">` with nested conditions and groups.
 
 **Fields:**
 - `String groupType` — "and" or "or"
-- `List<ConditionEvaluation> conditions` — individual condition results
-- `List<ConditionGroupEvaluation> nestedGroups` — nested group results
-- `bool satisfied` — true if group logic is satisfied
+- `List<ConditionEvaluation> conditions`
+- `List<ConditionGroupEvaluation> nestedGroups`
+- `ApplicabilityState state`
 
-**Logic:**
-- `type="and"` → all conditions AND nested groups must be satisfied
-- `type="or"` → at least one condition OR nested group must be satisfied
+**Group logic (unknown-aware):**
+
+**AND:**
+- If any child is `skipped` → group `skipped`
+- Else if any child is `unknown` → group `unknown`
+- Else → `applies`
+
+**OR:**
+- If any child is `applies` → group `applies`
+- Else if any child is `unknown` → group `unknown`
+- Else → `skipped`
+
+This prevents "unknown treated as false" errors.
 
 ---
 
@@ -127,17 +143,21 @@ Result of evaluating a condition group (AND/OR).
 
 **File:** `models/applicability_result.dart`
 
-Complete applicability evaluation result.
+Complete applicability evaluation for a given conditional source node and context.
 
 **Fields:**
-- `bool applicable` — true if all conditions met (or no conditions)
-- `String? reason` — explanation when not applicable
-- `List<ConditionEvaluation> conditionResults` — leaf condition evaluations
-- `ConditionGroupEvaluation? groupResult` — top-level group result (if conditions grouped)
+- `ApplicabilityState state`
+- `String? reason` — deterministic explanation (non-judgmental)
+- `List<ConditionEvaluation> conditionResults` — leaf results in XML traversal order
+- `ConditionGroupEvaluation? groupResult` — top-level group (if present)
+- **Provenance identity (index-ready):**
+  - `String sourceFileId`
+  - `NodeRef sourceNode`
+  - `String? targetId` — optional referenced id (when applicable)
 
 **Determinism:**
-- Results are deterministic given same inputs
-- Reason text is constructed from condition data (not random)
+- Leaf ordering preserves XML traversal order.
+- Reason text is deterministic (constructed from parsed condition data).
 
 ---
 
@@ -145,23 +165,14 @@ Complete applicability evaluation result.
 
 **File:** `models/applicability_diagnostic.dart`
 
-Non-fatal issue during applicability evaluation.
+Non-fatal issues encountered during evaluation. Diagnostics do not collapse into "skipped".
 
 **Fields:**
-- `String code` — diagnostic code (closed set)
-- `String message` — human-readable description
-- `String sourceFileId` — file where issue occurred
-- `NodeRef? sourceNode` — node where issue occurred
-- `String? targetId` — the ID involved (if applicable)
-
-**Diagnostic Codes (closed set):**
-
-| Code | Condition | Behavior |
-|------|-----------|----------|
-| `UNKNOWN_CONDITION_TYPE` | Condition type not recognized | Treat as NOT satisfied, continue |
-| `UNKNOWN_SCOPE` | Scope value not recognized | Treat as NOT satisfied, continue |
-| `UNKNOWN_FIELD` | Field value not recognized | Treat as NOT satisfied, continue |
-| `UNRESOLVED_CHILD_ID` | childId not found in bundle | Treat as count=0, continue |
+- `String code` — closed set
+- `String message`
+- `String sourceFileId`
+- `NodeRef? sourceNode`
+- `String? targetId`
 
 ---
 
@@ -169,74 +180,108 @@ Non-fatal issue during applicability evaluation.
 
 **File:** `models/applicability_failure.dart`
 
-Fatal exception for M7 failures.
+Fatal exception for corruption/invariants.
 
-**Fields:**
-- `String message`
-- `String? fileId`
-- `String? details`
+**Thrown ONLY for:**
+1. Corrupted M5 input (frozen contract violation)
+2. Internal invariant failure in M7 implementation
 
-**Fatality Policy:**
-
-ApplicabilityFailure is thrown ONLY for:
-1. Corrupted M5 input — BoundPackBundle violates frozen contracts
-2. Internal invariant violation — M7 implementation bug
-
-ApplicabilityFailure is NOT thrown for:
-- Unknown condition types → diagnostic
-- Unknown scopes → diagnostic
-- Unresolved childIds → diagnostic
-
-**In normal operation, no ApplicabilityFailure is thrown.**
+**Not thrown for:** unknown type/scope/field/target.
 
 ---
 
-## Condition Types (Closed Set)
+## Condition Types (Fixture-aligned Closed Set)
 
-BSData condition types supported:
+Supported in Rev 2:
 
-| Type | Semantics | Example |
-|------|-----------|---------|
-| `atLeast` | actual >= required | "at least 1 CHARACTER" |
-| `atMost` | actual <= required | "at most 3 selections" |
-| `greaterThan` | actual > required | "more than 5 models" |
-| `lessThan` | actual < required | "fewer than 10 points" |
-| `equalTo` | actual == required | "exactly 2 units" |
-| `notEqualTo` | actual != required | "not 0 selections" |
-| `instanceOf` | entry is instance of type | "is a CHARACTER" |
+| Type | Semantics |
+|------|-----------|
+| `atLeast` | actual >= required |
+| `atMost` | actual <= required |
+| `greaterThan` | actual > required |
+| `lessThan` | actual < required |
+| `equalTo` | actual == required |
+| `notEqualTo` | actual != required |
+| `instanceOf` | membership/type test (as defined by BSD semantics) |
+| `notInstanceOf` | negated membership/type test |
 
-**Unknown types:** Emit UNKNOWN_CONDITION_TYPE diagnostic, treat as NOT satisfied.
-
----
-
-## Scope Resolution (Closed Set)
-
-Condition scopes supported:
-
-| Scope | Resolution | Count Source |
-|-------|------------|--------------|
-| `self` | Current selection | Entries matching childId under this selection |
-| `parent` | Parent selection | Entries matching childId under parent |
-| `ancestor` | Any ancestor selection | Walk up tree, count matching |
-| `roster` | Entire roster | All selections matching childId |
-| `force` | Current force | Selections in same force |
-| `primary-category` | Selections with primary category | Filter by category |
-| `primary-catalogue` | Selections from catalogue | Filter by catalogue |
-
-**Unknown scopes:** Emit UNKNOWN_SCOPE diagnostic, treat as NOT satisfied.
+**Unknown types:**
+- Emit diagnostic `UNKNOWN_CONDITION_TYPE`
+- Leaf `state=unknown`
 
 ---
 
-## Field Resolution (Closed Set)
+## Child Inclusion Semantics (BLOCKING, Rev 2)
 
-Condition fields supported:
+Fixtures commonly use:
+- `includeChildSelections="true|false"`
+- `includeChildForces="true|false"`
 
-| Field | Semantics |
-|-------|-----------|
-| `selections` | Count of selections matching criteria |
-| `forces` | Count of forces matching criteria |
+Rev 2 requires these fields be parsed and applied.
 
-**Unknown fields:** Emit UNKNOWN_FIELD diagnostic, treat as NOT satisfied.
+**Normative semantics:**
+- `includeChildSelections=true` → counts include subtree selections (DFS descendants)
+- `includeChildSelections=false` → counts include direct-only children (immediate children) where applicable
+- `includeChildForces=true` → force counts include nested force structures (if snapshot supports)
+
+**If snapshot cannot compute these distinctions deterministically:**
+- Leaf `state=unknown`
+- `reasonCode=SNAPSHOT_DATA_GAP_CHILD_SEMANTICS` (or force equivalent)
+
+---
+
+## Field Resolution (Keyword OR ID)
+
+Field can be:
+- **keyword:** `selections`, `forces`
+- **id-like:** cost type id (fixtures show this)
+
+**Resolution:**
+1. If field is `selections` or `forces` → keyword field
+2. Else if field matches a known costTypeId in the bundle → cost field
+   - If snapshot does not provide cost totals → leaf `unknown` with `SNAPSHOT_DATA_GAP_COSTS`
+3. Else → leaf `unknown` with `UNRESOLVED_CONDITION_FIELD_ID`
+
+**Note:** Unknown field is `unknown`, not "skipped".
+
+---
+
+## Scope Resolution (Keyword OR ID)
+
+Scope can be:
+- **keywords:** self, parent, ancestor, roster, force (minimum required)
+- **id-like:** categoryId or entryId used as a boundary reference (fixtures show scope as an id)
+
+**Resolution:**
+1. If scope is a supported keyword → keyword scope
+2. Else if scope matches a known category id in bundle:
+   - Evaluate within that category boundary only if snapshot supports category membership deterministically
+   - Otherwise leaf `unknown` with `SNAPSHOT_DATA_GAP_CATEGORIES`
+3. Else if scope matches a known entry id in bundle:
+   - Rev 2 does not invent semantics.
+   - Only evaluate if an explicit operational meaning is documented and implementable via snapshot.
+   - Otherwise leaf `unknown` with `SNAPSHOT_DATA_GAP_SCOPE_ENTRY_BOUNDARY` (or `UNRESOLVED_CONDITION_SCOPE_ID`)
+4. Else → leaf `unknown` with `UNRESOLVED_CONDITION_SCOPE_ID`
+
+---
+
+## Diagnostics / Reason Codes (Closed Set)
+
+M7 uses `ApplicabilityDiagnostic` for system issues, and `ConditionEvaluation.reasonCode` for leaf outcome explanations. Codes must not reuse M5/M6 codes.
+
+**Diagnostic Codes:**
+- `UNKNOWN_CONDITION_TYPE`
+- `UNKNOWN_CONDITION_SCOPE_KEYWORD`
+- `UNKNOWN_CONDITION_FIELD_KEYWORD`
+- `UNRESOLVED_CONDITION_SCOPE_ID`
+- `UNRESOLVED_CONDITION_FIELD_ID`
+- `UNRESOLVED_CHILD_ID`
+- `SNAPSHOT_DATA_GAP_COSTS`
+- `SNAPSHOT_DATA_GAP_CHILD_SEMANTICS`
+- `SNAPSHOT_DATA_GAP_CATEGORIES`
+- `SNAPSHOT_DATA_GAP_FORCE_BOUNDARY`
+
+(Exact final set approved during names gate.)
 
 ---
 
@@ -254,19 +299,7 @@ Condition fields supported:
 - `models/applicability_diagnostic.dart`
 - `models/applicability_failure.dart`
 
-### File Layout
-```
-lib/modules/m7_applicability/
-├── m7_applicability.dart
-├── models/
-│   ├── applicability_result.dart
-│   ├── condition_evaluation.dart
-│   ├── condition_group_evaluation.dart
-│   ├── applicability_diagnostic.dart
-│   └── applicability_failure.dart
-└── services/
-    └── applicability_service.dart
-```
+(No new file names introduced.)
 
 ---
 
@@ -276,200 +309,130 @@ lib/modules/m7_applicability/
 
 **File:** `services/applicability_service.dart`
 
-**Method:**
+**Method 1: evaluate (single-source)**
 ```dart
 ApplicabilityResult evaluate({
   required WrappedNode conditionSource,
+  required String sourceFileId,
+  required NodeRef sourceNode,
   required SelectionSnapshot snapshot,
   required BoundPackBundle boundBundle,
   required String contextSelectionId,
 })
 ```
 
-**Parameters:**
-- `conditionSource` — Node containing conditions (modifier, constraint, etc.)
-- `snapshot` — Current roster state
-- `boundBundle` — For entry lookups
-- `contextSelectionId` — "self" scope resolves relative to this selection
+**Notes:**
+- `sourceFileId` + `sourceNode` are required to make the output index-ready and stable.
+- `contextSelectionId` defines the evaluation anchor for `scope=self` and ancestry resolution.
 
-**Behavior:**
-1. Find `<conditions>` or `<conditionGroups>` children of source node
-2. If no conditions found → return `applicable: true`
-3. Evaluate each condition against snapshot
-4. Apply AND/OR logic for condition groups
-5. Return ApplicabilityResult with all evaluations
+**Method 2: evaluateMany (bulk-friendly contract)**
+```dart
+List<ApplicabilityResult> evaluateMany({
+  required List<(WrappedNode conditionSource, String sourceFileId, NodeRef sourceNode)> sources,
+  required SelectionSnapshot snapshot,
+  required BoundPackBundle boundBundle,
+  required String contextSelectionId,
+})
+```
+
+**Purpose:**
+- Enables deterministic bulk evaluation without requiring a separate "index builder" module yet.
+- Allows voice/search to evaluate all relevant conditional elements in one deterministic pass.
 
 **Determinism:**
-- Same inputs → identical output
-- No dependence on wall clock
-- Condition order preserved from XML traversal
+- Results preserve the order of `sources` input.
+- No unordered map iteration without sorted keys.
 
 ---
 
 ## Integration with M6 Evaluate
 
-M7 does NOT modify M6. Instead, M7 provides a service M6 can optionally call.
+M7 does not modify M6.
 
-**Current M6 flow:**
-```
-For each constraint:
-  evaluate(constraint) → satisfied/violated
-```
+Caller/orchestrator composes a voice/search view:
+- If M7 state is `skipped`: present as "not applicable" with reason
+- If M7 state is `unknown`: present as "cannot determine applicability" with reason + diagnostics
+- If `applies`: present M6 outcome normally
 
-**Enhanced flow (M6 calls M7):**
-```
-For each constraint:
-  applicability = M7.evaluate(constraint conditions)
-  if not applicable:
-    outcome = NOT_APPLICABLE (with reason)
-  else:
-    evaluate(constraint) → satisfied/violated
-```
-
-**Note:** This is an M6 enhancement, not an M7 responsibility. M7 provides the applicability service; M6 decides how to use it.
+This supports voice honesty without unfreezing M6.
 
 ---
 
 ## Scope Boundaries
 
 ### M7 MAY:
-- Parse condition and conditionGroup elements
-- Evaluate condition logic against roster state
-- Count selections matching criteria
-- Apply AND/OR group logic
-- Return applicability results with reasons
-- Emit diagnostics for unknown types/scopes/fields
+- Traverse condition/conditionGroup structures from wrapped nodes
+- Evaluate condition truthiness against snapshot context
+- Produce tri-state applicability results with provenance
+- Emit diagnostics without failing
 
 ### M7 MUST NOT:
-- Modify BoundPackBundle (read-only)
-- Modify M6 behavior (separate service)
-- Evaluate constraints (M6's job)
-- Persist data
-- Make network calls
-- Produce UI elements
-- Apply modifiers (M8+ concern)
+- Modify BoundPackBundle or snapshot
+- Evaluate constraints (M6 responsibility)
+- Apply modifiers (future phase)
+- Persist data / network / UI
 
 ---
 
-## Phase Isolation Rules (Mandatory)
+## Required Tests (Rev 2)
 
-### Terminology Isolation
+### Leaf Condition Semantics
+- `atLeast` with actual < required → leaf `skipped`
+- `atLeast` with actual >= required → leaf `applies`
+- `notInstanceOf` basic cases → correct leaf state
 
-| Module | Terminology |
-|--------|-------------|
-| M5 Bind | BindDiagnostic |
-| M6 Evaluate | EvaluationWarning, EvaluationNotice |
-| M7 Applicability | ApplicabilityDiagnostic |
+### includeChild semantics
+- With `includeChildSelections=true` → subtree counting changes outcome
+- With `includeChildSelections=false` → direct-only counting changes outcome
+- If snapshot cannot support → leaf `unknown` with `SNAPSHOT_DATA_GAP_CHILD_SEMANTICS`
 
-### Code Pattern Isolation
+### Group Logic with Unknowns
+- AND group: one `skipped` → group `skipped`
+- AND group: one `unknown` and none skipped → group `unknown`
+- OR group: one `applies` → group `applies`
+- OR group: none applies but one `unknown` → group `unknown`
 
-| Module | Code Patterns |
-|--------|---------------|
-| M5 Bind | `UNRESOLVED_ENTRY_LINK`, `SHADOWED_DEFINITION` |
-| M6 Evaluate | `EMPTY_SNAPSHOT`, `UNKNOWN_SCOPE`, `UNKNOWN_FIELD` |
-| M7 Applicability | `UNKNOWN_CONDITION_TYPE`, `UNKNOWN_SCOPE`, `UNKNOWN_FIELD`, `UNRESOLVED_CHILD_ID` |
-
-### Failure Type Isolation
-
-| Module | Failure Type |
-|--------|-------------|
-| M5 Bind | BindFailure |
-| M6 Evaluate | EvaluateFailure |
-| M7 Applicability | ApplicabilityFailure |
-
----
-
-## Determinism Contract
-
-M7 guarantees:
-- Same inputs → identical ApplicabilityResult
-- Condition evaluation order matches XML traversal
-- Reason text is deterministic (constructed from condition data)
-- No hash-map iteration leaks
-- No wall-clock dependence
-
----
-
-## Required Tests
-
-### Structural Invariants (MANDATORY)
-- Condition with `type="atLeast" value="1"` and count=0 → NOT satisfied
-- Condition with `type="atLeast" value="1"` and count=1 → satisfied
-- ConditionGroup `type="and"` with one false → group NOT satisfied
-- ConditionGroup `type="or"` with one true → group satisfied
-- No conditions → applicable=true
-
-### Scope Resolution
-- `scope="self"` counts only within context selection
-- `scope="roster"` counts all selections
-- `scope="ancestor"` walks up parent chain
-
-### Diagnostic Invariants
-- Unknown condition type → UNKNOWN_CONDITION_TYPE diagnostic
-- Unknown scope → UNKNOWN_SCOPE diagnostic
-- Unresolved childId → UNRESOLVED_CHILD_ID diagnostic
+### ID Resolution
+- Field recognized as costTypeId:
+  - If costs not available → `unknown` + `SNAPSHOT_DATA_GAP_COSTS`
+- Scope recognized as category id:
+  - If categories not available → `unknown` + `SNAPSHOT_DATA_GAP_CATEGORIES`
+- Unresolved childId → `unknown` + `UNRESOLVED_CHILD_ID`
 
 ### Determinism
-- Evaluating same conditions twice yields identical results
+- Same inputs → identical ApplicabilityResult and diagnostics ordering
+- `evaluateMany` preserves input order
 
 ### No-Failure Policy
-- Unknown types do not throw ApplicabilityFailure
-- Missing entries do not throw ApplicabilityFailure
+- Unknown type/scope/field does not throw ApplicabilityFailure
+- Unresolved ids do not throw ApplicabilityFailure
 
 ---
 
-## Glossary Terms Required
+## Open Questions (Explicit)
 
-Before implementation, add to `/docs/glossary.md`:
+### Q1: Entry-id scope operational semantics
 
-- **Applicability Result** — M7 output indicating whether conditions are met
-- **Condition Evaluation** — Result of evaluating a single condition element
-- **Condition Group Evaluation** — Result of evaluating an AND/OR condition group
-- **Applicability Diagnostic** — Non-fatal issue during condition evaluation
-- **Applicability Failure** — Fatal exception for M7 corruption
-- **Applicability Service** — Service evaluating conditions against roster state
+If the project wants "entry-id scope" to mean "nearest ancestor with entryId defines boundary," this must be documented and added to snapshot contract if necessary. Otherwise remain `unknown`.
 
----
+### Q2: Category membership in snapshot
 
-## Open Questions
-
-### Q1: Should M7 handle modifier conditions?
-
-Modifiers have nested conditions that determine when the modifier applies.
-
-**Options:**
-- A) M7 evaluates conditions for both constraints AND modifiers
-- B) M7 only evaluates conditions; modifier application is M8
-
-**Recommendation:** Option A — M7 is the condition evaluation service, agnostic to parent element type.
-
-### Q2: Should M6 call M7 automatically?
-
-**Options:**
-- A) M6 calls M7 for every constraint (integrated)
-- B) M6 continues as-is; caller can use M7 separately (decoupled)
-
-**Recommendation:** Option B initially — maintain phase isolation. M6 can be enhanced later with controlled unfreeze.
-
-### Q3: Condition inheritance?
-
-Some conditions may reference entries that are defined at different levels.
-
-**Decision:** Same resolution as M5 — use M4's ResolvedRefs and shadowing policy.
+If M7 is expected to resolve category-id scopes, snapshot must expose deterministic category membership for selection instances OR M7 must remain `unknown` for that path.
 
 ---
 
 ## Approval Checklist
 
-- [ ] Module layout approved
-- [ ] Core model names approved (ApplicabilityResult, ConditionEvaluation, ConditionGroupEvaluation, ApplicabilityDiagnostic, ApplicabilityFailure)
-- [ ] Service name approved (ApplicabilityService)
-- [ ] Condition types approved (atLeast, atMost, greaterThan, lessThan, equalTo, notEqualTo, instanceOf)
-- [ ] Scope values approved (self, parent, ancestor, roster, force, primary-category, primary-catalogue)
-- [ ] Field values approved (selections, forces)
-- [ ] Diagnostic codes approved
+- [ ] Tri-state applicability approved (ApplicabilityState)
+- [ ] Condition types approved (+ notInstanceOf)
+- [ ] includeChildSelections/includeChildForces semantics approved
+- [ ] Field keyword + costTypeId resolution approved
+- [ ] Scope keyword + id-like resolution policy approved
+- [ ] Unknown-aware group logic approved
+- [ ] Diagnostic codes approved (isolation preserved)
+- [ ] Service signature updated with explicit source identity
+- [ ] evaluateMany bulk-friendly contract approved
 - [ ] Determinism contract approved
-- [ ] Phase isolation rules approved
-- [ ] Glossary terms approved
+- [ ] Required tests approved
 
 **NO CODE UNTIL APPROVAL.**
