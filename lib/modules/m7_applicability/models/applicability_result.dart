@@ -1,5 +1,6 @@
 import 'package:combat_goblin_prime/modules/m3_wrap/m3_wrap.dart';
 
+import 'applicability_diagnostic.dart';
 import 'condition_evaluation.dart';
 import 'condition_group_evaluation.dart';
 
@@ -59,6 +60,12 @@ class ApplicabilityResult {
   /// Optional referenced target ID (when applicable).
   final String? targetId;
 
+  /// Diagnostics from this evaluation.
+  ///
+  /// Contains non-fatal issues (unknown types, unresolved IDs, snapshot gaps).
+  /// Attached per-result so callers have full context for voice/search.
+  final List<ApplicabilityDiagnostic> diagnostics;
+
   const ApplicabilityResult({
     required this.state,
     this.reason,
@@ -67,6 +74,7 @@ class ApplicabilityResult {
     required this.sourceFileId,
     required this.sourceNode,
     this.targetId,
+    this.diagnostics = const [],
   });
 
   /// Creates an [ApplicabilityResult] with state [ApplicabilityState.applies].
@@ -78,6 +86,7 @@ class ApplicabilityResult {
     List<ConditionEvaluation> conditionResults = const [],
     ConditionGroupEvaluation? groupResult,
     String? targetId,
+    List<ApplicabilityDiagnostic> diagnostics = const [],
   }) {
     return ApplicabilityResult(
       state: ApplicabilityState.applies,
@@ -87,6 +96,7 @@ class ApplicabilityResult {
       sourceFileId: sourceFileId,
       sourceNode: sourceNode,
       targetId: targetId,
+      diagnostics: diagnostics,
     );
   }
 
@@ -100,6 +110,7 @@ class ApplicabilityResult {
     required List<ConditionEvaluation> conditionResults,
     ConditionGroupEvaluation? groupResult,
     String? targetId,
+    List<ApplicabilityDiagnostic> diagnostics = const [],
   }) {
     return ApplicabilityResult(
       state: ApplicabilityState.skipped,
@@ -109,6 +120,7 @@ class ApplicabilityResult {
       sourceFileId: sourceFileId,
       sourceNode: sourceNode,
       targetId: targetId,
+      diagnostics: diagnostics,
     );
   }
 
@@ -122,6 +134,7 @@ class ApplicabilityResult {
     required List<ConditionEvaluation> conditionResults,
     ConditionGroupEvaluation? groupResult,
     String? targetId,
+    List<ApplicabilityDiagnostic> diagnostics = const [],
   }) {
     return ApplicabilityResult(
       state: ApplicabilityState.unknown,
@@ -131,12 +144,13 @@ class ApplicabilityResult {
       sourceFileId: sourceFileId,
       sourceNode: sourceNode,
       targetId: targetId,
+      diagnostics: diagnostics,
     );
   }
 
   @override
   String toString() =>
-      'ApplicabilityResult(state: $state${reason != null ? ', reason: $reason' : ''}, conditions: ${conditionResults.length})';
+      'ApplicabilityResult(state: $state${reason != null ? ', reason: $reason' : ''}, conditions: ${conditionResults.length}, diagnostics: ${diagnostics.length})';
 
   @override
   bool operator ==(Object other) =>
@@ -149,17 +163,19 @@ class ApplicabilityResult {
           groupResult == other.groupResult &&
           sourceFileId == other.sourceFileId &&
           sourceNode == other.sourceNode &&
-          targetId == other.targetId;
+          targetId == other.targetId &&
+          _listEquals(diagnostics, other.diagnostics);
 
   @override
   int get hashCode =>
       state.hashCode ^
       reason.hashCode ^
-      conditionResults.hashCode ^
+      _deepListHash(conditionResults) ^
       groupResult.hashCode ^
       sourceFileId.hashCode ^
       sourceNode.hashCode ^
-      targetId.hashCode;
+      targetId.hashCode ^
+      _deepListHash(diagnostics);
 
   static bool _listEquals<T>(List<T> a, List<T> b) {
     if (a.length != b.length) return false;
@@ -167,5 +183,14 @@ class ApplicabilityResult {
       if (a[i] != b[i]) return false;
     }
     return true;
+  }
+
+  /// Computes a deterministic hash for a list based on element hashes.
+  static int _deepListHash<T>(List<T> list) {
+    var hash = 0;
+    for (var i = 0; i < list.length; i++) {
+      hash = hash ^ (list[i].hashCode * (i + 1));
+    }
+    return hash;
   }
 }

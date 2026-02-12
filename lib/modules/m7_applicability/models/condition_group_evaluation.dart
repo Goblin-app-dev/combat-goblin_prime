@@ -96,8 +96,8 @@ class ConditionGroupEvaluation {
   @override
   int get hashCode =>
       groupType.hashCode ^
-      conditions.hashCode ^
-      nestedGroups.hashCode ^
+      _deepListHash(conditions) ^
+      _deepListHash(nestedGroups) ^
       state.hashCode;
 
   static bool _listEquals<T>(List<T> a, List<T> b) {
@@ -106,5 +106,14 @@ class ConditionGroupEvaluation {
       if (a[i] != b[i]) return false;
     }
     return true;
+  }
+
+  /// Computes a deterministic hash for a list based on element hashes.
+  static int _deepListHash<T>(List<T> list) {
+    var hash = 0;
+    for (var i = 0; i < list.length; i++) {
+      hash = hash ^ (list[i].hashCode * (i + 1));
+    }
+    return hash;
   }
 }
