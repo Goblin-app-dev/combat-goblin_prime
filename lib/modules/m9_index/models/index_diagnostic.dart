@@ -4,15 +4,17 @@ import 'package:combat_goblin_prime/modules/m3_wrap/m3_wrap.dart';
 ///
 /// These codes represent non-fatal issues detected during indexing.
 /// No new codes may be added post-freeze without a new phase.
+///
+/// Note: Multiple docs sharing the same canonicalKey is EXPECTED
+/// (e.g., "Bolt Rifle" on many units). This is not a diagnostic.
+/// Only docId collisions (which indicate data issues) are reported.
 enum IndexDiagnosticCode {
   /// Entity missing required name field.
   missingName,
 
-  /// Canonical key collision between two documents.
-  duplicateDocKey,
-
-  /// Rule canonical key collision with differing descriptions.
-  duplicateRuleCanonicalKey,
+  /// Duplicate docId detected (indicates data issue, should be rare).
+  /// docId format is "type:{stableId}" so collisions mean duplicate IDs.
+  duplicateDocId,
 
   /// Profile has unrecognized typeId/typeName.
   unknownProfileType,
@@ -64,10 +66,8 @@ class IndexDiagnostic {
     switch (code) {
       case IndexDiagnosticCode.missingName:
         return 'MISSING_NAME';
-      case IndexDiagnosticCode.duplicateDocKey:
-        return 'DUPLICATE_DOC_KEY';
-      case IndexDiagnosticCode.duplicateRuleCanonicalKey:
-        return 'DUPLICATE_RULE_CANONICAL_KEY';
+      case IndexDiagnosticCode.duplicateDocId:
+        return 'DUPLICATE_DOC_ID';
       case IndexDiagnosticCode.unknownProfileType:
         return 'UNKNOWN_PROFILE_TYPE';
       case IndexDiagnosticCode.emptyCharacteristics:

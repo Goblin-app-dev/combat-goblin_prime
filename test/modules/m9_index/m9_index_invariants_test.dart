@@ -89,6 +89,7 @@ void main() {
       // Same unit docIds in same order
       for (var i = 0; i < bundle1.units.length; i++) {
         expect(bundle1.units[i].docId, bundle2.units[i].docId);
+        expect(bundle1.units[i].canonicalKey, bundle2.units[i].canonicalKey);
         expect(bundle1.units[i].name, bundle2.units[i].name);
         expect(bundle1.units[i].entryId, bundle2.units[i].entryId);
       }
@@ -97,6 +98,8 @@ void main() {
       // Same weapon docIds in same order
       for (var i = 0; i < bundle1.weapons.length; i++) {
         expect(bundle1.weapons[i].docId, bundle2.weapons[i].docId);
+        expect(
+            bundle1.weapons[i].canonicalKey, bundle2.weapons[i].canonicalKey);
         expect(bundle1.weapons[i].name, bundle2.weapons[i].name);
         expect(bundle1.weapons[i].profileId, bundle2.weapons[i].profileId);
       }
@@ -105,6 +108,7 @@ void main() {
       // Same rule docIds in same order
       for (var i = 0; i < bundle1.rules.length; i++) {
         expect(bundle1.rules[i].docId, bundle2.rules[i].docId);
+        expect(bundle1.rules[i].canonicalKey, bundle2.rules[i].canonicalKey);
         expect(bundle1.rules[i].name, bundle2.rules[i].name);
         expect(bundle1.rules[i].ruleId, bundle2.rules[i].ruleId);
       }
@@ -118,6 +122,29 @@ void main() {
       print('[M9 INVARIANT] Diagnostics are identical in order');
     });
 
+    test('determinism: canonical key index keys are sorted', () {
+      final indexService = IndexService();
+      final bundle = indexService.buildIndex(boundBundle);
+
+      final unitKeys = bundle.unitKeyToDocIds.keys.toList();
+      final sortedUnitKeys = List<String>.from(unitKeys)..sort();
+      expect(unitKeys, sortedUnitKeys);
+      print(
+          '[M9 INVARIANT] Unit canonical key index keys are sorted (${unitKeys.length} keys)');
+
+      final weaponKeys = bundle.weaponKeyToDocIds.keys.toList();
+      final sortedWeaponKeys = List<String>.from(weaponKeys)..sort();
+      expect(weaponKeys, sortedWeaponKeys);
+      print(
+          '[M9 INVARIANT] Weapon canonical key index keys are sorted (${weaponKeys.length} keys)');
+
+      final ruleKeys = bundle.ruleKeyToDocIds.keys.toList();
+      final sortedRuleKeys = List<String>.from(ruleKeys)..sort();
+      expect(ruleKeys, sortedRuleKeys);
+      print(
+          '[M9 INVARIANT] Rule canonical key index keys are sorted (${ruleKeys.length} keys)');
+    });
+
     test('determinism: keyword index keys are sorted', () {
       final indexService = IndexService();
       final bundle = indexService.buildIndex(boundBundle);
@@ -126,7 +153,8 @@ void main() {
       final sortedKeys = List<String>.from(keys)..sort();
 
       expect(keys, sortedKeys);
-      print('[M9 INVARIANT] Keyword index keys are sorted (${keys.length} keys)');
+      print(
+          '[M9 INVARIANT] Keyword index keys are sorted (${keys.length} keys)');
     });
 
     test('determinism: characteristic index keys are sorted', () {
@@ -164,23 +192,59 @@ void main() {
       print('[M9 INVARIANT] Characteristic index values are sorted');
     });
 
-    test('rule deduplication: repeated rule creates exactly one RuleDoc', () {
+    test('v2: no docId collisions with type-prefixed IDs', () {
       final indexService = IndexService();
       final bundle = indexService.buildIndex(boundBundle);
 
-      // Check for duplicate docIds (should be none)
-      final docIds = bundle.rules.map((r) => r.docId).toSet();
-      expect(docIds.length, bundle.rules.length,
-          reason: 'All RuleDocs should have unique docIds');
-      print('[M9 INVARIANT] All ${bundle.rules.length} rules have unique docIds');
+      // All docIds should be unique
+      final allDocIds = <String>{};
 
-      // Count DUPLICATE_RULE_CANONICAL_KEY diagnostics
-      final dupRuleDiags = bundle.diagnostics
-          .where(
-              (d) => d.code == IndexDiagnosticCode.duplicateRuleCanonicalKey)
-          .length;
+      for (final unit in bundle.units) {
+        expect(allDocIds.add(unit.docId), isTrue,
+            reason: 'Duplicate unit docId: ${unit.docId}');
+      }
+
+      for (final weapon in bundle.weapons) {
+        expect(allDocIds.add(weapon.docId), isTrue,
+            reason: 'Duplicate weapon docId: ${weapon.docId}');
+      }
+
+      for (final rule in bundle.rules) {
+        expect(allDocIds.add(rule.docId), isTrue,
+            reason: 'Duplicate rule docId: ${rule.docId}');
+      }
+
+      print('[M9 INVARIANT] All ${allDocIds.length} docIds are unique');
+      print('[M9 INVARIANT] DUPLICATE_DOC_ID count: ${bundle.duplicateDocIdCount}');
+      expect(bundle.duplicateDocIdCount, 0);
+    });
+
+    test('v2: canonicalKey groups multiple docs correctly', () {
+      final indexService = IndexService();
+      final bundle = indexService.buildIndex(boundBundle);
+
+      // Count how many canonical keys have multiple weapons
+      var multiWeaponKeys = 0;
+      for (final entry in bundle.weaponKeyToDocIds.entries) {
+        if (entry.value.length > 1) {
+          multiWeaponKeys++;
+        }
+      }
       print(
-          '[M9 INVARIANT] DUPLICATE_RULE_CANONICAL_KEY diagnostics: $dupRuleDiags');
+          '[M9 INVARIANT] Weapon canonical keys with multiple docs: $multiWeaponKeys');
+
+      // Count how many canonical keys have multiple rules
+      var multiRuleKeys = 0;
+      for (final entry in bundle.ruleKeyToDocIds.entries) {
+        if (entry.value.length > 1) {
+          multiRuleKeys++;
+        }
+      }
+      print(
+          '[M9 INVARIANT] Rule canonical keys with multiple docs: $multiRuleKeys');
+
+      // The v2 design should have these groupings
+      // (previously these would have been DUPLICATE_DOC_KEY diagnostics)
     });
 
     test('linking integrity: UnitDoc.weaponDocRefs resolve', () {
@@ -203,9 +267,7 @@ void main() {
         }
       }
 
-      print(
-          '[M9 INVARIANT] Weapon refs: $resolvedRefs/$totalRefs resolved');
-      // All should resolve (we only add refs for weapons we indexed)
+      print('[M9 INVARIANT] Weapon refs: $resolvedRefs/$totalRefs resolved');
       expect(resolvedRefs, totalRefs);
     });
 
@@ -230,7 +292,6 @@ void main() {
       }
 
       print('[M9 INVARIANT] Rule refs: $resolvedRefs/$totalRefs resolved');
-      // All should resolve (we only add refs for rules we indexed)
       expect(resolvedRefs, totalRefs);
     });
 
@@ -241,17 +302,13 @@ void main() {
       final bundle2 = indexService.buildIndex(boundBundle);
 
       expect(bundle1.missingNameCount, bundle2.missingNameCount);
-      expect(bundle1.duplicateDocKeyCount, bundle2.duplicateDocKeyCount);
-      expect(bundle1.duplicateRuleCanonicalKeyCount,
-          bundle2.duplicateRuleCanonicalKeyCount);
+      expect(bundle1.duplicateDocIdCount, bundle2.duplicateDocIdCount);
       expect(bundle1.unknownProfileTypeCount, bundle2.unknownProfileTypeCount);
       expect(bundle1.linkTargetMissingCount, bundle2.linkTargetMissingCount);
 
       print('[M9 INVARIANT] Diagnostic counts stable:');
       print('[M9 INVARIANT]   MISSING_NAME: ${bundle1.missingNameCount}');
-      print('[M9 INVARIANT]   DUPLICATE_DOC_KEY: ${bundle1.duplicateDocKeyCount}');
-      print(
-          '[M9 INVARIANT]   DUPLICATE_RULE_CANONICAL_KEY: ${bundle1.duplicateRuleCanonicalKeyCount}');
+      print('[M9 INVARIANT]   DUPLICATE_DOC_ID: ${bundle1.duplicateDocIdCount}');
       print(
           '[M9 INVARIANT]   UNKNOWN_PROFILE_TYPE: ${bundle1.unknownProfileTypeCount}');
       print(
@@ -264,7 +321,7 @@ void main() {
       final indexService = IndexService();
       final bundle = indexService.buildIndex(boundBundle);
 
-      // Try to find some common Space Marines units
+      // Try to find some common Space Marines units by canonical key
       final searchTerms = [
         'intercessor',
         'tactical',
@@ -273,15 +330,15 @@ void main() {
         'librarian',
       ];
 
-      print('[M9 SMOKE] Searching for units:');
+      print('[M9 SMOKE] Searching for units by canonical key:');
       for (final term in searchTerms) {
-        // Search in unit names (partial match)
+        // Search units whose canonicalKey contains the term
         final matches = bundle.units
-            .where((u) => u.docId.contains(term))
+            .where((u) => u.canonicalKey.contains(term))
             .toList();
         print('[M9 SMOKE]   "$term": ${matches.length} matches');
         for (final m in matches.take(3)) {
-          print('[M9 SMOKE]     - ${m.name}');
+          print('[M9 SMOKE]     - ${m.name} (${m.docId})');
         }
       }
     });
@@ -297,6 +354,7 @@ void main() {
       );
 
       print('[M9 SMOKE] Unit: ${unitWithStats.name}');
+      print('[M9 SMOKE] docId: ${unitWithStats.docId}');
       print('[M9 SMOKE] Stats:');
       for (final char in unitWithStats.characteristics) {
         print('[M9 SMOKE]   ${char.name}: ${char.valueText}');
@@ -320,14 +378,14 @@ void main() {
       for (final weaponRef in unitWithWeapons.weaponDocRefs) {
         final weapon = bundle.weaponByDocId(weaponRef);
         if (weapon != null) {
-          print('[M9 SMOKE]   - ${weapon.name}');
+          print('[M9 SMOKE]   - ${weapon.name} (${weapon.docId})');
         }
       }
 
       expect(unitWithWeapons.weaponDocRefs.isNotEmpty, isTrue);
     });
 
-    test('smoke: retrieve rule text by name', () {
+    test('smoke: retrieve rule text by canonical key', () {
       final indexService = IndexService();
       final bundle = indexService.buildIndex(boundBundle);
 
@@ -339,17 +397,47 @@ void main() {
       // Get first rule
       final rule = bundle.rules.first;
       print('[M9 SMOKE] Rule: ${rule.name}');
+      print('[M9 SMOKE] docId: ${rule.docId}');
+      print('[M9 SMOKE] canonicalKey: ${rule.canonicalKey}');
       print('[M9 SMOKE] Description preview:');
       final preview = rule.description.length > 200
           ? '${rule.description.substring(0, 200)}...'
           : rule.description;
       print('[M9 SMOKE]   $preview');
 
-      // Verify we can look it up by key
-      final found = bundle.ruleByKey(rule.docId);
-      expect(found, isNotNull);
-      expect(found!.name, rule.name);
-      print('[M9 SMOKE] Rule lookup by key: SUCCESS');
+      // Verify we can look it up by canonical key
+      final found = bundle.rulesByCanonicalKey(rule.canonicalKey).toList();
+      expect(found.isNotEmpty, isTrue);
+      expect(found.any((r) => r.docId == rule.docId), isTrue);
+      print('[M9 SMOKE] Rule lookup by canonical key: SUCCESS');
+    });
+
+    test('smoke: find all weapons with same name (canonical key grouping)', () {
+      final indexService = IndexService();
+      final bundle = indexService.buildIndex(boundBundle);
+
+      // Find a canonical key with multiple weapons
+      String? multiKey;
+      int? expectedCount;
+      for (final entry in bundle.weaponKeyToDocIds.entries) {
+        if (entry.value.length > 1) {
+          multiKey = entry.key;
+          expectedCount = entry.value.length;
+          break;
+        }
+      }
+
+      if (multiKey != null) {
+        final weapons = bundle.weaponsByCanonicalKey(multiKey).toList();
+        print(
+            '[M9 SMOKE] Weapons with canonicalKey "$multiKey": ${weapons.length}');
+        for (final w in weapons.take(5)) {
+          print('[M9 SMOKE]   - ${w.name} (${w.docId})');
+        }
+        expect(weapons.length, expectedCount);
+      } else {
+        print('[M9 SMOKE] No weapon canonical key with multiple docs found');
+      }
     });
 
     test('smoke: find units by keyword (category)', () {

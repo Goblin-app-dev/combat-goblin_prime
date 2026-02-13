@@ -83,12 +83,10 @@ void main() {
       print('[M9 TEST] WeaponDocs: ${indexBundle.weapons.length}');
       print('[M9 TEST] RuleDocs: ${indexBundle.rules.length}');
 
-      // Diagnostics
+      // Diagnostics (should be low with v2 key strategy)
       print('[M9 TEST] Diagnostics: ${indexBundle.diagnostics.length}');
       print('[M9 TEST]   MISSING_NAME: ${indexBundle.missingNameCount}');
-      print('[M9 TEST]   DUPLICATE_DOC_KEY: ${indexBundle.duplicateDocKeyCount}');
-      print(
-          '[M9 TEST]   DUPLICATE_RULE_CANONICAL_KEY: ${indexBundle.duplicateRuleCanonicalKeyCount}');
+      print('[M9 TEST]   DUPLICATE_DOC_ID: ${indexBundle.duplicateDocIdCount}');
       print(
           '[M9 TEST]   UNKNOWN_PROFILE_TYPE: ${indexBundle.unknownProfileTypeCount}');
       print(
@@ -103,6 +101,10 @@ void main() {
             '[M9 TEST]   ... and ${indexBundle.diagnostics.length - 10} more');
       }
 
+      // v2: DUPLICATE_DOC_ID should be near-zero
+      expect(indexBundle.duplicateDocIdCount, 0,
+          reason: 'With stable IDs, docId collisions should not occur');
+
       // boundBundle reference preserved
       expect(indexBundle.boundBundle, same(boundBundle));
 
@@ -116,22 +118,31 @@ void main() {
       // Print sample units
       for (final unit in indexBundle.units.take(5)) {
         print('[M9 TEST] Unit: ${unit.name} (docId=${unit.docId})');
+        print('[M9 TEST]   canonicalKey: ${unit.canonicalKey}');
         print('[M9 TEST]   entryId: ${unit.entryId}');
         print('[M9 TEST]   characteristics: ${unit.characteristics.length}');
         for (final c in unit.characteristics.take(6)) {
           print('[M9 TEST]     ${c.name}: ${c.valueText}');
         }
         print('[M9 TEST]   keywords: ${unit.keywordTokens.take(5).toList()}');
-        print('[M9 TEST]   categories: ${unit.categoryTokens.take(5).toList()}');
+        print(
+            '[M9 TEST]   categories: ${unit.categoryTokens.take(5).toList()}');
         print('[M9 TEST]   weaponRefs: ${unit.weaponDocRefs.length}');
         print('[M9 TEST]   ruleRefs: ${unit.ruleDocRefs.length}');
-        print('[M9 TEST]   costs: ${unit.costs.map((c) => '${c.typeName}=${c.value}').toList()}');
+        print(
+            '[M9 TEST]   costs: ${unit.costs.map((c) => '${c.typeName}=${c.value}').toList()}');
       }
 
       // Units should have characteristics (from unit profiles)
       final unitsWithChars =
           indexBundle.units.where((u) => u.characteristics.isNotEmpty).toList();
       print('[M9 TEST] Units with characteristics: ${unitsWithChars.length}');
+
+      // docId should be prefixed with "unit:"
+      for (final unit in indexBundle.units.take(10)) {
+        expect(unit.docId.startsWith('unit:'), isTrue,
+            reason: 'UnitDoc docId should start with "unit:"');
+      }
     });
 
     test('weapons: sample weapon documents have expected structure', () {
@@ -141,6 +152,7 @@ void main() {
       // Print sample weapons
       for (final weapon in indexBundle.weapons.take(5)) {
         print('[M9 TEST] Weapon: ${weapon.name} (docId=${weapon.docId})');
+        print('[M9 TEST]   canonicalKey: ${weapon.canonicalKey}');
         print('[M9 TEST]   profileId: ${weapon.profileId}');
         print('[M9 TEST]   characteristics: ${weapon.characteristics.length}');
         for (final c in weapon.characteristics) {
@@ -148,6 +160,12 @@ void main() {
         }
         print('[M9 TEST]   keywords: ${weapon.keywordTokens}');
         print('[M9 TEST]   ruleRefs: ${weapon.ruleDocRefs}');
+      }
+
+      // docId should be prefixed with "weapon:"
+      for (final weapon in indexBundle.weapons.take(10)) {
+        expect(weapon.docId.startsWith('weapon:'), isTrue,
+            reason: 'WeaponDoc docId should start with "weapon:"');
       }
     });
 
@@ -158,6 +176,7 @@ void main() {
       // Print sample rules
       for (final rule in indexBundle.rules.take(5)) {
         print('[M9 TEST] Rule: ${rule.name} (docId=${rule.docId})');
+        print('[M9 TEST]   canonicalKey: ${rule.canonicalKey}');
         print('[M9 TEST]   ruleId: ${rule.ruleId}');
         final descPreview = rule.description.length > 80
             ? '${rule.description.substring(0, 80)}...'
@@ -165,30 +184,84 @@ void main() {
         print('[M9 TEST]   description: $descPreview');
       }
 
-      // Rules should be deduplicated
+      // All RuleDocs should have unique docIds
       final docIds = indexBundle.rules.map((r) => r.docId).toSet();
       expect(docIds.length, indexBundle.rules.length,
           reason: 'RuleDocs should have unique docIds');
       print('[M9 TEST] All RuleDocs have unique docIds');
+
+      // docId should be prefixed with "rule:"
+      for (final rule in indexBundle.rules.take(10)) {
+        expect(rule.docId.startsWith('rule:'), isTrue,
+            reason: 'RuleDoc docId should start with "rule:"');
+      }
     });
 
-    test('query surface: unitByKey returns correct unit or null', () {
+    test('query surface: unitByDocId returns correct unit or null', () {
       final indexService = IndexService();
       final indexBundle = indexService.buildIndex(boundBundle);
 
       if (indexBundle.units.isNotEmpty) {
         final firstUnit = indexBundle.units.first;
-        final found = indexBundle.unitByKey(firstUnit.docId);
+        final found = indexBundle.unitByDocId(firstUnit.docId);
         expect(found, isNotNull);
         expect(found!.docId, firstUnit.docId);
         expect(found.name, firstUnit.name);
-        print('[M9 TEST] unitByKey found: ${found.name}');
+        print('[M9 TEST] unitByDocId found: ${found.name}');
       }
 
-      // Non-existent key returns null
-      final notFound = indexBundle.unitByKey('this-key-does-not-exist');
+      // Non-existent docId returns null
+      final notFound = indexBundle.unitByDocId('unit:this-id-does-not-exist');
       expect(notFound, isNull);
-      print('[M9 TEST] unitByKey returns null for non-existent key');
+      print('[M9 TEST] unitByDocId returns null for non-existent docId');
+    });
+
+    test('query surface: unitsByCanonicalKey returns matching units', () {
+      final indexService = IndexService();
+      final indexBundle = indexService.buildIndex(boundBundle);
+
+      if (indexBundle.units.isNotEmpty) {
+        final firstUnit = indexBundle.units.first;
+        final matches =
+            indexBundle.unitsByCanonicalKey(firstUnit.canonicalKey).toList();
+        expect(matches.isNotEmpty, isTrue);
+        expect(matches.any((u) => u.docId == firstUnit.docId), isTrue);
+        print(
+            '[M9 TEST] unitsByCanonicalKey("${firstUnit.canonicalKey}"): ${matches.length} units');
+      }
+
+      // Non-existent key returns empty
+      final empty =
+          indexBundle.unitsByCanonicalKey('xyznonexistentcanonicalkey');
+      expect(empty.isEmpty, isTrue);
+      print(
+          '[M9 TEST] unitsByCanonicalKey returns empty for non-existent key');
+    });
+
+    test('query surface: weaponsByCanonicalKey returns all matching weapons',
+        () {
+      final indexService = IndexService();
+      final indexBundle = indexService.buildIndex(boundBundle);
+
+      // Find a weapon name that appears multiple times
+      final keyCount = <String, int>{};
+      for (final weapon in indexBundle.weapons) {
+        keyCount[weapon.canonicalKey] =
+            (keyCount[weapon.canonicalKey] ?? 0) + 1;
+      }
+
+      // Find a key with multiple weapons
+      final multiKey =
+          keyCount.entries.where((e) => e.value > 1).take(1).firstOrNull;
+      if (multiKey != null) {
+        final matches =
+            indexBundle.weaponsByCanonicalKey(multiKey.key).toList();
+        expect(matches.length, multiKey.value);
+        print(
+            '[M9 TEST] weaponsByCanonicalKey("${multiKey.key}"): ${matches.length} weapons (expected ${multiKey.value})');
+      } else {
+        print('[M9 TEST] No weapon canonical key with multiple matches found');
+      }
     });
 
     test('query surface: unitsByKeyword returns matching units', () {

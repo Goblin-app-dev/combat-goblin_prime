@@ -13,14 +13,17 @@ import 'weapon_doc.dart';
 /// built from M5 BoundPackBundle. All lists are sorted by docId
 /// for deterministic iteration.
 ///
+/// Identity vs Search:
+/// - docId: Globally unique stable identifier (type:{id})
+/// - canonicalKey: Normalized name for search grouping
+///
 /// Query Semantics:
-/// - *ByKey(key): Returns null if canonical key not found
-/// - *ByDocId(docId): Returns null if docId not found
-/// - unitsByKeyword(keyword): Returns empty list if keyword not found
-/// - unitsByCharacteristic(name): Returns empty list if name not found
+/// - *ByDocId(docId): Returns single doc or null (identity lookup)
+/// - *ByCanonicalKey(key): Returns list of docs (search lookup)
+/// - unitsByKeyword(keyword): Returns list of units with that keyword
 ///
 /// Deterministic Ordering:
-/// - All document lists sorted by docId (canonical key)
+/// - All document lists sorted by docId
 /// - All lookup map values are sorted lists
 /// - Diagnostics sorted by (sourceFileId, sourceNode.nodeIndex)
 ///
@@ -41,14 +44,14 @@ class IndexBundle {
   /// All rule documents (sorted by docId).
   final List<RuleDoc> rules;
 
-  /// Canonical key → UnitDoc docId lookup.
-  final SplayTreeMap<String, String> unitKeyToDocId;
+  /// Canonical key → list of UnitDoc docIds (for search grouping).
+  final SplayTreeMap<String, List<String>> unitKeyToDocIds;
 
-  /// Canonical key → WeaponDoc docId lookup.
-  final SplayTreeMap<String, String> weaponKeyToDocId;
+  /// Canonical key → list of WeaponDoc docIds (for search grouping).
+  final SplayTreeMap<String, List<String>> weaponKeyToDocIds;
 
-  /// Canonical key → RuleDoc docId lookup.
-  final SplayTreeMap<String, String> ruleKeyToDocId;
+  /// Canonical key → list of RuleDoc docIds (for search grouping).
+  final SplayTreeMap<String, List<String>> ruleKeyToDocIds;
 
   /// Keyword → list of UnitDoc docIds (sorted).
   final SplayTreeMap<String, List<String>> keywordToUnitDocIds;
@@ -73,9 +76,9 @@ class IndexBundle {
     required this.units,
     required this.weapons,
     required this.rules,
-    required this.unitKeyToDocId,
-    required this.weaponKeyToDocId,
-    required this.ruleKeyToDocId,
+    required this.unitKeyToDocIds,
+    required this.weaponKeyToDocIds,
+    required this.ruleKeyToDocIds,
     required this.keywordToUnitDocIds,
     required this.characteristicNameToDocIds,
     required this.diagnostics,
@@ -84,27 +87,7 @@ class IndexBundle {
         _weaponByDocId = {for (final w in weapons) w.docId: w},
         _ruleByDocId = {for (final r in rules) r.docId: r};
 
-  // --- Lookup by canonical key ---
-
-  /// Returns UnitDoc for the given canonical key, or null if not found.
-  UnitDoc? unitByKey(String key) {
-    final docId = unitKeyToDocId[key];
-    return docId != null ? _unitByDocId[docId] : null;
-  }
-
-  /// Returns WeaponDoc for the given canonical key, or null if not found.
-  WeaponDoc? weaponByKey(String key) {
-    final docId = weaponKeyToDocId[key];
-    return docId != null ? _weaponByDocId[docId] : null;
-  }
-
-  /// Returns RuleDoc for the given canonical key, or null if not found.
-  RuleDoc? ruleByKey(String key) {
-    final docId = ruleKeyToDocId[key];
-    return docId != null ? _ruleByDocId[docId] : null;
-  }
-
-  // --- Lookup by docId ---
+  // --- Lookup by docId (identity) ---
 
   /// Returns UnitDoc for the given docId, or null if not found.
   UnitDoc? unitByDocId(String docId) => _unitByDocId[docId];
@@ -114,6 +97,29 @@ class IndexBundle {
 
   /// Returns RuleDoc for the given docId, or null if not found.
   RuleDoc? ruleByDocId(String docId) => _ruleByDocId[docId];
+
+  // --- Lookup by canonical key (search) ---
+
+  /// Returns all UnitDocs matching the canonical key (sorted by docId).
+  Iterable<UnitDoc> unitsByCanonicalKey(String key) {
+    final docIds = unitKeyToDocIds[key];
+    if (docIds == null) return const [];
+    return docIds.map((id) => _unitByDocId[id]).whereType<UnitDoc>();
+  }
+
+  /// Returns all WeaponDocs matching the canonical key (sorted by docId).
+  Iterable<WeaponDoc> weaponsByCanonicalKey(String key) {
+    final docIds = weaponKeyToDocIds[key];
+    if (docIds == null) return const [];
+    return docIds.map((id) => _weaponByDocId[id]).whereType<WeaponDoc>();
+  }
+
+  /// Returns all RuleDocs matching the canonical key (sorted by docId).
+  Iterable<RuleDoc> rulesByCanonicalKey(String key) {
+    final docIds = ruleKeyToDocIds[key];
+    if (docIds == null) return const [];
+    return docIds.map((id) => _ruleByDocId[id]).whereType<RuleDoc>();
+  }
 
   // --- Inverted index queries ---
 
@@ -136,12 +142,8 @@ class IndexBundle {
       .where((d) => d.code == IndexDiagnosticCode.missingName)
       .length;
 
-  int get duplicateDocKeyCount => diagnostics
-      .where((d) => d.code == IndexDiagnosticCode.duplicateDocKey)
-      .length;
-
-  int get duplicateRuleCanonicalKeyCount => diagnostics
-      .where((d) => d.code == IndexDiagnosticCode.duplicateRuleCanonicalKey)
+  int get duplicateDocIdCount => diagnostics
+      .where((d) => d.code == IndexDiagnosticCode.duplicateDocId)
       .length;
 
   int get unknownProfileTypeCount => diagnostics
