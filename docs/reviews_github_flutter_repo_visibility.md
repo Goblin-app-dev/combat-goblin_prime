@@ -59,3 +59,49 @@ Optional fallback if topic is sparse:
 
 This fits cleanly by adding a dedicated GitHub module rather than forcing behavior into existing M1-M9 parsing modules.
 
+
+---
+
+## Review adjustments from inline comments
+
+The following constraints are now explicitly adopted for implementation review:
+
+1. **Hard isolation boundary**
+   - Feature lives only under `lib/features/github_repository_search/`.
+   - No imports from `lib/modules/` into this feature.
+   - No global singletons/caches/shared mutable state.
+   - Add dedicated feature doc clarifying this is not part of M1–M9.
+
+2. **Narrow stable API**
+   - Public method shape:
+     - `Future<RepoSearchPage> search({required RepoSearchQuery query, String? pageCursor})`
+   - Query passed as value object only (no external raw query concatenation).
+   - `RepoSummary` intentionally minimal and UI-focused.
+
+3. **Determinism rules**
+   - Same inputs produce same query string (stable qualifier ordering).
+   - Same request parameters produce stable result ordering (explicit `sort` + `order`).
+   - Default sorting frozen to `sort=stars&order=desc`.
+
+4. **Pagination contract**
+   - Expose `nextPageToken`, `isLastPage`, `totalCount`.
+   - `nextPageToken` maps to GitHub integer `page` represented as string.
+
+5. **Expanded error mapping**
+   - `403` with rate-limit indicators => `rateLimited`.
+   - `403` without such indicators => `forbidden`.
+   - Invalid JSON/parse failures => `invalidResponse` (or `serverFailure` fallback).
+
+6. **Authentication posture**
+   - Auth injected via constructor/provider.
+   - No auth material in diagnostics/logging.
+   - Test doubles must stub auth header behavior.
+
+7. **Test coverage additions**
+   - Query escaping cases (quotes, colon, hyphen, unicode).
+   - Qualifier whitelist enforcement.
+   - Deterministic normalization checks.
+   - Redaction test ensuring token/header never leaked.
+   - Coupling check script to enforce no feature->modules imports.
+
+For copy/paste, use the section below and/or `docs/features/github_repository_search.md`.
