@@ -136,6 +136,143 @@ class IndexBundle {
         const [];
   }
 
+  // --- Name-based search (query surface) ---
+
+  /// Finds units whose canonicalKey matches exactly.
+  ///
+  /// Returns stable-sorted list by docId. Query is normalized before lookup.
+  /// For substring/contains matching, use [findUnitsContaining].
+  List<UnitDoc> findUnitsByName(String query) {
+    final key = _normalize(query);
+    return unitsByCanonicalKey(key).toList();
+  }
+
+  /// Finds weapons whose canonicalKey matches exactly.
+  ///
+  /// Returns stable-sorted list by docId. Query is normalized before lookup.
+  List<WeaponDoc> findWeaponsByName(String query) {
+    final key = _normalize(query);
+    return weaponsByCanonicalKey(key).toList();
+  }
+
+  /// Finds rules whose canonicalKey matches exactly.
+  ///
+  /// Returns stable-sorted list by docId. Query is normalized before lookup.
+  List<RuleDoc> findRulesByName(String query) {
+    final key = _normalize(query);
+    return rulesByCanonicalKey(key).toList();
+  }
+
+  /// Finds units whose canonicalKey contains the normalized query.
+  ///
+  /// Returns stable-sorted list by docId. More expensive than exact match.
+  List<UnitDoc> findUnitsContaining(String query) {
+    final key = _normalize(query);
+    if (key.isEmpty) return const [];
+    final results = <UnitDoc>[];
+    for (final entry in unitKeyToDocIds.entries) {
+      if (entry.key.contains(key)) {
+        for (final docId in entry.value) {
+          final doc = _unitByDocId[docId];
+          if (doc != null) results.add(doc);
+        }
+      }
+    }
+    return results;
+  }
+
+  /// Finds weapons whose canonicalKey contains the normalized query.
+  ///
+  /// Returns stable-sorted list by docId. More expensive than exact match.
+  List<WeaponDoc> findWeaponsContaining(String query) {
+    final key = _normalize(query);
+    if (key.isEmpty) return const [];
+    final results = <WeaponDoc>[];
+    for (final entry in weaponKeyToDocIds.entries) {
+      if (entry.key.contains(key)) {
+        for (final docId in entry.value) {
+          final doc = _weaponByDocId[docId];
+          if (doc != null) results.add(doc);
+        }
+      }
+    }
+    return results;
+  }
+
+  /// Finds rules whose canonicalKey contains the normalized query.
+  ///
+  /// Returns stable-sorted list by docId. More expensive than exact match.
+  List<RuleDoc> findRulesContaining(String query) {
+    final key = _normalize(query);
+    if (key.isEmpty) return const [];
+    final results = <RuleDoc>[];
+    for (final entry in ruleKeyToDocIds.entries) {
+      if (entry.key.contains(key)) {
+        for (final docId in entry.value) {
+          final doc = _ruleByDocId[docId];
+          if (doc != null) results.add(doc);
+        }
+      }
+    }
+    return results;
+  }
+
+  /// Returns unit canonical keys that start with the given prefix.
+  ///
+  /// Sorted lexicographically. Useful for autocomplete/typeahead.
+  List<String> autocompleteUnitKeys(String prefix, {int limit = 10}) {
+    final key = _normalize(prefix);
+    if (key.isEmpty) return const [];
+    final results = <String>[];
+    for (final k in unitKeyToDocIds.keys) {
+      if (k.startsWith(key)) {
+        results.add(k);
+        if (results.length >= limit) break;
+      }
+    }
+    return results;
+  }
+
+  /// Returns weapon canonical keys that start with the given prefix.
+  ///
+  /// Sorted lexicographically. Useful for autocomplete/typeahead.
+  List<String> autocompleteWeaponKeys(String prefix, {int limit = 10}) {
+    final key = _normalize(prefix);
+    if (key.isEmpty) return const [];
+    final results = <String>[];
+    for (final k in weaponKeyToDocIds.keys) {
+      if (k.startsWith(key)) {
+        results.add(k);
+        if (results.length >= limit) break;
+      }
+    }
+    return results;
+  }
+
+  /// Returns rule canonical keys that start with the given prefix.
+  ///
+  /// Sorted lexicographically. Useful for autocomplete/typeahead.
+  List<String> autocompleteRuleKeys(String prefix, {int limit = 10}) {
+    final key = _normalize(prefix);
+    if (key.isEmpty) return const [];
+    final results = <String>[];
+    for (final k in ruleKeyToDocIds.keys) {
+      if (k.startsWith(key)) {
+        results.add(k);
+        if (results.length >= limit) break;
+      }
+    }
+    return results;
+  }
+
+  /// Normalize query string (same rules as IndexService.normalize).
+  static String _normalize(String name) {
+    var result = name.toLowerCase();
+    result = result.replaceAll(RegExp(r'[^a-z0-9\s]'), '');
+    result = result.replaceAll(RegExp(r'\s+'), ' ');
+    return result.trim();
+  }
+
   // --- Diagnostic helpers ---
 
   int get missingNameCount => diagnostics
@@ -152,6 +289,11 @@ class IndexBundle {
 
   int get linkTargetMissingCount => diagnostics
       .where((d) => d.code == IndexDiagnosticCode.linkTargetMissing)
+      .length;
+
+  int get duplicateSourceProfileSkippedCount => diagnostics
+      .where(
+          (d) => d.code == IndexDiagnosticCode.duplicateSourceProfileSkipped)
       .length;
 
   @override
