@@ -167,3 +167,13 @@ Mapping:
 - ✅ Error mapping table implemented (`403` rateLimited vs forbidden)
 - ✅ Auth injected, never logged
 - ✅ Tests: determinism/escaping, whitelist, normalization, contract matrix, redaction, isolation
+
+## Skills compliance notes
+
+This feature design aligns to repository skills as follows:
+
+- `skill_06_module_boundary_integrity`: feature code stays in `lib/features/github_repository_search/` and must not import `lib/modules/`.
+- `skill_10_deterministic_behavior`: query builder and sort/order defaults are frozen and testable.
+- `skill_11_debug_visibility`: typed error mapping and diagnostics are required.
+- `skill_07_module_io_accountability`: request headers, auth injection, and output models are explicit.
+- `skill_01_read_before_write` + naming skills (`02`, `03`, `13`): names/spec documented before implementation.

@@ -268,3 +268,15 @@ No silent renames are permitted.
 - New name: MISSING_NAME, DUPLICATE_DOC_KEY, DUPLICATE_RULE_CANONICAL_KEY, UNKNOWN_PROFILE_TYPE, EMPTY_CHARACTERISTICS, TRUNCATED_DESCRIPTION, LINK_TARGET_MISSING
 - Reason: New M9 Index-Core diagnostic codes (7 codes total, +2 from Rev 1).
 - Approval reference: M9 Index-Core names proposal Rev 2
+
+## 2026-02-14 (GitHub Repository Search Feature — PROPOSED)
+- Old name: N/A
+- New name: RepoSearchQuery, RepoSearchPage, RepoSummary, RepoSearchDiagnostics, RepoSearchError, RepoSearchException
+- Reason: New feature-level value objects and error model for GitHub repository discovery.
+- Approval reference: docs/features/github_repository_search.md
+
+## 2026-02-14 (GitHub Repository Search Feature — PROPOSED)
+- Old name: N/A
+- New name: GitHubRepositorySearchService, GitHubRepositorySearchServiceHttp, GitHubQueryBuilder
+- Reason: New service abstraction + HTTP adapter + deterministic query builder for GitHub repository search.
+- Approval reference: docs/features/github_repository_search.md
