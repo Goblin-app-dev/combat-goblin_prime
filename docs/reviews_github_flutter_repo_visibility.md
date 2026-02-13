@@ -105,3 +105,31 @@ The following constraints are now explicitly adopted for implementation review:
    - Coupling check script to enforce no feature->modules imports.
 
 For copy/paste, use the section below and/or `docs/features/github_repository_search.md`.
+
+
+8. **Request headers and API versioning**
+   - Always send `Accept: application/vnd.github+json`.
+   - Always send `X-GitHub-Api-Version: 2022-11-28`.
+   - Default `per_page` is frozen to `30`; override only via query options.
+
+9. **Canonical query spec**
+   - Default payload (byte-for-byte): `language:dart topic:flutter archived:false`.
+   - Fallback payload (byte-for-byte): `flutter in:name,description,readme language:dart archived:false`.
+   - Qualifier ordering is frozen to: `archived`, `in`, `language`, `topic`, then free-text.
+
+10. **Pagination naming clarity**
+   - Public param may remain `pageCursor`, but implementation uses explicit `pageToken`/`page` naming to avoid cursor ambiguity.
+
+### Paste-ready implementation checklist
+
+- ✅ Feature folder only (`lib/features/github_repository_search/`)
+- ✅ No `lib/modules/` imports (enforced by isolation script)
+- ✅ No global singletons
+- ✅ Frozen API + data fields exactly
+- ✅ Stable query builder ordering + escaping
+- ✅ Always sends `sort=stars&order=desc` unless overridden
+- ✅ Page/`per_page` pagination, `nextPageToken` is stringified page #
+- ✅ Error mapping matches table + distinguishes `403` rateLimited vs forbidden
+- ✅ Auth injected, never logged
+- ✅ Tests: query determinism/escaping, whitelist, normalization, contract matrix, redaction, isolation
+

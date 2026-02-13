@@ -19,7 +19,7 @@
 abstract interface class GitHubRepositorySearchService {
   Future<RepoSearchPage> search({
     required RepoSearchQuery query,
-    String? pageCursor,
+    String? pageCursor, // page-number token semantics
   });
 }
 ```
@@ -31,13 +31,22 @@ final class RepoSearchQuery {
   final String? text;
   final RepoSearchSort sort; // stars | updated
   final SortOrder order; // desc | asc
-  final int pageSize; // default 20
+  final int pageSize; // default 30
   final RepoSearchMode mode; // flutterDiscovery | exactName
 }
 ```
 
 - No raw query-string concatenation outside query builder.
+- Public `pageCursor` uses page-number semantics; treat it internally as `pageToken`/`page`.
 - `pageCursor` maps to GitHub `page` (stringified int).
+- `pageSize` default is **30** and maps to GitHub `per_page`; override only via `RepoSearchQuery` options.
+
+## Request headers and API versioning
+
+All requests to GitHub Search Repositories must send:
+
+- `Accept: application/vnd.github+json`
+- `X-GitHub-Api-Version: 2022-11-28`
 
 ### Result model
 
@@ -91,6 +100,18 @@ Defaults (frozen):
 - `sort=stars`
 - `order=desc`
 
+
+
+Canonical default query payload (byte-for-byte test target):
+- `language:dart topic:flutter archived:false`
+
+Canonical fallback payload:
+- `flutter in:name,description,readme language:dart archived:false`
+
+Qualifier ordering rule (frozen for composed/dynamic queries):
+- `archived`, `in`, `language`, `topic`, then free-text
+- `flutterDiscovery` default still uses the canonical literal payload above for byte-for-byte assertions
+
 Escaping/validation:
 - Escape user text (quotes, colon, hyphen, unicode-safe).
 - Reject invalid qualifiers from UI (whitelist supported qualifiers only).
@@ -132,3 +153,17 @@ Mapping:
 3. Contract tests with stubbed HTTP client (no live GitHub): 200 empty, 200 paged, 401, 403 rate-limit, 403 forbidden, 422, timeout, invalid JSON.
 4. Redaction tests: diagnostics/log records must not contain auth token/header.
 5. Coupling check: automated script verifies no imports from `lib/modules/` in feature files.
+
+
+## AI-coder review checklist (paste-ready)
+
+- ✅ Feature folder only (`lib/features/github_repository_search/`)
+- ✅ No `lib/modules/` imports (enforced by isolation script)
+- ✅ No global singletons
+- ✅ Frozen API + data fields exactly
+- ✅ Stable query builder ordering + escaping
+- ✅ Always sends `sort=stars&order=desc` unless overridden
+- ✅ Page/`per_page` pagination, `nextPageToken` is stringified page #
+- ✅ Error mapping table implemented (`403` rateLimited vs forbidden)
+- ✅ Auth injected, never logged
+- ✅ Tests: determinism/escaping, whitelist, normalization, contract matrix, redaction, isolation
