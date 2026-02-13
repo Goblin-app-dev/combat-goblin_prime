@@ -249,25 +249,25 @@ Unified diagnostic wrapper with source module attribution (M6, M7, M8, or ORCHES
 Coordinator service that calls M6/M7/M8 and produces ViewBundle. Single deterministic entrypoint. Evaluation order fixed: M6 → M7 → M8. Takes OrchestratorRequest, returns ViewBundle.
 
 ## Index Bundle (PROPOSED — M9 Index-Core)
-Complete search index for a pack containing unit/weapon/rule documents with lookup surfaces. Produced by M9 Index-Core (IndexService). Deterministic given same BoundPackBundle input (except indexedAt timestamp). **Proposed for M9 Index-Core; not yet approved.**
+Complete search index for a pack containing unit/weapon/rule documents with inverted index facets (byCharacteristicNameToken). Produced by M9 Index-Core (IndexService). Deterministic given same BoundPackBundle input (except indexedAt timestamp). All doc lists and lookups sorted by stable keys. **Proposed for M9 Index-Core; not yet approved.**
 
 ## Unit Doc (PROPOSED — M9 Index-Core)
-Indexed document for a unit with characteristics, keywords, and provenance. One UnitDoc per BoundEntry representing a unit/model with appropriate profile type. Contains key (entryId), name, characteristics, keywords, and references to weapons/rules. **Proposed for M9 Index-Core; not yet approved.**
+Indexed document for a unit with characteristics as fields (not docs), keywords, and provenance. One UnitDoc per BoundEntry representing a unit/model with appropriate profile type. Contains key (entryId), name, characteristics (List<IndexedCharacteristic>), keywords, and references to weapons/rules. **Proposed for M9 Index-Core; not yet approved.**
 
 ## Weapon Doc (PROPOSED — M9 Index-Core)
-Indexed document for a weapon with characteristics (Range, Type, S, AP, D). One WeaponDoc per BoundProfile with weapon-type typeName. Contains key (profileId), name, characteristics, weapon type, and provenance. **Proposed for M9 Index-Core; not yet approved.**
+Indexed document for a weapon with characteristics as fields (Range, Type, S, AP, D). One WeaponDoc per BoundProfile with weapon-type typeName. Contains key (profileId), name, characteristics (List<IndexedCharacteristic>), weapon type, ruleKeys, and provenance. **Proposed for M9 Index-Core; not yet approved.**
 
 ## Rule Doc (PROPOSED — M9 Index-Core)
-Indexed document for a rule with name and description text. One RuleDoc per unique rule element, deduplicated by key (first occurrence wins). May have truncated description if source text exceeds limit. **Proposed for M9 Index-Core; not yet approved.**
+Indexed document for a rule with name and description text. One RuleDoc per unique rule element, deduplicated by canonical key (first occurrence wins). Sources: BoundRule, ability profiles, weapon keywords. May have truncated description if source text exceeds 1000 chars. **Proposed for M9 Index-Core; not yet approved.**
 
-## Characteristic Doc (PROPOSED — M9 Index-Core)
-Single characteristic name-value pair for indexing. Preserves raw value as string (no numeric parsing). Used within UnitDoc and WeaponDoc to represent stats. **Proposed for M9 Index-Core; not yet approved.**
+## Indexed Characteristic (PROPOSED — M9 Index-Core)
+Single characteristic name-value-token tuple as a **field** on UnitDoc/WeaponDoc (NOT a standalone doc). Fields: name, typeId, valueText, normalizedToken. Characteristics are fields to avoid scope trap (huge doc set, ambiguity, linking complexity). Use IndexBundle.byCharacteristicNameToken for characteristic-based queries. **Proposed for M9 Index-Core; not yet approved.**
 
 ## Index Diagnostic (PROPOSED — M9 Index-Core)
-Non-fatal issue detected during M9 index building. Closed code set: MISSING_NAME, DUPLICATE_DOC_KEY, UNKNOWN_PROFILE_TYPE, EMPTY_CHARACTERISTICS, TRUNCATED_DESCRIPTION. Always accumulated; never thrown. **Proposed for M9 Index-Core; not yet approved.**
+Non-fatal issue detected during M9 index building. Closed code set (7 codes): MISSING_NAME, DUPLICATE_DOC_KEY, DUPLICATE_RULE_CANONICAL_KEY, UNKNOWN_PROFILE_TYPE, EMPTY_CHARACTERISTICS, TRUNCATED_DESCRIPTION, LINK_TARGET_MISSING. Always accumulated; never thrown. Sorted by (sourceFileId, nodeIndex) for determinism. **Proposed for M9 Index-Core; not yet approved.**
 
 ## Index Service (PROPOSED — M9 Index-Core)
-Service that builds search index from BoundPackBundle. Provides buildIndex() method returning IndexBundle. Takes M5 output only (no M6/M7/M8 dependence for v1). **Proposed for M9 Index-Core; not yet approved.**
+Service that builds search index from BoundPackBundle. Provides buildIndex() method returning IndexBundle. Takes M5 output only (no M6/M7/M8 dependence for v1). Implementation sequence: rules first (for linking), then weapons, then units. **Proposed for M9 Index-Core; not yet approved.**
 
 ---
 
