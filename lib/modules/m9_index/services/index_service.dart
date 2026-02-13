@@ -159,6 +159,7 @@ class IndexService {
   ) {
     final ruleDocs = <RuleDoc>[];
     final seenDocIds = <String>{};
+    var skippedCount = 0;
 
     // Sort profiles by ID for stable iteration order
     final sortedProfiles = boundPack.profiles.toList()
@@ -203,7 +204,10 @@ class IndexService {
       final docId = 'rule:${profile.id}';
 
       // Skip duplicate profile IDs (same profile appears on multiple entries)
-      if (!seenDocIds.add(docId)) continue;
+      if (!seenDocIds.add(docId)) {
+        skippedCount++;
+        continue;
+      }
 
       // Create RuleDoc
       ruleDocs.add(RuleDoc(
@@ -215,6 +219,14 @@ class IndexService {
         page: null, // Page info not available in M5
         sourceFileId: profile.sourceFileId,
         sourceNode: profile.sourceNode,
+      ));
+    }
+
+    if (skippedCount > 0) {
+      diagnostics.add(IndexDiagnostic(
+        code: IndexDiagnosticCode.duplicateSourceProfileSkipped,
+        message:
+            'Skipped $skippedCount duplicate rule profile(s) (same profileId on multiple entries)',
       ));
     }
 
@@ -234,6 +246,7 @@ class IndexService {
   ) {
     final weaponDocs = <WeaponDoc>[];
     final seenDocIds = <String>{};
+    var skippedCount = 0;
 
     // Build canonical key → docIds lookup for rules (for linking)
     final ruleKeyToDocIds = <String, List<String>>{};
@@ -288,7 +301,10 @@ class IndexService {
       final docId = 'weapon:${profile.id}';
 
       // Skip duplicate profile IDs (same profile appears on multiple entries)
-      if (!seenDocIds.add(docId)) continue;
+      if (!seenDocIds.add(docId)) {
+        skippedCount++;
+        continue;
+      }
 
       // Build characteristics
       final characteristics = profile.characteristics
@@ -323,6 +339,14 @@ class IndexService {
         ruleDocRefs: ruleDocRefs,
         sourceFileId: profile.sourceFileId,
         sourceNode: profile.sourceNode,
+      ));
+    }
+
+    if (skippedCount > 0) {
+      diagnostics.add(IndexDiagnostic(
+        code: IndexDiagnosticCode.duplicateSourceProfileSkipped,
+        message:
+            'Skipped $skippedCount duplicate weapon profile(s) (same profileId on multiple entries)',
       ));
     }
 
@@ -433,14 +457,15 @@ class IndexService {
       _collectRuleRefs(entry, ruleByProfileId, ruleDocRefs);
       final sortedRuleRefs = ruleDocRefs.toList()..sort();
 
-      // Build costs
+      // Build costs (sorted by typeId for determinism)
       final costs = entry.costs
           .map((c) => IndexedCost(
                 typeId: c.typeId,
                 typeName: c.typeName ?? c.typeId,
                 value: c.value,
               ))
-          .toList();
+          .toList()
+        ..sort((a, b) => a.typeId.compareTo(b.typeId));
 
       // Create UnitDoc
       unitDocs.add(UnitDoc(

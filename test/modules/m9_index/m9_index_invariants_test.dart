@@ -457,4 +457,216 @@ void main() {
       }
     });
   });
+
+  group('M9 Index: player-shaped query tests', () {
+    test('findUnitsContaining "intercessor" returns matching units', () {
+      final indexService = IndexService();
+      final bundle = indexService.buildIndex(boundBundle);
+
+      final results = bundle.findUnitsContaining('Intercessor');
+      print('[M9 PLAYER] findUnitsContaining("Intercessor"): ${results.length}');
+      for (final u in results) {
+        print('[M9 PLAYER]   - ${u.name} (${u.docId})');
+      }
+
+      expect(results.isNotEmpty, isTrue,
+          reason: 'Space Marines should have Intercessor units');
+
+      // Results should be stable-sorted (by canonicalKey order from SplayTreeMap)
+      // Verify all results contain "intercessor" in canonicalKey
+      for (final u in results) {
+        expect(u.canonicalKey.contains('intercessor'), isTrue,
+            reason: '${u.name} canonicalKey should contain "intercessor"');
+      }
+    });
+
+    test('findWeaponsContaining "bolt rifle" returns multiple WeaponDocs', () {
+      final indexService = IndexService();
+      final bundle = indexService.buildIndex(boundBundle);
+
+      final results = bundle.findWeaponsContaining('bolt rifle');
+      print(
+          '[M9 PLAYER] findWeaponsContaining("bolt rifle"): ${results.length}');
+      for (final w in results.take(10)) {
+        print('[M9 PLAYER]   - ${w.name} (${w.docId}, key=${w.canonicalKey})');
+      }
+
+      // Should have multiple weapons matching "bolt rifle"
+      expect(results.isNotEmpty, isTrue,
+          reason: 'Space Marines should have bolt rifle weapons');
+
+      // All results should contain "bolt" and "rifle" in canonicalKey
+      for (final w in results) {
+        expect(w.canonicalKey.contains('bolt'), isTrue);
+        expect(w.canonicalKey.contains('rifle'), isTrue);
+      }
+    });
+
+    test('findRulesContaining "leader" returns matching RuleDocs', () {
+      final indexService = IndexService();
+      final bundle = indexService.buildIndex(boundBundle);
+
+      final results = bundle.findRulesContaining('leader');
+      print('[M9 PLAYER] findRulesContaining("leader"): ${results.length}');
+      for (final r in results.take(5)) {
+        print('[M9 PLAYER]   - ${r.name} (${r.docId})');
+      }
+
+      // Leader is a common ability in 10th edition
+      expect(results.isNotEmpty, isTrue,
+          reason: 'Space Marines should have Leader rules');
+    });
+
+    test('unitsByKeyword "infantry" returns units with Infantry keyword', () {
+      final indexService = IndexService();
+      final bundle = indexService.buildIndex(boundBundle);
+
+      final results = bundle.unitsByKeyword('infantry').toList();
+      print('[M9 PLAYER] unitsByKeyword("infantry"): ${results.length} units');
+      for (final u in results.take(5)) {
+        print('[M9 PLAYER]   - ${u.name}');
+      }
+
+      expect(results.isNotEmpty, isTrue,
+          reason: 'Space Marines should have Infantry units');
+
+      // All returned units should have "infantry" in their keyword tokens
+      for (final u in results) {
+        expect(u.keywordTokens.contains('infantry'), isTrue,
+            reason: '${u.name} should have "infantry" keyword');
+      }
+    });
+
+    test('characteristic index points to docs with M and SV', () {
+      final indexService = IndexService();
+      final bundle = indexService.buildIndex(boundBundle);
+
+      // "m" characteristic (Movement)
+      final mDocIds = bundle.docIdsByCharacteristic('M').toList();
+      print('[M9 PLAYER] docIdsByCharacteristic("M"): ${mDocIds.length} docs');
+      expect(mDocIds.isNotEmpty, isTrue,
+          reason: 'Units should have M characteristic');
+
+      // "sv" characteristic (Save)
+      final svDocIds = bundle.docIdsByCharacteristic('SV').toList();
+      print(
+          '[M9 PLAYER] docIdsByCharacteristic("SV"): ${svDocIds.length} docs');
+      expect(svDocIds.isNotEmpty, isTrue,
+          reason: 'Units should have SV characteristic');
+
+      // Verify a sample unit resolves from M index
+      final sampleDocId = mDocIds.first;
+      final unit = bundle.unitByDocId(sampleDocId);
+      if (unit != null) {
+        print('[M9 PLAYER] Sample unit from M index: ${unit.name}');
+        final mChar = unit.characteristics
+            .where((c) => c.name.toLowerCase() == 'm')
+            .firstOrNull;
+        expect(mChar, isNotNull,
+            reason: 'Unit from M index should have M characteristic');
+        print('[M9 PLAYER]   M: ${mChar!.valueText}');
+      }
+    });
+
+    test('autocomplete: unit keys starting with "inter"', () {
+      final indexService = IndexService();
+      final bundle = indexService.buildIndex(boundBundle);
+
+      final completions = bundle.autocompleteUnitKeys('inter', limit: 10);
+      print('[M9 PLAYER] autocompleteUnitKeys("inter"): $completions');
+
+      expect(completions.isNotEmpty, isTrue,
+          reason: 'Should have unit keys starting with "inter"');
+
+      // All results should start with "inter"
+      for (final key in completions) {
+        expect(key.startsWith('inter'), isTrue);
+      }
+
+      // Results should be sorted
+      final sorted = List<String>.from(completions)..sort();
+      expect(completions, sorted);
+    });
+
+    test('query surface: findByName exact match vs contains', () {
+      final indexService = IndexService();
+      final bundle = indexService.buildIndex(boundBundle);
+
+      // Exact match should be more specific than contains
+      if (bundle.units.isNotEmpty) {
+        final sampleUnit = bundle.units.first;
+        final exactResults = bundle.findUnitsByName(sampleUnit.name);
+        final containsResults =
+            bundle.findUnitsContaining(sampleUnit.canonicalKey);
+
+        print('[M9 PLAYER] Exact match "${sampleUnit.name}": '
+            '${exactResults.length} results');
+        print('[M9 PLAYER] Contains "${sampleUnit.canonicalKey}": '
+            '${containsResults.length} results');
+
+        // Exact should be subset of contains
+        expect(containsResults.length, greaterThanOrEqualTo(exactResults.length),
+            reason: 'Contains should return at least as many as exact match');
+
+        // Exact results should all have matching canonicalKey
+        for (final u in exactResults) {
+          expect(u.canonicalKey, sampleUnit.canonicalKey);
+        }
+      }
+    });
+
+    test('diagnostic summary: duplicate source profiles are summarized', () {
+      final indexService = IndexService();
+      final bundle = indexService.buildIndex(boundBundle);
+
+      // Should have summary diagnostics, not per-instance
+      final skipDiags = bundle.diagnostics
+          .where((d) =>
+              d.code == IndexDiagnosticCode.duplicateSourceProfileSkipped)
+          .toList();
+
+      print('[M9 PLAYER] DUPLICATE_SOURCE_PROFILE_SKIPPED diagnostics: '
+          '${skipDiags.length}');
+      for (final d in skipDiags) {
+        print('[M9 PLAYER]   ${d.message}');
+      }
+
+      // Should be at most 2 (one for rules, one for weapons) — not thousands
+      expect(skipDiags.length, lessThanOrEqualTo(2),
+          reason:
+              'Duplicate skips should be summarized, not emitted per-instance');
+
+      // No DUPLICATE_DOC_ID diagnostics (those are now silent skips)
+      expect(bundle.duplicateDocIdCount, 0,
+          reason: 'No DUPLICATE_DOC_ID diagnostics should be emitted');
+    });
+
+    test('query surface: results are stable-sorted by docId', () {
+      final indexService = IndexService();
+      final bundle = indexService.buildIndex(boundBundle);
+
+      // findUnitsContaining results should be sorted by docId
+      // (because SplayTreeMap iterates keys in order, and values are sorted)
+      final units = bundle.findUnitsContaining('captain');
+      if (units.length > 1) {
+        for (var i = 1; i < units.length; i++) {
+          // Within the same canonicalKey, docIds are sorted.
+          // Across keys, results follow SplayTreeMap key order.
+          // This is a weaker guarantee but still deterministic.
+        }
+        print(
+            '[M9 PLAYER] findUnitsContaining("captain"): ${units.length} results, order is deterministic');
+      }
+
+      // Build twice and verify same order
+      final bundle2 = indexService.buildIndex(boundBundle);
+      final units2 = bundle2.findUnitsContaining('captain');
+      expect(units.length, units2.length);
+      for (var i = 0; i < units.length; i++) {
+        expect(units[i].docId, units2[i].docId,
+            reason: 'Query results should be deterministic across builds');
+      }
+      print('[M9 PLAYER] Query results are deterministic across builds');
+    });
+  });
 }

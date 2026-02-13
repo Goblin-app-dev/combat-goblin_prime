@@ -27,6 +27,10 @@ enum IndexDiagnosticCode {
 
   /// Unit→Weapon or Weapon→Rule link target not found.
   linkTargetMissing,
+
+  /// Source profiles were deduplicated (same profileId on multiple entries).
+  /// Emitted once as a summary with count, not per-instance.
+  duplicateSourceProfileSkipped,
 }
 
 /// Non-fatal issue detected during M9 indexing.
@@ -76,6 +80,8 @@ class IndexDiagnostic {
         return 'TRUNCATED_DESCRIPTION';
       case IndexDiagnosticCode.linkTargetMissing:
         return 'LINK_TARGET_MISSING';
+      case IndexDiagnosticCode.duplicateSourceProfileSkipped:
+        return 'DUPLICATE_SOURCE_PROFILE_SKIPPED';
     }
   }
 
