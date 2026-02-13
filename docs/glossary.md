@@ -272,3 +272,24 @@ Service that builds search index from BoundPackBundle. Provides buildIndex() met
 ---
 
 Any concept used in code must appear here first.
+
+## Repo Search Query (PROPOSED — GitHub Repository Search)
+Feature-level request object for GitHub repository search. Contains free text, sort/order, pageSize, mode, and fallback selector. Deterministic intent: same fields produce same request query and params.
+
+## Repo Search Page (PROPOSED — GitHub Repository Search)
+Paginated feature output containing normalized RepoSummary items, nextPageToken, isLastPage, optional totalCount, and diagnostics.
+
+## Repo Summary (PROPOSED — GitHub Repository Search)
+Normalized repository summary for UI consumption. Fields: fullName (owner/name canonical), htmlUrl, description (trimmed/null-safe), language, stargazersCount, forksCount, updatedAt.
+
+## Repo Search Diagnostics (PROPOSED — GitHub Repository Search)
+Per-response diagnostics for GitHub search requests, including statusCode and optional rate-limit/request metadata.
+
+## Repo Search Error (PROPOSED — GitHub Repository Search)
+Closed feature error set: unauthorized, rateLimited, forbidden, invalidQuery, networkFailure, invalidResponse, serverFailure.
+
+## GitHub Query Builder (PROPOSED — GitHub Repository Search)
+Deterministic query builder for GitHub repository search. Freezes canonical payloads and qualifier ordering rules.
+
+## GitHub Repository Search Service (PROPOSED — GitHub Repository Search)
+Feature service contract exposing `search({required RepoSearchQuery query, String? pageCursor})` for GitHub repository discovery.
