@@ -137,9 +137,14 @@ Must:
 - Never mutate inputs
 - Never depend on evaluation modules (M6–M8)
 
-M9 usage policy: Uses M9 lookup methods (byDocId, byCanonicalKey) for direct
-resolution. Search/filter logic operates on raw indexed structures to avoid
-coupling to M9's convenience query surface.
+M9 delegation policy:
+- M10 delegates to the frozen M9 query surface where appropriate (lookup by
+  docId, lookup by canonicalKey).
+- Raw index access (sorted lists, SplayTreeMap indices) is allowed only for
+  higher-level composition (filtering, sorting, fuzzy matching) that M9 does
+  not provide.
+- M10 must not re-implement functionality already present in M9's frozen
+  query surface.
 
 ## Optional Extensions (Separate Layer)
 
