@@ -2,8 +2,19 @@ import 'package:combat_goblin_prime/modules/m3_wrap/m3_wrap.dart';
 
 /// Closed set of diagnostic codes for M9 Index-Core.
 ///
+/// **STATUS: FROZEN** (2026-02-13)
+///
 /// These codes represent non-fatal issues detected during indexing.
-/// No new codes may be added post-freeze without a new phase.
+/// No new codes may be added post-freeze without a new module version.
+///
+/// ## Frozen Codes
+/// - `missingName`: Entity missing required name field
+/// - `duplicateDocId`: Duplicate docId detected (data issue)
+/// - `unknownProfileType`: Profile has unrecognized typeId/typeName
+/// - `emptyCharacteristics`: Profile has no characteristics
+/// - `truncatedDescription`: Rule description was truncated
+/// - `linkTargetMissing`: Unit→Weapon or Weapon→Rule link target not found
+/// - `duplicateSourceProfileSkipped`: Summary of deduplicated profiles
 ///
 /// Note: Multiple docs sharing the same canonicalKey is EXPECTED
 /// (e.g., "Bolt Rifle" on many units). This is not a diagnostic.
