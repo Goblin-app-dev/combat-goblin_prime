@@ -5,13 +5,20 @@ import 'indexed_cost.dart';
 
 /// Unit/datasheet document for search indexing.
 ///
-/// Represents a player-facing unit flattened for lookup by name,
-/// keyword filtering, and voice-ready stat retrieval.
+/// Identity vs Search:
+/// - docId: Globally unique stable identifier (unit:{entryId})
+/// - canonicalKey: Normalized name for search grouping (normalize(name))
+///
+/// Unit names are mostly unique, but using entryId ensures stability
+/// across variants, punctuation changes, and localization.
 ///
 /// Part of M9 Index-Core (Search).
 class UnitDoc {
-  /// Canonical document ID (stable, deterministic).
+  /// Globally unique document ID (format: "unit:{entryId}").
   final String docId;
+
+  /// Canonical search key (normalized name for grouping).
+  final String canonicalKey;
 
   /// Original entry ID from M5 (for provenance).
   final String entryId;
@@ -45,6 +52,7 @@ class UnitDoc {
 
   const UnitDoc({
     required this.docId,
+    required this.canonicalKey,
     required this.entryId,
     required this.name,
     required this.characteristics,
@@ -62,40 +70,11 @@ class UnitDoc {
       identical(this, other) ||
       other is UnitDoc &&
           runtimeType == other.runtimeType &&
-          docId == other.docId &&
-          entryId == other.entryId &&
-          name == other.name &&
-          _listEquals(characteristics, other.characteristics) &&
-          _listEquals(keywordTokens, other.keywordTokens) &&
-          _listEquals(categoryTokens, other.categoryTokens) &&
-          _listEquals(weaponDocRefs, other.weaponDocRefs) &&
-          _listEquals(ruleDocRefs, other.ruleDocRefs) &&
-          _listEquals(costs, other.costs) &&
-          sourceFileId == other.sourceFileId &&
-          sourceNode == other.sourceNode;
+          docId == other.docId;
 
   @override
-  int get hashCode =>
-      docId.hashCode ^
-      entryId.hashCode ^
-      name.hashCode ^
-      Object.hashAll(characteristics) ^
-      Object.hashAll(keywordTokens) ^
-      Object.hashAll(categoryTokens) ^
-      Object.hashAll(weaponDocRefs) ^
-      Object.hashAll(ruleDocRefs) ^
-      Object.hashAll(costs) ^
-      sourceFileId.hashCode ^
-      sourceNode.hashCode;
+  int get hashCode => docId.hashCode;
 
   @override
   String toString() => 'UnitDoc($docId: "$name")';
-
-  static bool _listEquals<T>(List<T> a, List<T> b) {
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
-    return true;
-  }
 }

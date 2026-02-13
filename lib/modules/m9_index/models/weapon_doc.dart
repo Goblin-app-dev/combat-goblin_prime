@@ -4,13 +4,20 @@ import 'indexed_characteristic.dart';
 
 /// Weapon document for search indexing.
 ///
-/// Represents a weapon profile (Ranged or Melee) flattened for
-/// player-facing lookup and voice retrieval.
+/// Identity vs Search:
+/// - docId: Globally unique stable identifier (weapon:{profileId})
+/// - canonicalKey: Normalized name for search grouping (normalize(name))
+///
+/// Multiple weapons may share the same canonicalKey (e.g., "Bolt Rifle"
+/// on many units). Use canonicalKey for search, docId for identity.
 ///
 /// Part of M9 Index-Core (Search).
 class WeaponDoc {
-  /// Canonical document ID (stable, deterministic).
+  /// Globally unique document ID (format: "weapon:{profileId}").
   final String docId;
+
+  /// Canonical search key (normalized name for grouping).
+  final String canonicalKey;
 
   /// Original profile ID from M5 (for provenance).
   final String profileId;
@@ -35,6 +42,7 @@ class WeaponDoc {
 
   const WeaponDoc({
     required this.docId,
+    required this.canonicalKey,
     required this.profileId,
     required this.name,
     required this.characteristics,
@@ -49,34 +57,11 @@ class WeaponDoc {
       identical(this, other) ||
       other is WeaponDoc &&
           runtimeType == other.runtimeType &&
-          docId == other.docId &&
-          profileId == other.profileId &&
-          name == other.name &&
-          _listEquals(characteristics, other.characteristics) &&
-          _listEquals(keywordTokens, other.keywordTokens) &&
-          _listEquals(ruleDocRefs, other.ruleDocRefs) &&
-          sourceFileId == other.sourceFileId &&
-          sourceNode == other.sourceNode;
+          docId == other.docId;
 
   @override
-  int get hashCode =>
-      docId.hashCode ^
-      profileId.hashCode ^
-      name.hashCode ^
-      Object.hashAll(characteristics) ^
-      Object.hashAll(keywordTokens) ^
-      Object.hashAll(ruleDocRefs) ^
-      sourceFileId.hashCode ^
-      sourceNode.hashCode;
+  int get hashCode => docId.hashCode;
 
   @override
   String toString() => 'WeaponDoc($docId: "$name")';
-
-  static bool _listEquals<T>(List<T> a, List<T> b) {
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
-    return true;
-  }
 }

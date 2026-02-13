@@ -2,17 +2,23 @@ import 'package:combat_goblin_prime/modules/m3_wrap/m3_wrap.dart';
 
 /// Canonical rule entry for search indexing.
 ///
-/// RuleDocs are deduplicated by canonical key. When multiple rules share
-/// the same normalized name, only the first (in stable iteration order)
-/// becomes a RuleDoc; others link to it.
+/// Identity vs Search:
+/// - docId: Globally unique stable identifier (rule:{ruleId})
+/// - canonicalKey: Normalized name for search grouping (normalize(name))
+///
+/// Multiple rules may share the same canonicalKey (e.g., "Leader" ability
+/// on many characters). Use canonicalKey for search, docId for identity.
 ///
 /// Sources (v1):
 /// - Ability-type profiles with description text
 ///
 /// Part of M9 Index-Core (Search).
 class RuleDoc {
-  /// Canonical document ID (stable, deterministic).
+  /// Globally unique document ID (format: "rule:{ruleId}").
   final String docId;
+
+  /// Canonical search key (normalized name for grouping).
+  final String canonicalKey;
 
   /// Original rule/profile ID from M5 (for provenance).
   final String ruleId;
@@ -34,6 +40,7 @@ class RuleDoc {
 
   const RuleDoc({
     required this.docId,
+    required this.canonicalKey,
     required this.ruleId,
     required this.name,
     required this.description,
@@ -47,23 +54,10 @@ class RuleDoc {
       identical(this, other) ||
       other is RuleDoc &&
           runtimeType == other.runtimeType &&
-          docId == other.docId &&
-          ruleId == other.ruleId &&
-          name == other.name &&
-          description == other.description &&
-          page == other.page &&
-          sourceFileId == other.sourceFileId &&
-          sourceNode == other.sourceNode;
+          docId == other.docId;
 
   @override
-  int get hashCode =>
-      docId.hashCode ^
-      ruleId.hashCode ^
-      name.hashCode ^
-      description.hashCode ^
-      (page?.hashCode ?? 0) ^
-      sourceFileId.hashCode ^
-      sourceNode.hashCode;
+  int get hashCode => docId.hashCode;
 
   @override
   String toString() => 'RuleDoc($docId: "$name")';

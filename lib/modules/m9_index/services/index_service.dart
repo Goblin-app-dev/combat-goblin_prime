@@ -12,6 +12,13 @@ import '../models/weapon_doc.dart';
 
 /// Service for building deterministic search indices from M5 output.
 ///
+/// v2 Key Strategy:
+/// - docId: Globally unique stable identifier (type:{stableId})
+/// - canonicalKey: Normalized name for search grouping
+///
+/// Multiple docs may share the same canonicalKey (e.g., "Bolt Rifle" on
+/// many units). Use canonicalKey for search, docId for identity.
+///
 /// Contract: IndexBundle buildIndex(BoundPackBundle boundPack)
 ///
 /// Pure function:
@@ -36,55 +43,44 @@ class IndexService {
   /// Builds a deterministic search index from M5 BoundPackBundle.
   ///
   /// Processing order (for determinism):
-  /// 1. Build RuleDoc dedupe map (from ability profiles, sorted by profileId)
-  /// 2. Build WeaponDocs (sorted by profileId, link to rules)
-  /// 3. Build UnitDocs (sorted by entryId, link to weapons and rules)
-  /// 4. Build inverted indices
-  /// 5. Sort all outputs by canonical key
+  /// 1. Build RuleDocs (from ability profiles, sorted by profileId)
+  /// 2. Build WeaponDocs (sorted by profileId)
+  /// 3. Build UnitDocs (sorted by entryId)
+  /// 4. Build canonical key → docIds maps (search grouping)
+  /// 5. Build inverted indices (keywords, characteristics)
+  /// 6. Sort all outputs
   IndexBundle buildIndex(BoundPackBundle boundPack) {
     final diagnostics = <IndexDiagnostic>[];
 
-    // Step 1: Build RuleDoc dedupe map (abilities → rules)
-    final ruleDocMap = _buildRuleDocMap(boundPack, diagnostics);
+    // Step 1: Build RuleDocs (all ability profiles with descriptions)
+    final ruleDocList = _buildRuleDocs(boundPack, diagnostics);
 
-    // Step 2: Build WeaponDoc map
-    final weaponDocMap = _buildWeaponDocMap(boundPack, ruleDocMap, diagnostics);
+    // Step 2: Build WeaponDocs (all weapon profiles)
+    final weaponDocList = _buildWeaponDocs(boundPack, ruleDocList, diagnostics);
 
-    // Step 3: Build UnitDoc map
-    final unitDocMap =
-        _buildUnitDocMap(boundPack, weaponDocMap, ruleDocMap, diagnostics);
+    // Step 3: Build UnitDocs (all entries with unit profiles)
+    final unitDocList =
+        _buildUnitDocs(boundPack, weaponDocList, ruleDocList, diagnostics);
 
-    // Step 4: Extract sorted lists
-    final rules = ruleDocMap.values.toList()
-      ..sort((a, b) => a.docId.compareTo(b.docId));
-    final weapons = weaponDocMap.values.toList()
-      ..sort((a, b) => a.docId.compareTo(b.docId));
-    final units = unitDocMap.values.toList()
-      ..sort((a, b) => a.docId.compareTo(b.docId));
+    // Step 4: Sort lists by docId
+    ruleDocList.sort((a, b) => a.docId.compareTo(b.docId));
+    weaponDocList.sort((a, b) => a.docId.compareTo(b.docId));
+    unitDocList.sort((a, b) => a.docId.compareTo(b.docId));
 
-    // Step 5: Build lookup maps (canonical key → docId)
-    final unitKeyToDocId = SplayTreeMap<String, String>();
-    for (final unit in units) {
-      unitKeyToDocId[unit.docId] = unit.docId;
-    }
-
-    final weaponKeyToDocId = SplayTreeMap<String, String>();
-    for (final weapon in weapons) {
-      weaponKeyToDocId[weapon.docId] = weapon.docId;
-    }
-
-    final ruleKeyToDocId = SplayTreeMap<String, String>();
-    for (final rule in rules) {
-      ruleKeyToDocId[rule.docId] = rule.docId;
-    }
+    // Step 5: Build canonical key → docIds maps (search grouping)
+    final unitKeyToDocIds = _buildCanonicalKeyIndex(unitDocList);
+    final weaponKeyToDocIds = _buildCanonicalKeyIndex(weaponDocList);
+    final ruleKeyToDocIds = _buildCanonicalKeyIndex(ruleDocList);
 
     // Step 6: Build inverted indices
-    final keywordToUnitDocIds = _buildKeywordIndex(units);
-    final characteristicNameToDocIds = _buildCharacteristicIndex(units, weapons);
+    final keywordToUnitDocIds = _buildKeywordIndex(unitDocList);
+    final characteristicNameToDocIds =
+        _buildCharacteristicIndex(unitDocList, weaponDocList);
 
     // Step 7: Sort diagnostics deterministically
     diagnostics.sort((a, b) {
-      final fileCompare = (a.sourceFileId ?? '').compareTo(b.sourceFileId ?? '');
+      final fileCompare =
+          (a.sourceFileId ?? '').compareTo(b.sourceFileId ?? '');
       if (fileCompare != 0) return fileCompare;
       final aIndex = a.sourceNode?.nodeIndex ?? 0;
       final bIndex = b.sourceNode?.nodeIndex ?? 0;
@@ -94,12 +90,12 @@ class IndexService {
     return IndexBundle(
       packId: boundPack.packId,
       indexedAt: DateTime.now(),
-      units: units,
-      weapons: weapons,
-      rules: rules,
-      unitKeyToDocId: unitKeyToDocId,
-      weaponKeyToDocId: weaponKeyToDocId,
-      ruleKeyToDocId: ruleKeyToDocId,
+      units: unitDocList,
+      weapons: weaponDocList,
+      rules: ruleDocList,
+      unitKeyToDocIds: unitKeyToDocIds,
+      weaponKeyToDocIds: weaponKeyToDocIds,
+      ruleKeyToDocIds: ruleKeyToDocIds,
       keywordToUnitDocIds: keywordToUnitDocIds,
       characteristicNameToDocIds: characteristicNameToDocIds,
       diagnostics: diagnostics,
@@ -151,18 +147,18 @@ class IndexService {
     return tokens.toList()..sort();
   }
 
-  // --- Private: Build RuleDoc Map ---
+  // --- Private: Build RuleDocs ---
 
-  /// Builds RuleDoc map from ability-type profiles.
+  /// Builds RuleDocs from ability-type profiles.
   ///
-  /// Iteration order: profiles sorted by profileId for stability.
-  /// Deduplication: by canonical key (normalized name).
-  Map<String, RuleDoc> _buildRuleDocMap(
+  /// Every ability profile with a description becomes a RuleDoc.
+  /// docId format: "rule:{profileId}"
+  List<RuleDoc> _buildRuleDocs(
     BoundPackBundle boundPack,
     List<IndexDiagnostic> diagnostics,
   ) {
-    final ruleDocMap = <String, RuleDoc>{};
-    final seenKeys = <String, RuleDoc>{};
+    final ruleDocs = <RuleDoc>[];
+    final seenDocIds = <String>{};
 
     // Sort profiles by ID for stable iteration order
     final sortedProfiles = boundPack.profiles.toList()
@@ -194,7 +190,8 @@ class IndexService {
       if (canonicalKey.isEmpty) {
         diagnostics.add(IndexDiagnostic(
           code: IndexDiagnosticCode.missingName,
-          message: 'Ability profile name normalizes to empty: "${profile.name}"',
+          message:
+              'Ability profile name normalizes to empty: "${profile.name}"',
           sourceFileId: profile.sourceFileId,
           sourceNode: profile.sourceNode,
           targetId: profile.id,
@@ -202,67 +199,46 @@ class IndexService {
         continue;
       }
 
-      // Check for duplicate canonical key
-      if (seenKeys.containsKey(canonicalKey)) {
-        final existing = seenKeys[canonicalKey]!;
-        // Check if descriptions differ
-        if (existing.description != description) {
-          diagnostics.add(IndexDiagnostic(
-            code: IndexDiagnosticCode.duplicateRuleCanonicalKey,
-            message:
-                'Rule "$canonicalKey" has conflicting descriptions; using first encountered (${existing.ruleId})',
-            sourceFileId: profile.sourceFileId,
-            sourceNode: profile.sourceNode,
-            targetId: profile.id,
-          ));
-        } else {
-          diagnostics.add(IndexDiagnostic(
-            code: IndexDiagnosticCode.duplicateDocKey,
-            message:
-                'Rule "$canonicalKey" already indexed as ${existing.docId}; skipping duplicate',
-            sourceFileId: profile.sourceFileId,
-            sourceNode: profile.sourceNode,
-            targetId: profile.id,
-          ));
-        }
-        continue;
-      }
+      // Generate unique docId
+      final docId = 'rule:${profile.id}';
+
+      // Skip duplicate profile IDs (same profile appears on multiple entries)
+      if (!seenDocIds.add(docId)) continue;
 
       // Create RuleDoc
-      final ruleDoc = RuleDoc(
-        docId: canonicalKey,
+      ruleDocs.add(RuleDoc(
+        docId: docId,
+        canonicalKey: canonicalKey,
         ruleId: profile.id,
         name: profile.name,
         description: description,
         page: null, // Page info not available in M5
         sourceFileId: profile.sourceFileId,
         sourceNode: profile.sourceNode,
-      );
-
-      ruleDocMap[profile.id] = ruleDoc;
-      seenKeys[canonicalKey] = ruleDoc;
+      ));
     }
 
-    return ruleDocMap;
+    return ruleDocs;
   }
 
-  // --- Private: Build WeaponDoc Map ---
+  // --- Private: Build WeaponDocs ---
 
-  /// Builds WeaponDoc map from weapon-type profiles.
+  /// Builds WeaponDocs from weapon-type profiles.
   ///
-  /// Iteration order: profiles sorted by profileId for stability.
-  Map<String, WeaponDoc> _buildWeaponDocMap(
+  /// Every weapon profile becomes a WeaponDoc.
+  /// docId format: "weapon:{profileId}"
+  List<WeaponDoc> _buildWeaponDocs(
     BoundPackBundle boundPack,
-    Map<String, RuleDoc> ruleDocMap,
+    List<RuleDoc> ruleDocs,
     List<IndexDiagnostic> diagnostics,
   ) {
-    final weaponDocMap = <String, WeaponDoc>{};
-    final seenKeys = <String, WeaponDoc>{};
+    final weaponDocs = <WeaponDoc>[];
+    final seenDocIds = <String>{};
 
-    // Build canonical key → docId lookup for rules
-    final ruleKeyToDocId = <String, String>{};
-    for (final rule in ruleDocMap.values) {
-      ruleKeyToDocId[rule.docId] = rule.docId;
+    // Build canonical key → docIds lookup for rules (for linking)
+    final ruleKeyToDocIds = <String, List<String>>{};
+    for (final rule in ruleDocs) {
+      ruleKeyToDocIds.putIfAbsent(rule.canonicalKey, () => []).add(rule.docId);
     }
 
     // Sort profiles by ID for stable iteration order
@@ -299,7 +275,8 @@ class IndexService {
       if (canonicalKey.isEmpty) {
         diagnostics.add(IndexDiagnostic(
           code: IndexDiagnosticCode.missingName,
-          message: 'Weapon profile name normalizes to empty: "${profile.name}"',
+          message:
+              'Weapon profile name normalizes to empty: "${profile.name}"',
           sourceFileId: profile.sourceFileId,
           sourceNode: profile.sourceNode,
           targetId: profile.id,
@@ -307,19 +284,11 @@ class IndexService {
         continue;
       }
 
-      // Check for duplicate canonical key
-      if (seenKeys.containsKey(canonicalKey)) {
-        final existing = seenKeys[canonicalKey]!;
-        diagnostics.add(IndexDiagnostic(
-          code: IndexDiagnosticCode.duplicateDocKey,
-          message:
-              'Weapon "$canonicalKey" already indexed as ${existing.docId}; skipping duplicate',
-          sourceFileId: profile.sourceFileId,
-          sourceNode: profile.sourceNode,
-          targetId: profile.id,
-        ));
-        continue;
-      }
+      // Generate unique docId
+      final docId = 'weapon:${profile.id}';
+
+      // Skip duplicate profile IDs (same profile appears on multiple entries)
+      if (!seenDocIds.add(docId)) continue;
 
       // Build characteristics
       final characteristics = profile.characteristics
@@ -330,22 +299,23 @@ class IndexService {
               ))
           .toList();
 
-      // Extract keyword tokens from weapon name and type
+      // Extract keyword tokens from weapon name
       final keywordTokens = tokenize(profile.name);
 
-      // Link to rules (by canonical key match)
-      // For v1, we don't invent rules from keywords; we only link if rule exists
+      // Link to rules by canonical key match (take first if multiple)
       final ruleDocRefs = <String>[];
       for (final token in keywordTokens) {
-        if (ruleKeyToDocId.containsKey(token)) {
-          ruleDocRefs.add(ruleKeyToDocId[token]!);
+        final matchingRules = ruleKeyToDocIds[token];
+        if (matchingRules != null && matchingRules.isNotEmpty) {
+          ruleDocRefs.add(matchingRules.first);
         }
       }
       ruleDocRefs.sort();
 
       // Create WeaponDoc
-      final weaponDoc = WeaponDoc(
-        docId: canonicalKey,
+      weaponDocs.add(WeaponDoc(
+        docId: docId,
+        canonicalKey: canonicalKey,
         profileId: profile.id,
         name: profile.name,
         characteristics: characteristics,
@@ -353,38 +323,36 @@ class IndexService {
         ruleDocRefs: ruleDocRefs,
         sourceFileId: profile.sourceFileId,
         sourceNode: profile.sourceNode,
-      );
-
-      weaponDocMap[profile.id] = weaponDoc;
-      seenKeys[canonicalKey] = weaponDoc;
+      ));
     }
 
-    return weaponDocMap;
+    return weaponDocs;
   }
 
-  // --- Private: Build UnitDoc Map ---
+  // --- Private: Build UnitDocs ---
 
-  /// Builds UnitDoc map from entries with unit-type profiles.
+  /// Builds UnitDocs from entries with unit-type profiles.
   ///
-  /// Iteration order: entries sorted by entryId for stability.
-  Map<String, UnitDoc> _buildUnitDocMap(
+  /// Every entry with a unit profile becomes a UnitDoc.
+  /// docId format: "unit:{entryId}"
+  List<UnitDoc> _buildUnitDocs(
     BoundPackBundle boundPack,
-    Map<String, WeaponDoc> weaponDocMap,
-    Map<String, RuleDoc> ruleDocMap,
+    List<WeaponDoc> weaponDocs,
+    List<RuleDoc> ruleDocs,
     List<IndexDiagnostic> diagnostics,
   ) {
-    final unitDocMap = <String, UnitDoc>{};
-    final seenKeys = <String, UnitDoc>{};
+    final unitDocs = <UnitDoc>[];
+    final seenDocIds = <String>{};
 
     // Build profileId → weaponDoc lookup
     final weaponByProfileId = <String, WeaponDoc>{};
-    for (final weapon in weaponDocMap.values) {
+    for (final weapon in weaponDocs) {
       weaponByProfileId[weapon.profileId] = weapon;
     }
 
     // Build profileId → ruleDoc lookup
     final ruleByProfileId = <String, RuleDoc>{};
-    for (final rule in ruleDocMap.values) {
+    for (final rule in ruleDocs) {
       ruleByProfileId[rule.ruleId] = rule;
     }
 
@@ -425,19 +393,11 @@ class IndexService {
         continue;
       }
 
-      // Check for duplicate canonical key
-      if (seenKeys.containsKey(canonicalKey)) {
-        final existing = seenKeys[canonicalKey]!;
-        diagnostics.add(IndexDiagnostic(
-          code: IndexDiagnosticCode.duplicateDocKey,
-          message:
-              'Unit "$canonicalKey" already indexed as ${existing.docId}; skipping duplicate',
-          sourceFileId: entry.sourceFileId,
-          sourceNode: entry.sourceNode,
-          targetId: entry.id,
-        ));
-        continue;
-      }
+      // Generate unique docId
+      final docId = 'unit:${entry.id}';
+
+      // Skip duplicate entry IDs (shouldn't happen, but be safe)
+      if (!seenDocIds.add(docId)) continue;
 
       // Build characteristics from unit profile
       final characteristics = unitProfile.characteristics
@@ -465,7 +425,7 @@ class IndexService {
 
       // Collect weapon refs from nested profiles
       final weaponDocRefs = <String>{};
-      _collectWeaponRefs(entry, weaponByProfileId, weaponDocRefs, diagnostics);
+      _collectWeaponRefs(entry, weaponByProfileId, weaponDocRefs);
       final sortedWeaponRefs = weaponDocRefs.toList()..sort();
 
       // Collect rule refs from nested ability profiles
@@ -483,8 +443,9 @@ class IndexService {
           .toList();
 
       // Create UnitDoc
-      final unitDoc = UnitDoc(
-        docId: canonicalKey,
+      unitDocs.add(UnitDoc(
+        docId: docId,
+        canonicalKey: canonicalKey,
         entryId: entry.id,
         name: entry.name,
         characteristics: characteristics,
@@ -495,13 +456,46 @@ class IndexService {
         costs: costs,
         sourceFileId: entry.sourceFileId,
         sourceNode: entry.sourceNode,
-      );
-
-      unitDocMap[entry.id] = unitDoc;
-      seenKeys[canonicalKey] = unitDoc;
+      ));
     }
 
-    return unitDocMap;
+    return unitDocs;
+  }
+
+  // --- Private: Build Canonical Key Index ---
+
+  /// Builds canonical key → docIds map from docs with canonicalKey field.
+  SplayTreeMap<String, List<String>> _buildCanonicalKeyIndex<T>(
+    List<T> docs,
+  ) {
+    final index = SplayTreeMap<String, List<String>>();
+
+    for (final doc in docs) {
+      final String canonicalKey;
+      final String docId;
+
+      if (doc is UnitDoc) {
+        canonicalKey = doc.canonicalKey;
+        docId = doc.docId;
+      } else if (doc is WeaponDoc) {
+        canonicalKey = doc.canonicalKey;
+        docId = doc.docId;
+      } else if (doc is RuleDoc) {
+        canonicalKey = doc.canonicalKey;
+        docId = doc.docId;
+      } else {
+        continue;
+      }
+
+      index.putIfAbsent(canonicalKey, () => []).add(docId);
+    }
+
+    // Sort value lists for determinism
+    for (final entry in index.entries) {
+      entry.value.sort();
+    }
+
+    return index;
   }
 
   // --- Private: Inverted Index Builders ---
@@ -601,7 +595,6 @@ class IndexService {
     BoundEntry entry,
     Map<String, WeaponDoc> weaponByProfileId,
     Set<String> weaponDocRefs,
-    List<IndexDiagnostic> diagnostics,
   ) {
     for (final profile in entry.profiles) {
       if (_isWeaponProfile(profile)) {
@@ -609,13 +602,12 @@ class IndexService {
         if (weapon != null) {
           weaponDocRefs.add(weapon.docId);
         }
-        // No LINK_TARGET_MISSING here; weapon profiles create their own docs
       }
     }
 
     // Recurse into children
     for (final child in entry.children) {
-      _collectWeaponRefs(child, weaponByProfileId, weaponDocRefs, diagnostics);
+      _collectWeaponRefs(child, weaponByProfileId, weaponDocRefs);
     }
   }
 
@@ -631,7 +623,6 @@ class IndexService {
         if (rule != null) {
           ruleDocRefs.add(rule.docId);
         }
-        // Duplicate abilities link to canonical; no diagnostic needed
       }
     }
 
