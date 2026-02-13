@@ -10,7 +10,7 @@
 - Phase 4 (M6 Evaluate): **FROZEN** (2026-02-11)
 - Phase 5 (M7 Applicability): **FROZEN** (2026-02-12)
 - Phase 6 (M8 Modifiers): **FROZEN** (2026-02-12)
-- Orchestrator v1: **PROPOSED**
+- Orchestrator v1: **FROZEN** (2026-02-12)
 
 ---
 
@@ -19,6 +19,8 @@
 | Rev | Date | Changes |
 |-----|------|---------|
 | 1 | 2026-02-12 | Initial names-only proposal (coordinator pattern) |
+| 2 | 2026-02-12 | Added Diagnostic Architecture (structured separation) section |
+| 3 | 2026-02-12 | **FROZEN** — All 12 smoke tests pass |
 
 ---
 
@@ -265,6 +267,59 @@ Orchestrator guarantees:
 
 ---
 
+## Diagnostic Architecture (Structured Separation)
+
+ViewBundle uses **structured separation** for diagnostics, NOT a merged flat list:
+
+### Access Paths
+
+| Access Path | Contains | Scope |
+|-------------|----------|-------|
+| `ViewBundle.diagnostics` | M6 + M7 + M8 + Orchestrator | Runtime evaluation diagnostics |
+| `ViewBundle.boundBundle.diagnostics` | M5 | Compile-time binding diagnostics |
+
+### What This Means
+
+- **M5 binder diagnostics** (e.g., `UNRESOLVED_INFO_LINK`) are NOT merged into `ViewBundle.diagnostics`
+- Access M5 diagnostics via `viewBundle.boundBundle.diagnostics`
+- **Runtime diagnostics** (M6/M7/M8) flow through `ViewBundle.diagnostics` with source attribution
+
+### Preserved vs Aggregated
+
+| Module | Preserved Where | Aggregated In |
+|--------|-----------------|---------------|
+| M5 Bind | `boundBundle.diagnostics` | Not in `diagnostics` |
+| M6 Evaluate | `evaluationReport.warnings` | `diagnostics` (source=M6) |
+| M7 Applicability | `applicabilityResults[].diagnostics` | `diagnostics` (source=M7) |
+| M8 Modifiers | `modifierResults[].diagnostics` | `diagnostics` (source=M8) |
+| Orchestrator | — | `diagnostics` (source=ORCHESTRATOR) |
+
+### Ordering Guarantees
+
+Within `ViewBundle.diagnostics`:
+1. M6 diagnostics first (from constraint evaluation)
+2. M7 diagnostics per-selection (evaluation order)
+3. M8 diagnostics per-selection (evaluation order)
+4. Orchestrator diagnostics last
+
+### Code Preservation
+
+Diagnostic codes are **never normalized or transformed**:
+- M6 codes: `UNKNOWN_CONSTRAINT_FIELD`, etc. (preserved exactly)
+- M7 codes: `UNKNOWN_CONDITION_TYPE`, `SNAPSHOT_DATA_GAP_COSTS`, etc.
+- M8 codes: `UNKNOWN_MODIFIER_FIELD`, `UNSUPPORTED_TARGET_SCOPE`, etc.
+- Orchestrator codes: `SELECTION_NOT_IN_BUNDLE`, `EVALUATION_ORDER_VIOLATION`
+
+### Test Coverage (Verified)
+
+Smoke test confirms:
+- M5: 3,757 `UNRESOLVED_INFO_LINK` preserved in `boundBundle.diagnostics`
+- M6: 3+ `UNKNOWN_CONSTRAINT_FIELD` flow through to `ViewBundle.diagnostics`
+- M8: 12+ `UNKNOWN_MODIFIER_FIELD` flow through to `ViewBundle.diagnostics`
+- Source attribution retained for all diagnostics
+
+---
+
 ## Required Tests
 
 ### Structural Invariants (MANDATORY)
@@ -303,15 +358,50 @@ Before implementation, add to `/docs/glossary.md`:
 
 ---
 
+## Frozen Invariants
+
+**These invariants are locked. Changing them requires an explicit unfreeze decision.**
+
+### Diagnostic Codes (2 Orchestrator-specific)
+- `SELECTION_NOT_IN_BUNDLE` — Selection references entry not in BoundPackBundle
+- `EVALUATION_ORDER_VIOLATION` — Internal ordering invariant violated (fatal)
+
+### Evaluation Order (Fixed)
+- M6 → M7 → M8 (never changes)
+- Selection processing order: snapshot.orderedSelections() (stable)
+
+### Diagnostic Architecture (Structured Separation)
+- `ViewBundle.diagnostics` = M6 + M7 + M8 + Orchestrator (runtime evaluation)
+- `ViewBundle.boundBundle.diagnostics` = M5 (compile-time binding)
+- M5 diagnostics are NOT merged into ViewBundle.diagnostics
+
+### Determinism Guarantee
+- Same `OrchestratorRequest` → identical `ViewBundle` (except evaluatedAt)
+- No hash-map iteration leaks (all maps sorted)
+- Diagnostic order: M6, then M7, then M8, then Orchestrator
+
+### No-Mutation Guarantee
+- Orchestrator MUST NOT modify BoundPackBundle or SelectionSnapshot
+- Input references are preserved, not copied
+
+### Test Coverage (12 tests passing)
+- M5 binder diagnostics preserved: 3,757 UNRESOLVED_INFO_LINK
+- M6 warnings flow through: 3+ UNKNOWN_CONSTRAINT_FIELD
+- M8 diagnostics flow through: 12+ UNKNOWN_MODIFIER_FIELD
+- Source attribution retained for all diagnostics
+- One call → complete voice/search-ready bundle
+
+---
+
 ## Approval Checklist
 
-- [ ] Module layout approved (lib/modules/orchestrator/)
-- [ ] Core model names approved (OrchestratorRequest, OrchestratorOptions, ViewBundle, ViewSelection, OrchestratorDiagnostic)
-- [ ] Service name approved (OrchestratorService)
-- [ ] Service method approved (buildViewBundle)
-- [ ] Coordinator pattern approved (internal M6/M7/M8 calls)
-- [ ] Determinism contract approved
-- [ ] Diagnostic aggregation rules approved
-- [ ] Glossary terms approved
+- [x] Module layout approved (lib/modules/orchestrator/)
+- [x] Core model names approved (OrchestratorRequest, OrchestratorOptions, ViewBundle, ViewSelection, OrchestratorDiagnostic)
+- [x] Service name approved (OrchestratorService)
+- [x] Service method approved (buildViewBundle)
+- [x] Coordinator pattern approved (internal M6/M7/M8 calls)
+- [x] Determinism contract approved
+- [x] Diagnostic aggregation rules approved
+- [x] Glossary terms approved
 
-**NO CODE UNTIL APPROVAL.**
+**FROZEN 2026-02-12. All 12 smoke tests pass.**

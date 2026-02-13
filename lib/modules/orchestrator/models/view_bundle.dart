@@ -11,7 +11,14 @@ import 'view_selection.dart';
 /// Contains:
 /// - ViewSelections for each selection in the snapshot
 /// - Raw M6/M7/M8 results (preserved without transformation)
-/// - Merged diagnostics from all modules
+/// - Evaluation diagnostics (M6/M7/M8/Orchestrator)
+///
+/// Diagnostic Architecture (structured separation):
+/// - [diagnostics]: Runtime evaluation diagnostics (M6/M7/M8/Orchestrator)
+/// - [boundBundle].diagnostics: Compile-time binding diagnostics (M5)
+///
+/// M5 binder diagnostics (e.g., UNRESOLVED_INFO_LINK) are NOT merged into
+/// [diagnostics]. Access them via [boundBundle.diagnostics].
 ///
 /// Deterministic: same inputs → identical ViewBundle.
 ///
@@ -37,9 +44,12 @@ class ViewBundle {
   /// M8 modifier results (preserved).
   final List<ModifierResult> modifierResults;
 
-  /// Merged diagnostics from all modules.
+  /// Runtime evaluation diagnostics (M6/M7/M8/Orchestrator only).
   ///
   /// Order: M6 diagnostics, then M7, then M8, then Orchestrator.
+  ///
+  /// Does NOT include M5 binder diagnostics. Access those via
+  /// [boundBundle.diagnostics].
   final List<OrchestratorDiagnostic> diagnostics;
 
   /// Reference to input BoundPackBundle (for downstream lookups).

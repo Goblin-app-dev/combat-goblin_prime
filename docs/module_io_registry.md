@@ -473,11 +473,11 @@ M8 MAY apply modifiers. M8 MUST NOT evaluate constraints (M6's job) or evaluate 
 
 ---
 
-## Orchestrator v1 — PROPOSED
+## Orchestrator v1 — FROZEN
 
 Single deterministic entrypoint that coordinates M6/M7/M8 evaluation to produce a unified ViewBundle.
 
-**Status:** PROPOSED (2026-02-12). Pending approval.
+**Status:** FROZEN (2026-02-12). All 12 smoke tests pass.
 
 ### Design Pattern
 Orchestrator is a **coordinator** (not pure composer):
@@ -530,6 +530,73 @@ Orchestrator is a **coordinator** (not pure composer):
 
 ### Scope Boundaries
 Orchestrator MAY coordinate M6/M7/M8 calls. Orchestrator MUST NOT add semantic interpretation, modify inputs, persist data, or produce UI elements.
+
+---
+
+## M9 Index-Core — PROPOSED
+
+Builds search index for player-facing queries (find unit, find weapon, what does rule X do).
+
+**Status:** PROPOSED (2026-02-13, Rev 2). Awaiting approval.
+
+### Inputs
+- BoundPackBundle (from M5 Bind, read-only)
+
+### Outputs
+- IndexBundle containing:
+  - List<UnitDoc> (indexed units with characteristics as fields)
+  - List<WeaponDoc> (indexed weapons with characteristics as fields)
+  - List<RuleDoc> (indexed rules with descriptions)
+  - Lookup maps (unitsByKey, unitsByName, weaponsByKey, etc.)
+  - Map<String, List<String>> byCharacteristicNameToken (inverted index facet)
+  - List<IndexDiagnostic> (issues encountered, sorted)
+  - boundBundle reference (for provenance chain)
+  - packId and indexedAt timestamp
+
+### Document Kinds (v1)
+- UnitDoc, WeaponDoc, RuleDoc only
+- Characteristics are List<IndexedCharacteristic> fields (NOT standalone docs)
+- IndexedCharacteristic: (name, typeId, valueText, normalizedToken)
+
+### Behavior
+- Traverses BoundEntry roots and profiles
+- Classifies profiles by typeName to determine doc type
+- Build order: RuleDoc first (for linking), then WeaponDoc, then UnitDoc
+- Builds inverted index facets (byCharacteristicNameToken)
+- All doc emission and lookups sorted by stable keys (no unordered iteration)
+- Uses lowercase normalization for name searches
+
+### RuleDoc Sources (v1)
+- BoundRule entities (if M5 provides them)
+- BoundProfile where typeName = "Abilities" with description
+- Weapon keywords that resolve to rule entries
+
+### Diagnostic Codes (7 codes)
+- MISSING_NAME: Entry/profile has empty or missing name
+- DUPLICATE_DOC_KEY: Same unit/weapon key encountered twice
+- DUPLICATE_RULE_CANONICAL_KEY: Same rule canonical key encountered twice
+- UNKNOWN_PROFILE_TYPE: Profile typeName not recognized
+- EMPTY_CHARACTERISTICS: Unit/weapon has no characteristics
+- TRUNCATED_DESCRIPTION: Rule description exceeded max length (>1000 chars)
+- LINK_TARGET_MISSING: Unit→weapon, weapon→rule, or keyword→rule link cannot resolve
+
+### Error Contracts
+- IndexDiagnostic for indexing issues (non-fatal)
+- IndexFailure only for corrupted M5 input or internal bugs
+- In normal operation, no IndexFailure is thrown
+
+### Service Methods
+- buildIndex(BoundPackBundle): returns IndexBundle
+
+### Determinism Contract
+- Same BoundPackBundle → identical IndexBundle (except indexedAt)
+- All doc lists sorted alphabetically by key
+- All lookup maps sorted alphabetically by key
+- Diagnostics sorted by (sourceFileId, nodeIndex)
+- No unordered iteration anywhere
+
+### Scope Boundaries
+M9 MAY build search indices and inverted index facets. M9 MUST NOT depend on M6/M7/M8 (v1), modify BoundPackBundle, persist index, or make network calls.
 
 ---
 

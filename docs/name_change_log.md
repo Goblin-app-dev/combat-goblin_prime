@@ -209,32 +209,62 @@ No silent renames are permitted.
 - Reason: New M8 Modifiers diagnostic codes (7 codes total).
 - Approval reference: Phase 6 M8 Modifiers names proposal Rev 2 (frozen 2026-02-12)
 
-## 2026-02-12 (Orchestrator v1 — PROPOSED)
+## 2026-02-12 (Orchestrator v1 — FROZEN)
 - Old name: N/A
 - New name: OrchestratorRequest, OrchestratorOptions
 - Reason: New Orchestrator input types for coordinator pattern.
-- Approval reference: Orchestrator v1 names proposal (pending approval)
+- Approval reference: Orchestrator v1 names proposal (frozen 2026-02-12)
 
-## 2026-02-12 (Orchestrator v1 — PROPOSED)
+## 2026-02-12 (Orchestrator v1 — FROZEN)
 - Old name: N/A
 - New name: ViewBundle, ViewSelection
 - Reason: New Orchestrator output types for unified view of evaluated roster.
-- Approval reference: Orchestrator v1 names proposal (pending approval)
+- Approval reference: Orchestrator v1 names proposal (frozen 2026-02-12)
 
-## 2026-02-12 (Orchestrator v1 — PROPOSED)
+## 2026-02-12 (Orchestrator v1 — FROZEN)
 - Old name: N/A
 - New name: OrchestratorDiagnostic, DiagnosticSource
 - Reason: New Orchestrator diagnostic wrapper with source module attribution.
-- Approval reference: Orchestrator v1 names proposal (pending approval)
+- Approval reference: Orchestrator v1 names proposal (frozen 2026-02-12)
 
-## 2026-02-12 (Orchestrator v1 — PROPOSED)
+## 2026-02-12 (Orchestrator v1 — FROZEN)
 - Old name: N/A
 - New name: OrchestratorService, OrchestratorFailure
 - Reason: New Orchestrator coordinator service and fatal exception type.
-- Approval reference: Orchestrator v1 names proposal (pending approval)
+- Approval reference: Orchestrator v1 names proposal (frozen 2026-02-12)
 
-## 2026-02-12 (Orchestrator v1 — PROPOSED)
+## 2026-02-12 (Orchestrator v1 — FROZEN)
 - Old name: N/A
 - New name: SELECTION_NOT_IN_BUNDLE, EVALUATION_ORDER_VIOLATION
 - Reason: New Orchestrator-specific diagnostic codes (2 codes total).
-- Approval reference: Orchestrator v1 names proposal (pending approval)
+- Approval reference: Orchestrator v1 names proposal (frozen 2026-02-12)
+
+## 2026-02-13 (M9 Index-Core — PROPOSED)
+- Old name: N/A
+- New name: IndexBundle, UnitDoc, WeaponDoc, RuleDoc
+- Reason: New M9 Index-Core document types for search index (3 doc kinds only).
+- Approval reference: M9 Index-Core names proposal Rev 2
+
+## 2026-02-13 (M9 Index-Core — PROPOSED)
+- Old name: CharacteristicDoc
+- New name: IndexedCharacteristic
+- Reason: Demoted from standalone doc to field type on UnitDoc/WeaponDoc per reviewer feedback.
+- Approval reference: M9 Index-Core names proposal Rev 2
+
+## 2026-02-13 (M9 Index-Core — PROPOSED)
+- Old name: N/A
+- New name: IndexDiagnostic
+- Reason: New M9 Index-Core diagnostic type.
+- Approval reference: M9 Index-Core names proposal Rev 2
+
+## 2026-02-13 (M9 Index-Core — PROPOSED)
+- Old name: N/A
+- New name: IndexService
+- Reason: New M9 Index-Core service for building search index.
+- Approval reference: M9 Index-Core names proposal Rev 2
+
+## 2026-02-13 (M9 Index-Core — PROPOSED)
+- Old name: N/A
+- New name: MISSING_NAME, DUPLICATE_DOC_KEY, DUPLICATE_RULE_CANONICAL_KEY, UNKNOWN_PROFILE_TYPE, EMPTY_CHARACTERISTICS, TRUNCATED_DESCRIPTION, LINK_TARGET_MISSING
+- Reason: New M9 Index-Core diagnostic codes (7 codes total, +2 from Rev 1).
+- Approval reference: M9 Index-Core names proposal Rev 2
