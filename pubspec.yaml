@@ -1,5 +1,5 @@
 name: combat_goblin_prime
-description: M1 Acquire storage implementation
+description: Deterministic multi-phase data pipeline engine for structured game system processing (M1-M9+ modules)
 version: 0.0.1
 
 dev_dependencies:
