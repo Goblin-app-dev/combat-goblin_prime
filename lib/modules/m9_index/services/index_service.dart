@@ -477,7 +477,7 @@ class IndexService {
       final costs = entry.costs
           .map((c) => IndexedCost(
                 typeId: c.typeId,
-                typeName: c.typeName,
+                typeName: c.typeName ?? c.typeId,
                 value: c.value,
               ))
           .toList();
