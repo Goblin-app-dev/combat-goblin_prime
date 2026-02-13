@@ -9,23 +9,29 @@ import 'weapon_doc.dart';
 
 /// Complete M9 output with indexed documents and query surface.
 ///
+/// **STATUS: FROZEN** (2026-02-13)
+///
 /// IndexBundle provides deterministic, canonical search documents
 /// built from M5 BoundPackBundle. All lists are sorted by docId
 /// for deterministic iteration.
 ///
-/// Identity vs Search:
+/// ## Identity vs Search
 /// - docId: Globally unique stable identifier (type:{id})
 /// - canonicalKey: Normalized name for search grouping
 ///
-/// Query Semantics:
-/// - *ByDocId(docId): Returns single doc or null (identity lookup)
-/// - *ByCanonicalKey(key): Returns list of docs (search lookup)
-/// - unitsByKeyword(keyword): Returns list of units with that keyword
+/// ## Query Semantics (Frozen)
+/// - `*ByDocId(docId)`: Returns single doc or null (identity lookup)
+/// - `*ByCanonicalKey(key)`: Returns list of docs (search lookup)
+/// - `unitsByKeyword(keyword)`: Returns list of units with that keyword
+/// - `findUnitsByName(query)`: Exact canonical key match
+/// - `findUnitsContaining(query)`: Substring match on canonical key
+/// - `autocompleteUnitKeys(prefix)`: Sorted prefix completions
 ///
-/// Deterministic Ordering:
+/// ## Deterministic Ordering (Frozen)
 /// - All document lists sorted by docId
 /// - All lookup map values are sorted lists
 /// - Diagnostics sorted by (sourceFileId, sourceNode.nodeIndex)
+/// - Query results are stable-sorted and deterministic across builds
 ///
 /// Part of M9 Index-Core (Search).
 class IndexBundle {

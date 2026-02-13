@@ -12,19 +12,25 @@ import '../models/weapon_doc.dart';
 
 /// Service for building deterministic search indices from M5 output.
 ///
-/// v2 Key Strategy:
+/// **STATUS: FROZEN** (2026-02-13)
+///
+/// ## v2 Key Strategy
 /// - docId: Globally unique stable identifier (type:{stableId})
 /// - canonicalKey: Normalized name for search grouping
 ///
 /// Multiple docs may share the same canonicalKey (e.g., "Bolt Rifle" on
 /// many units). Use canonicalKey for search, docId for identity.
 ///
-/// Contract: IndexBundle buildIndex(BoundPackBundle boundPack)
+/// ## Contract
+/// ```dart
+/// IndexBundle buildIndex(BoundPackBundle boundPack)
+/// ```
 ///
-/// Pure function:
+/// ## Pure Function Guarantees
 /// - No IO
 /// - No mutation of input
 /// - Deterministic output (same input → identical output)
+/// - All internal iteration uses sorted collections
 ///
 /// Part of M9 Index-Core (Search).
 class IndexService {
