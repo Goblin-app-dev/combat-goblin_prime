@@ -80,7 +80,7 @@ class OrchestratorService {
     final evaluatedAt = DateTime.now().toUtc();
     final boundBundle = request.boundBundle;
     final snapshot = request.snapshot;
-    final options = request.options;
+    // Note: request.options available for future use (e.g., verbosity, feature flags)
 
     final diagnostics = <OrchestratorDiagnostic>[];
 

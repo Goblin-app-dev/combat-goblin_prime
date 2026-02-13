@@ -136,13 +136,8 @@ class EvaluateService {
     BoundPackBundle boundBundle,
     SelectionSnapshot snapshot,
   ) {
-    // NULL_PROVENANCE: Required provenance pointers missing
-    if (boundBundle.linkedBundle == null) {
-      throw EvaluateFailure(
-        invariant: EvaluateFailure.invariantNullProvenance,
-        message: 'BoundPackBundle.linkedBundle is null',
-      );
-    }
+    // Note: BoundPackBundle.linkedBundle is non-nullable by type definition,
+    // so null check is enforced at compile time.
 
     final selections = snapshot.orderedSelections();
     final selectionSet = selections.toSet();

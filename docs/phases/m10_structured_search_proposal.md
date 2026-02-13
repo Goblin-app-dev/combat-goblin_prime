@@ -1,176 +1,231 @@
-# M10 Structured Search — Proposal
+# M10 Structured Search — Names Proposal (Phase-Safe)
 
-**Status:** PROPOSAL (not implemented)
+**Status:** SCAFFOLDED (names + file structure committed)
 **Date:** 2026-02-13
-**Depends on:** M9 Index-Core (frozen)
+**Depends on:** M9 Index (frozen)
+**Input:** IndexBundle
+**Output:** Deterministic search results
+**Mutation:** None
 
 ## Overview
 
-M10 extends M9's raw search indices with structured query capabilities for voice interfaces and player-facing search. While M9 provides the indexed documents and basic query surface, M10 adds:
+M10 introduces a deterministic structured search layer over the frozen M9
+IndexBundle. This is **engine search over IndexBundle** — not repo search,
+not GitHub search, not external search.
 
-- Intent parsing (natural language → structured query)
-- Fuzzy matching and ranking
-- Query composition (AND/OR/NOT)
-- Faceted filtering
-- Response formatting for voice
+M10:
+- Consumes IndexBundle
+- Performs deterministic query resolution
+- Returns stable, order-guaranteed results
+- Does not mutate data
+- Does not evaluate constraints
+- Does not apply modifiers
+- Does not reinterpret diagnostics
+
+M10 operates in Index-only mode by default.
+Optional higher-level features (intent parsing, presentation formatting) are
+defined as separate abstract interfaces and are not required for core search.
 
 ## Scope Boundary
 
-M10 does NOT:
-- Modify M9 indices (M9 is frozen)
-- Execute game rules
-- Depend on M6/M7/M8
-- Require rosters (pack-level search only)
+M10 may:
+- Filter documents by type
+- Match canonical keys
+- Match indexed keywords
+- Match indexed characteristics
+- Perform deterministic fuzzy matching (optional, bounded)
 
-## Proposed Query Types
+M10 must not:
+- Evaluate constraints (M6)
+- Determine applicability (M7)
+- Apply modifiers (M8)
+- Re-link data (M4)
+- Mutate IndexBundle
+- Introduce global state
+- Reinterpret M9 diagnostics
 
-### 1. Unit Search
+## Core Design
 
-```dart
-/// Search for units by name with fuzzy matching.
-class UnitSearchQuery {
-  final String nameQuery;        // "intercessors" → fuzzy match
-  final List<String>? keywords;  // ["infantry", "battleline"]
-  final String? faction;         // "space marines"
-  final int limit;
-}
+### Single Query Model
 
-/// Ranked results with match confidence.
-class UnitSearchResult {
-  final UnitDoc unit;
-  final double score;            // 0.0–1.0
-  final MatchReason reason;      // exact, fuzzy, keyword
-}
+Replaces per-type queries with a unified request model.
+
+#### SearchRequest
+
+Represents a deterministic query over IndexBundle.
+
+Fields:
+- `String? text` — free-text query
+- `Set<SearchDocType>? docTypes` — filter by document type
+- `Set<String>? keywords` — filter by keyword tokens
+- `Map<String, String>? characteristicFilters` — key=name, value=query
+- `SearchMode mode` — autocomplete / fullText / structured
+- `int limit` — max results
+- `SearchSort sort` — relevance / alphabetical / docTypeThenAlphabetical
+- `SortDirection sortDirection` — ascending / descending
+
+Const constructor with defaults. No parsing logic. Pure request container.
+
+#### SearchHit
+
+- `String docId`
+- `SearchDocType docType`
+- `String canonicalKey`
+- `String displayName`
+- `List<MatchReason> matchReasons` — deterministic order by enum index
+
+No derived computation. No evaluation output.
+
+#### SearchResult
+
+- `List<SearchHit> hits` — deterministically ordered by service
+- `List<SearchDiagnostic> diagnostics` — M10-only
+
+Tie-break rules for ordering:
+1. Score (if applicable)
+2. docType (enum index)
+3. canonicalKey (lexicographic)
+4. docId (lexicographic)
+
+### Enums and Supporting Types
+
+| Type | Values |
+|------|--------|
+| `SearchDocType` | unit, weapon, rule |
+| `SearchMode` | autocomplete, fullText, structured |
+| `SearchSort` | relevance, alphabetical, docTypeThenAlphabetical |
+| `SortDirection` | ascending, descending |
+| `MatchReason` | canonicalKeyMatch, keywordMatch, characteristicMatch, fuzzyMatch |
+
+Relevance must be deterministic and stable.
+
+### SearchConfig
+
+Immutable, const-constructible configuration for the service:
+- `int defaultLimit` (default: 20)
+- `bool fuzzyEnabled` (default: false)
+- `int fuzzyMaxEditDistance` (default: 2)
+
+### Diagnostics + Failures (M10-only)
+
+**SearchDiagnosticCode** (closed set):
+- invalidFilter
+- emptyQuery
+- resultLimitApplied
+- unsupportedMode
+
+**SearchDiagnostic**: code + message + optional context map.
+
+**SearchFailure**: Hard failures (invalid state, misuse). Does not reuse M9
+diagnostics.
+
+## Core Service Interface
+
+### StructuredSearchService
+
+Constructor: `StructuredSearchService({SearchConfig config})`
+
+Consumes IndexBundle per-call (stateless with respect to index data).
+
+Public methods:
+- `SearchResult search(IndexBundle index, SearchRequest request)`
+- `List<String> suggest(IndexBundle index, String prefix, {int limit})`
+- `SearchHit? resolveByDocId(IndexBundle index, String docId)`
+
+Must:
+- Preserve deterministic ordering
+- Never mutate inputs
+- Never depend on evaluation modules (M6–M8)
+
+M9 usage policy: Uses M9 lookup methods (byDocId, byCanonicalKey) for direct
+resolution. Search/filter logic operates on raw indexed structures to avoid
+coupling to M9's convenience query surface.
+
+## Optional Extensions (Separate Layer)
+
+These are **not part of core M10** and must remain optional.
+
+### SearchIntentParser (abstract)
+
+- Converts natural language → SearchRequest
+- Must not access M6–M8
+- Must not access IndexBundle directly
+
+### SearchPresentationFormatter (abstract)
+
+- Converts SearchResult → display/voice strings
+- Must not access IndexBundle directly
+- Must not access M6–M8
+
+Voice/display formatting is **not** an M10 core responsibility.
+
+## Determinism Guarantees
+
+M10 must guarantee:
+- Stable sorting across runs
+- Explicit tie-break rules (score → docType → canonicalKey → docId)
+- No iteration over unordered maps
+- No time-based or random scoring
+
+## File Structure
+
 ```
-
-### 2. Weapon Search
-
-```dart
-/// Search for weapons by name or characteristic.
-class WeaponSearchQuery {
-  final String? nameQuery;       // "bolt rifle"
-  final String? characteristic;  // "S" > 5
-  final String? type;            // "ranged", "melee"
-  final int limit;
-}
+lib/modules/m10_structured_search/
+  m10_structured_search.dart          # barrel export
+  models/
+    match_reason.dart
+    search_config.dart
+    search_diagnostic.dart
+    search_doc_type.dart
+    search_failure.dart
+    search_hit.dart
+    search_mode.dart
+    search_request.dart
+    search_result.dart
+    search_sort.dart
+    sort_direction.dart
+  services/
+    structured_search_service.dart
+  extensions/                         # optional, not required for core
+    search_intent_parser.dart
+    search_presentation_formatter.dart
 ```
-
-### 3. Rule Search
-
-```dart
-/// Search for rules by name or effect text.
-class RuleSearchQuery {
-  final String query;            // "leader" or "re-roll"
-  final bool searchDescription;  // search effect text too
-  final int limit;
-}
-```
-
-### 4. Composite Query
-
-```dart
-/// Combine multiple conditions.
-class CompositeQuery {
-  final List<QueryCondition> conditions;
-  final CompositeOp op;          // and, or
-}
-
-enum CompositeOp { and, or }
-```
-
-## Proposed Service API
-
-```dart
-/// M10 Structured Search service.
-///
-/// Wraps M9 IndexBundle with structured query capabilities.
-class SearchService {
-  final IndexBundle index;
-
-  /// Search units with ranking.
-  List<UnitSearchResult> searchUnits(UnitSearchQuery query);
-
-  /// Search weapons with ranking.
-  List<WeaponSearchResult> searchWeapons(WeaponSearchQuery query);
-
-  /// Search rules with ranking.
-  List<RuleSearchResult> searchRules(RuleSearchQuery query);
-
-  /// Parse natural language query into structured form.
-  StructuredQuery parseIntent(String naturalLanguage);
-
-  /// Format result for voice response.
-  String formatForVoice(SearchResult result);
-}
-```
-
-## Fuzzy Matching Strategy
-
-Options to evaluate:
-
-1. **Levenshtein distance** — Simple edit distance
-2. **Trigram similarity** — Good for typos
-3. **Soundex/Metaphone** — Phonetic matching ("intersesor" → "intercessor")
-4. **Prefix matching** — Fast for autocomplete
-
-Recommendation: Start with trigram + prefix, add phonetic if voice input is common.
-
-## Intent Parsing Strategy
-
-Options to evaluate:
-
-1. **Keyword extraction** — Simple regex patterns
-2. **Rule-based parser** — Grammar for common patterns
-3. **ML classifier** — Overkill for v1
-
-Recommended v1 patterns:
-- "what is [unit/weapon/rule]?" → lookup query
-- "show me [keyword] units" → keyword filter
-- "find units with [characteristic] > N" → characteristic filter
-
-## Open Questions
-
-1. **Ranking weights** — How to weight exact vs fuzzy vs keyword matches?
-2. **Caching** — Should SearchService cache parsed queries?
-3. **Voice formatting** — What's the right verbosity for voice output?
-4. **Multi-pack search** — Should M10 support searching across multiple IndexBundles?
-
-## Dependencies
-
-- M9 IndexBundle (frozen) — all doc types, indices, query surface
-- No new M9 changes required
 
 ## Non-Goals for M10
 
-- Rule execution (M6/M7 territory)
-- Roster-aware search (needs M6)
-- Real-time updates (M9 is built once per pack-load)
-- Cross-catalog deduplication (same unit in multiple catalogs)
+- No constraint evaluation
+- No modifier application
+- No roster awareness
+- No persistence
+- No caching layer (caller responsibility)
+- No cross-pack merging
+- No voice formatting in core (separate extension only)
 
-## Implementation Notes
+## Dependencies
 
-This is a **proposal only** — no implementation yet.
+- M9 IndexBundle (frozen)
+- No dependency on M6–M8
 
-Next steps if approved:
-1. Finalize query types
-2. Choose fuzzy matching algorithm
-3. Implement SearchService
-4. Add intent parsing
-5. Add voice formatting
-6. Write tests
+## Open Questions (Explicitly Deferred)
 
-## File Structure (Proposed)
+1. Should fuzzy matching be enabled by default or opt-in?
+2. Should relevance scoring be introduced now or deferred?
+3. Should composite multi-field queries be fully supported in v1?
+4. Where should caching of SearchResult live (outside M10)?
 
-```
-lib/modules/m10_search/
-  m10_search.dart           # barrel export
-  models/
-    unit_search_query.dart
-    weapon_search_query.dart
-    rule_search_query.dart
-    search_result.dart
-  services/
-    search_service.dart
-    intent_parser.dart
-    voice_formatter.dart
-```
+## Compatibility Note
+
+M10 must function with:
+- Index-only mode (primary)
+- Optional enrichment layer (external, additive only)
+
+M10 must not require orchestrator output.
+
+## Why This Version Is Safer
+
+- Eliminates query-type explosion (single SearchRequest replaces per-type queries)
+- Removes voice formatting from core
+- Makes intent parsing explicitly optional
+- Locks search to M9 IndexBundle input only — no GitHub search, no repo search
+- Aligns with existing module naming discipline
+- Prevents evaluation creep
