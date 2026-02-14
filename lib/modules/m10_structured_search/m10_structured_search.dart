@@ -1,3 +1,23 @@
+/// M10 Structured Search — deterministic search over frozen M9 IndexBundle.
+///
+/// ## STATUS: FROZEN (2026-02-14)
+///
+/// ## Frozen Invariants
+///
+/// - **Public API**: [StructuredSearchService.search],
+///   [StructuredSearchService.suggest], [StructuredSearchService.resolveByDocId]
+/// - **Query drivers**: text, keywords, characteristicFilters (docTypes alone
+///   is NOT a driver)
+/// - **Empty-query contract**: no drivers → emptyQuery diagnostic, 0 hits
+/// - **Deterministic ordering**: all results use explicit tie-break chain
+///   terminating at docId (see [SearchResult] doc)
+/// - **Diagnostic uniqueness**: at most one diagnostic per unsupported
+///   dimension per request; sorted by code index then message
+/// - **M9 delegation**: delegates to frozen M9 primitives; raw inspection
+///   only for weapon keyword tokens and characteristic value matching
+/// - **Filter support**: keywords unsupported for rules (invalidFilter);
+///   characteristics unsupported for rules (no characteristics)
+/// - **Suggest semantics**: merged, deduplicated, lex-sorted, limit-respecting
 library m10_structured_search;
 
 // Models

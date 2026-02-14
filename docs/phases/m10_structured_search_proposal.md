@@ -1,7 +1,7 @@
-# M10 Structured Search — Names Proposal (Phase-Safe)
+# M10 Structured Search — Freeze Contract
 
-**Status:** SCAFFOLDED (names + file structure committed)
-**Date:** 2026-02-13
+**Status:** FROZEN (2026-02-14)
+**Date:** 2026-02-13 (scaffolded), 2026-02-14 (frozen)
 **Depends on:** M9 Index (frozen)
 **Input:** IndexBundle
 **Output:** Deterministic search results
@@ -44,6 +44,23 @@ M10 must not:
 - Introduce global state
 - Reinterpret M9 diagnostics
 
+## Query Driver Definition
+
+A **query driver** is a non-empty search dimension that produces candidate
+document IDs. The three query drivers are:
+
+| Driver | SearchRequest field | What it does |
+|--------|-------------------|--------------|
+| Text | `text` | Free-text substring matching via M9 `find*Containing()` |
+| Keywords | `keywords` | Keyword token matching via M9 inverted index (units) or raw inspection (weapons) |
+| Characteristics | `characteristicFilters` | Name-narrowing via M9 + value matching via raw inspection |
+
+A **non-empty query** must include at least one driver with a non-empty
+normalized value. `docTypes` alone is NOT a driver — it is a filter that
+narrows which document types to search, but does not generate candidates.
+
+Empty/whitespace-only values are normalized away and do not count as drivers.
+
 ## Core Design
 
 ### Single Query Model
@@ -81,12 +98,6 @@ No derived computation. No evaluation output.
 - `List<SearchHit> hits` — deterministically ordered by service
 - `List<SearchDiagnostic> diagnostics` — M10-only
 
-Tie-break rules for ordering:
-1. Score (if applicable)
-2. docType (enum index)
-3. canonicalKey (lexicographic)
-4. docId (lexicographic)
-
 ### Enums and Supporting Types
 
 | Type | Values |
@@ -109,15 +120,76 @@ Immutable, const-constructible configuration for the service:
 ### Diagnostics + Failures (M10-only)
 
 **SearchDiagnosticCode** (closed set):
-- invalidFilter
-- emptyQuery
-- resultLimitApplied
-- unsupportedMode
+- `invalidFilter` — filter dimension unsupported for target doc type, or invalid value
+- `emptyQuery` — no query drivers provided
+- `resultLimitApplied` — results truncated to limit
+- `unsupportedMode` — SearchMode not yet supported
+
+**Diagnostic uniqueness contract:**
+- At most one diagnostic per unsupported dimension per request
+- Sorted by enum index, then message (lexicographic)
+- Identical requests produce identical diagnostic lists
 
 **SearchDiagnostic**: code + message + optional context map.
 
 **SearchFailure**: Hard failures (invalid state, misuse). Does not reuse M9
 diagnostics.
+
+## Deterministic Ordering Rules and Tie-Break Chain
+
+All search results use a **deterministic comparator chain** to guarantee
+stable ordering across runs. The chain varies by sort strategy but all
+strategies terminate with a unique tie-breaker (docId).
+
+### Sort Strategy: `alphabetical`
+
+| Priority | Field | Direction |
+|----------|-------|-----------|
+| 1 | `canonicalKey` | lexicographic ascending |
+| 2 | `docType` | enum index ascending |
+| 3 | `docId` | lexicographic ascending |
+
+### Sort Strategy: `docTypeThenAlphabetical`
+
+| Priority | Field | Direction |
+|----------|-------|-----------|
+| 1 | `docType` | enum index ascending |
+| 2 | `canonicalKey` | lexicographic ascending |
+| 3 | `docId` | lexicographic ascending |
+
+### Sort Strategy: `relevance`
+
+| Priority | Field | Direction |
+|----------|-------|-----------|
+| 1 | `matchReasons.length` | descending (higher score first) |
+| 2 | `docType` | enum index ascending |
+| 3 | `canonicalKey` | lexicographic ascending |
+| 4 | `docId` | lexicographic ascending |
+
+### Direction inversion
+
+When `SortDirection.descending` is set, the entire comparator is inverted
+(i.e. `comparator(b, a)` instead of `comparator(a, b)`).
+
+### Internal data structures
+
+All intermediate candidate sets use `SplayTreeSet<String>` (lexicographic
+order). All normalized filter maps use `SplayTreeMap`. No iteration over
+unordered collections. No time-based or random scoring.
+
+## Filter Support by Document Type
+
+| Filter dimension | unit | weapon | rule |
+|-----------------|------|--------|------|
+| Text (`find*Containing`) | Supported (M9) | Supported (M9) | Supported (M9) |
+| Keywords | Supported (M9 `unitsByKeyword`) | Supported (raw `keywordTokens` inspection) | **Unsupported** — emits `invalidFilter` diagnostic |
+| Characteristics | Supported (M9 name-narrowing + raw value match) | Supported (M9 name-narrowing + raw value match) | **Unsupported** — rules have no characteristics |
+| `resolveByDocId` | Supported | Supported | Supported |
+| `suggest` (autocomplete) | Supported | Supported | Supported |
+
+When multiple drivers are present, candidate sets are intersected (AND
+semantics). When multiple keywords or characteristic filters are present,
+they are also intersected within their dimension (AND semantics).
 
 ## Core Service Interface
 
@@ -137,14 +209,26 @@ Must:
 - Never mutate inputs
 - Never depend on evaluation modules (M6–M8)
 
-M9 delegation policy:
-- M10 delegates to the frozen M9 query surface where appropriate (lookup by
-  docId, lookup by canonicalKey).
-- Raw index access (sorted lists, SplayTreeMap indices) is allowed only for
-  higher-level composition (filtering, sorting, fuzzy matching) that M9 does
-  not provide.
-- M10 must not re-implement functionality already present in M9's frozen
-  query surface.
+## M9 Delegation Policy (Detailed)
+
+M10 delegates to M9 frozen primitives wherever possible:
+
+| Operation | M9 Primitive Used |
+|-----------|------------------|
+| Text normalization | `IndexService.normalize(...)` (static) |
+| Direct doc lookup | `IndexBundle.unitByDocId/weaponByDocId/ruleByDocId` |
+| Text-driven candidates | `IndexBundle.findUnitsContaining/findWeaponsContaining/findRulesContaining` |
+| Unit keyword filtering | `IndexBundle.unitsByKeyword(keyword)` |
+| Characteristic name narrowing | `IndexBundle.docIdsByCharacteristic(name)` |
+| Autocomplete | `IndexBundle.autocompleteUnitKeys/autocompleteWeaponKeys/autocompleteRuleKeys` |
+
+Raw doc inspection (not delegated to M9) is used only for:
+- **Weapon keyword filtering**: iterate `WeaponDoc.keywordTokens` (M9 has no weapon keyword index)
+- **Characteristic value matching**: inspect `IndexedCharacteristic.valueText` after name-narrowing via M9
+- **Rule keyword diagnostic**: rules have no `keywordTokens`, emit `invalidFilter` diagnostic once per request
+
+M10 must not re-implement functionality already present in M9's frozen
+query surface.
 
 ## Optional Extensions (Separate Layer)
 
@@ -164,13 +248,21 @@ These are **not part of core M10** and must remain optional.
 
 Voice/display formatting is **not** an M10 core responsibility.
 
-## Determinism Guarantees
+## Empty-Query Contract (Decided)
 
-M10 must guarantee:
-- Stable sorting across runs
-- Explicit tie-break rules (score → docType → canonicalKey → docId)
-- No iteration over unordered maps
-- No time-based or random scoring
+**Rule: docTypes-only is empty.**
+
+A `SearchRequest` must include at least one **search driver** — `text`,
+`keywords`, or `characteristicFilters` — to produce results. Setting only
+`docTypes` (with no drivers) is treated as an empty query:
+
+- Returns `SearchResult(hits: [], diagnostics: [emptyQuery])`
+- Diagnostic message: `'No search driver provided. At least one of text,
+  keywords, or characteristicFilters is required.'`
+
+Rationale: a bare docTypes filter is an unbounded browse scan with no scoring
+anchor. It does not compose well with deterministic relevance or limit
+semantics, and creates an ambiguous edge case for tests.
 
 ## File Structure
 
@@ -210,40 +302,6 @@ lib/modules/m10_structured_search/
 
 - M9 IndexBundle (frozen)
 - No dependency on M6–M8
-
-## Empty-Query Contract (Decided)
-
-**Rule: docTypes-only is empty.**
-
-A `SearchRequest` must include at least one **search driver** — `text`,
-`keywords`, or `characteristicFilters` — to produce results. Setting only
-`docTypes` (with no drivers) is treated as an empty query:
-
-- Returns `SearchResult(hits: [], diagnostics: [emptyQuery])`
-- Diagnostic message: `'No search driver provided. At least one of text,
-  keywords, or characteristicFilters is required.'`
-
-Rationale: a bare docTypes filter is an unbounded browse scan with no scoring
-anchor. It does not compose well with deterministic relevance or limit
-semantics, and creates an ambiguous edge case for tests.
-
-## M9 Delegation Policy (Detailed)
-
-M10 delegates to M9 frozen primitives wherever possible:
-
-| Operation | M9 Primitive Used |
-|-----------|------------------|
-| Text normalization | `IndexService.normalize(...)` (static) |
-| Direct doc lookup | `IndexBundle.unitByDocId/weaponByDocId/ruleByDocId` |
-| Text-driven candidates | `IndexBundle.findUnitsContaining/findWeaponsContaining/findRulesContaining` |
-| Unit keyword filtering | `IndexBundle.unitsByKeyword(keyword)` |
-| Characteristic name narrowing | `IndexBundle.docIdsByCharacteristic(name)` |
-| Autocomplete | `IndexBundle.autocompleteUnitKeys/autocompleteWeaponKeys/autocompleteRuleKeys` |
-
-Raw doc inspection (not delegated to M9) is used only for:
-- **Weapon keyword filtering**: iterate `WeaponDoc.keywordTokens` (M9 has no weapon keyword index)
-- **Characteristic value matching**: inspect `IndexedCharacteristic.valueText` after name-narrowing via M9
-- **Rule keyword diagnostic**: rules have no `keywordTokens`, emit `invalidFilter` diagnostic once per request
 
 ## Open Questions (Explicitly Deferred)
 

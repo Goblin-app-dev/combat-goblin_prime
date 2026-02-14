@@ -14,10 +14,12 @@ import '../models/sort_direction.dart';
 
 /// Deterministic structured search over an M9 [IndexBundle].
 ///
+/// ## STATUS: FROZEN (2026-02-14)
+///
 /// This service is stateless with respect to index data — the [IndexBundle]
 /// is passed per-call so the service holds no mutable references.
 ///
-/// ## Determinism guarantees
+/// ## Frozen Invariants — Determinism
 ///
 /// All results are deterministically ordered using explicit tie-break rules:
 ///   1. Score (if applicable, higher first)
@@ -26,14 +28,18 @@ import '../models/sort_direction.dart';
 ///   4. docId (lexicographic, ascending)
 ///
 /// No iteration over unordered maps. No time-based or random scoring.
+/// All intermediate sets use [SplayTreeSet], all maps use [SplayTreeMap].
+/// Same [IndexBundle] + same [SearchRequest] → identical [SearchResult]
+/// (including diagnostics order).
 ///
-/// ## M9 delegation policy
+/// ## Frozen Invariants — M9 Delegation
 ///
 /// Delegates to [IndexService.normalize] for all text normalization.
 /// Uses M9 lookup methods ([IndexBundle.unitByDocId], etc.) for direct
 /// resolution. Uses M9 text-search primitives ([IndexBundle.findUnitsContaining],
 /// etc.) where available. Raw doc inspection is used only for filters that
 /// M9 does not provide (weapon keyword tokens, characteristic value matching).
+/// Must not re-implement functionality present in M9's frozen query surface.
 ///
 /// ## Empty-query contract
 ///
