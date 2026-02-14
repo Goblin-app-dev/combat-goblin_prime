@@ -211,12 +211,45 @@ lib/modules/m10_structured_search/
 - M9 IndexBundle (frozen)
 - No dependency on M6–M8
 
+## Empty-Query Contract (Decided)
+
+**Rule: docTypes-only is empty.**
+
+A `SearchRequest` must include at least one **search driver** — `text`,
+`keywords`, or `characteristicFilters` — to produce results. Setting only
+`docTypes` (with no drivers) is treated as an empty query:
+
+- Returns `SearchResult(hits: [], diagnostics: [emptyQuery])`
+- Diagnostic message: `'No search driver provided. At least one of text,
+  keywords, or characteristicFilters is required.'`
+
+Rationale: a bare docTypes filter is an unbounded browse scan with no scoring
+anchor. It does not compose well with deterministic relevance or limit
+semantics, and creates an ambiguous edge case for tests.
+
+## M9 Delegation Policy (Detailed)
+
+M10 delegates to M9 frozen primitives wherever possible:
+
+| Operation | M9 Primitive Used |
+|-----------|------------------|
+| Text normalization | `IndexService.normalize(...)` (static) |
+| Direct doc lookup | `IndexBundle.unitByDocId/weaponByDocId/ruleByDocId` |
+| Text-driven candidates | `IndexBundle.findUnitsContaining/findWeaponsContaining/findRulesContaining` |
+| Unit keyword filtering | `IndexBundle.unitsByKeyword(keyword)` |
+| Characteristic name narrowing | `IndexBundle.docIdsByCharacteristic(name)` |
+| Autocomplete | `IndexBundle.autocompleteUnitKeys/autocompleteWeaponKeys/autocompleteRuleKeys` |
+
+Raw doc inspection (not delegated to M9) is used only for:
+- **Weapon keyword filtering**: iterate `WeaponDoc.keywordTokens` (M9 has no weapon keyword index)
+- **Characteristic value matching**: inspect `IndexedCharacteristic.valueText` after name-narrowing via M9
+- **Rule keyword diagnostic**: rules have no `keywordTokens`, emit `invalidFilter` diagnostic once per request
+
 ## Open Questions (Explicitly Deferred)
 
 1. Should fuzzy matching be enabled by default or opt-in?
-2. Should relevance scoring be introduced now or deferred?
-3. Should composite multi-field queries be fully supported in v1?
-4. Where should caching of SearchResult live (outside M10)?
+2. Should composite multi-field queries be fully supported in v1?
+3. Where should caching of SearchResult live (outside M10)?
 
 ## Compatibility Note
 
