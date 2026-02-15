@@ -2,11 +2,40 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:path/path.dart' as p;
 
+import '../models/acquire_failure.dart';
 import '../models/source_file_metadata.dart';
 import '../models/source_file_type.dart';
 
 class AcquireStorage {
+  /// Rejects path segments that could escape the storage root.
+  static void _validateSegment(String segment, String label) {
+    if (segment.isEmpty) {
+      throw AcquireFailure(message: '$label must not be empty.');
+    }
+    if (p.isAbsolute(segment)) {
+      throw AcquireFailure(message: '$label must not be an absolute path.');
+    }
+    if (segment.contains('..')) {
+      throw AcquireFailure(message: '$label must not contain path traversal.');
+    }
+    if (segment.contains('/') || segment.contains('\\')) {
+      throw AcquireFailure(message: '$label must not contain path separators.');
+    }
+  }
+
+  /// Ensures [resolved] is a child of [base] after normalization.
+  static void _ensureContained(String base, String resolved) {
+    final normalizedBase = p.normalize(p.absolute(base)) + p.separator;
+    final normalizedResolved = p.normalize(p.absolute(resolved));
+    if (!normalizedResolved.startsWith(normalizedBase)) {
+      throw AcquireFailure(
+        message: 'Resolved storage path escapes the base directory.',
+      );
+    }
+  }
+
   Future<SourceFileMetadata> storeFile({
     required List<int> bytes,
     required SourceFileType fileType,
@@ -18,6 +47,13 @@ class AcquireStorage {
     if (fileType == SourceFileType.cat && packId == null) {
       throw StateError('Catalog storage requires packId.');
     }
+
+    // Validate caller-supplied path segments before constructing any path.
+    _validateSegment(rootId, 'rootId');
+    if (packId != null) {
+      _validateSegment(packId, 'packId');
+    }
+
     final fileId = sha256.convert(bytes).toString();
     final byteLength = bytes.length;
     final importedAt = DateTime.now().toUtc();
@@ -25,8 +61,14 @@ class AcquireStorage {
         fileExtension.startsWith('.') ? fileExtension : '.${fileExtension}';
     final appDataRoot = Directory('appDataRoot');
     final storedPath = fileType == SourceFileType.gst
-        ? '${appDataRoot.path}/gamesystem_cache/$rootId/$fileId$normalizedFileExtension'
-        : '${appDataRoot.path}/packs/$packId/catalogs/$rootId/$fileId$normalizedFileExtension';
+        ? p.join(appDataRoot.path, 'gamesystem_cache', rootId,
+            '$fileId$normalizedFileExtension')
+        : p.join(appDataRoot.path, 'packs', packId!, 'catalogs', rootId,
+            '$fileId$normalizedFileExtension');
+
+    // Final containment check: the resolved path must stay inside appDataRoot.
+    _ensureContained(appDataRoot.path, storedPath);
+
     final storedFile = File(storedPath);
 
     await storedFile.parent.create(recursive: true);
