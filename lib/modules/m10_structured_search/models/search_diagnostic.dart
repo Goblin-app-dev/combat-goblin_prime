@@ -2,8 +2,23 @@
 ///
 /// These are distinct from M9 [IndexDiagnosticCode] and must not be
 /// conflated with indexing diagnostics.
+///
+/// ## Uniqueness contract
+///
+/// Diagnostics emitted by [StructuredSearchService] are:
+///   - **Unique**: at most one diagnostic per unsupported dimension per request
+///     (e.g. one [invalidFilter] for "keyword filter unsupported for rule docs",
+///     not one per keyword).
+///   - **Stable order**: sorted by [SearchDiagnosticCode] enum index, then by
+///     message (lexicographic). Identical requests produce identical diagnostic
+///     lists.
 enum SearchDiagnosticCode {
-  /// A filter field references an invalid or unknown value.
+  /// A filter dimension is unsupported for the target document type, or a
+  /// filter field references an invalid/unknown value.
+  ///
+  /// Emitted at most once per unsupported dimension per request. For example,
+  /// keyword filtering on rule docs emits a single diagnostic regardless of
+  /// how many keywords were requested.
   invalidFilter,
 
   /// The query contains no actionable search criteria.

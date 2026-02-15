@@ -15,3 +15,7 @@ Read and acknowledge the following files in order:
 10. tools/name_audit.md
 
 Output ONLY acknowledgement bullets. No code.   ASK QUESTIONS, DO NOT ASSUME,  DO NOT IMPROVE,  DO NOT INVENT
+
+## Follow-Up: Post-M10
+
+- [ ] Investigate and fix mojibake (encoding corruption) in data/text assets

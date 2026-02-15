@@ -5,8 +5,21 @@ import 'sort_direction.dart';
 
 /// A deterministic query over an M9 [IndexBundle].
 ///
+/// ## STATUS: FROZEN (2026-02-14)
+///
 /// This is a pure request container — no parsing logic, no tokenization.
 /// All filtering and matching is performed by [StructuredSearchService].
+///
+/// ## Frozen Invariants — Ordering Semantics
+///
+/// The [sort] field selects a deterministic comparator chain. All chains
+/// terminate at [SearchHit.docId] to guarantee total ordering. The [limit]
+/// field truncates after sorting; if truncation occurs, a
+/// [SearchDiagnosticCode.resultLimitApplied] diagnostic is emitted.
+///
+/// A request must include at least one search driver ([text], [keywords],
+/// or [characteristicFilters]) to produce results. [docTypes] alone is
+/// not a driver.
 class SearchRequest {
   /// Free-text query string. Interpretation depends on [mode].
   final String? text;
