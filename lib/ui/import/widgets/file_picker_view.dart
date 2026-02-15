@@ -120,6 +120,70 @@ class _FilePickerViewState extends State<FilePickerView> {
           ),
           const SizedBox(height: 32),
 
+          // Reload Last Session Button (if available)
+          AnimatedBuilder(
+            animation: controller,
+            builder: (context, _) {
+              if (!controller.hasPersistedSession) {
+                return const SizedBox.shrink();
+              }
+
+              final session = controller.persistedSession;
+              return Card(
+                color: Theme.of(context).colorScheme.secondaryContainer,
+                margin: const EdgeInsets.only(bottom: 16),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.history,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSecondaryContainer,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Previous Session Available',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSecondaryContainer,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            iconSize: 18,
+                            onPressed: () => controller.clearPersistedSession(),
+                            tooltip: 'Dismiss',
+                          ),
+                        ],
+                      ),
+                      if (session != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Last used: ${_formatDate(session.savedAt)}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      FilledButton.tonal(
+                        onPressed: () => controller.reloadLastSession(),
+                        child: const Text('Reload Last Pack'),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+
           // Import Button
           AnimatedBuilder(
             animation: controller,
@@ -267,5 +331,25 @@ class _FileSelectionCard extends StatelessWidget {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+}
+
+/// Formats a DateTime for display.
+String _formatDate(DateTime date) {
+  final now = DateTime.now();
+  final diff = now.difference(date);
+
+  if (diff.inMinutes < 1) {
+    return 'just now';
+  } else if (diff.inHours < 1) {
+    return '${diff.inMinutes} min ago';
+  } else if (diff.inDays < 1) {
+    return '${diff.inHours} hours ago';
+  } else if (diff.inDays == 1) {
+    return 'yesterday';
+  } else if (diff.inDays < 7) {
+    return '${diff.inDays} days ago';
+  } else {
+    return '${date.month}/${date.day}/${date.year}';
   }
 }
