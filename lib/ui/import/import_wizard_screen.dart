@@ -65,12 +65,15 @@ class ImportWizardScreen extends StatelessWidget {
         return DependencyResolutionView(
           missingTargetIds: controller.missingTargetIds,
           resolvedCount: controller.resolvedCount,
+          resolverError: controller.resolverError,
+          hasAuthToken: controller.hasAuthToken,
           onResolveAutomatically: controller.sourceLocator != null
               ? () => controller.resolveDependencies()
               : null,
           onRetryBuild: controller.allDependenciesResolved
               ? () => controller.retryBuildWithResolvedDeps()
               : null,
+          onSetAuthToken: (token) => controller.setAuthToken(token),
         );
 
       case ImportStatus.success:
