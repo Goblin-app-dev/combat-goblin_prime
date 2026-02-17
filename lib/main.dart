@@ -67,22 +67,22 @@ class _AppNavigatorState extends State<_AppNavigator> {
       builder: (context, child) {
         // Navigate to search when import succeeds
         if (controller.status == ImportStatus.success &&
-            controller.indexBundle != null &&
+            controller.indexBundles.isNotEmpty &&
             !_showSearch) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             setState(() => _showSearch = true);
           });
         }
 
-        if (_showSearch && controller.indexBundle != null) {
-          return SearchScreen(
-            indexBundle: controller.indexBundle!,
+        if (_showSearch && controller.indexBundles.isNotEmpty) {
+          return SearchScreen.multi(
+            indexBundles: controller.indexBundles,
           );
         }
 
         return ImportWizardScreen(
           onImportSuccess: () {
-            if (controller.indexBundle != null) {
+            if (controller.indexBundles.isNotEmpty) {
               setState(() => _showSearch = true);
             }
           },

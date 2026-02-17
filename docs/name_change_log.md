@@ -269,14 +269,38 @@ No silent renames are permitted.
 - Reason: New M9 Index-Core diagnostic codes (7 codes total, +2 from Rev 1).
 - Approval reference: M9 Index-Core names proposal Rev 2
 
-## 2026-02-14 (GitHub Repository Search Feature — PROPOSED)
+## 2026-02-17 (Phase 11B — Multi-Catalog — PROPOSAL)
 - Old name: N/A
-- New name: RepoSearchQuery, RepoSearchPage, RepoSummary, RepoSearchDiagnostics, RepoSearchError, RepoSearchException
-- Reason: New feature-level value objects and error model for GitHub repository discovery.
-- Approval reference: docs/features/github_repository_search.md
+- New name: kMaxSelectedCatalogs
+- Reason: New constant defining maximum user-selected primary catalogs (value: 3).
+- Approval reference: Phase 11B Multi-Catalog names proposal
 
-## 2026-02-14 (GitHub Repository Search Feature — PROPOSED)
+## 2026-02-17 (Phase 11B — GitHub Sync — PROPOSAL)
 - Old name: N/A
-- New name: GitHubRepositorySearchService, GitHubRepositorySearchServiceHttp, GitHubQueryBuilder
-- Reason: New service abstraction + HTTP adapter + deterministic query builder for GitHub repository search.
-- Approval reference: docs/features/github_repository_search.md
+- New name: TrackedFile, SessionPackState, RepoSyncState, GitHubSyncState, GitHubSyncStateService
+- Reason: New GitHub sync state types for blob SHA tracking and update detection. Stored separately from M1 engine metadata.
+- Approval reference: Phase 11B Multi-Catalog names proposal
+
+## 2026-02-17 (Phase 11B — Multi-Pack Search — PROPOSAL)
+- Old name: N/A
+- New name: MultiPackSearchHit, MultiPackSearchResult, MultiPackSearchService
+- Reason: New multi-pack search types for deterministic cross-bundle search with merge and deduplication.
+- Approval reference: Phase 11B Multi-Catalog names proposal
+
+## 2026-02-17 (Phase 11B — BsdResolver Extensions — PROPOSAL)
+- Old name: N/A
+- New name: RepoTreeEntry, RepoTreeResult, fetchRepoTree()
+- Reason: BsdResolverService extensions for GitHub Trees API with blob SHA tracking.
+- Approval reference: Phase 11B Multi-Catalog names proposal
+
+## 2026-02-17 (Phase 11B — ImportSessionController Extensions — PROPOSAL)
+- Old name: primaryCatalogFile, rawBundle, boundBundle, indexBundle, setPrimaryCatalogFile()
+- New name: selectedCatalogs, rawBundles, boundBundles, indexBundles, setSelectedCatalogs() (with deprecated aliases preserved)
+- Reason: Multi-catalog support: single → multiple. Legacy single accessors deprecated but preserved for backward compatibility.
+- Approval reference: Phase 11B Multi-Catalog names proposal
+
+## 2026-02-17 (Phase 11B — SearchScreen Extensions — PROPOSAL)
+- Old name: SearchScreen.indexBundle
+- New name: SearchScreen.indexBundles, SearchScreen.bundleOrder, SearchScreen.single(), SearchScreen.multi()
+- Reason: Multi-pack search support: single bundle → multiple bundles with deterministic ordering. Legacy indexBundle deprecated.
+- Approval reference: Phase 11B Multi-Catalog names proposal

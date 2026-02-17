@@ -45,7 +45,7 @@ class _FilePickerViewState extends State<FilePickerView> {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Choose a game system file (.gst) and a catalog file (.cat) to import.',
+            'Choose a game system file (.gst) and up to 3 catalog files (.cat) to import.',
           ),
           const SizedBox(height: 24),
 
@@ -64,19 +64,63 @@ class _FilePickerViewState extends State<FilePickerView> {
           ),
           const SizedBox(height: 16),
 
-          // Primary Catalog File
-          _FileSelectionCard(
-            title: 'Primary Catalog',
-            subtitle: '.cat file',
-            icon: Icons.folder_open,
-            allowedExtension: 'cat',
-            selectedFile: controller.primaryCatalogFile,
-            onFilePicked: (name, bytes, path) {
-              controller.setPrimaryCatalogFile(
-                SelectedFile(fileName: name, bytes: bytes, filePath: path),
-              );
-            },
-          ),
+          // Selected Catalogs (up to kMaxSelectedCatalogs)
+          ...List.generate(controller.selectedCatalogs.length, (index) {
+            final catalog = controller.selectedCatalogs[index];
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _FileSelectionCard(
+                title: 'Catalog ${index + 1}',
+                subtitle: '.cat file',
+                icon: Icons.folder_open,
+                allowedExtension: 'cat',
+                selectedFile: catalog,
+                onFilePicked: (name, bytes, path) {
+                  final updated = List<SelectedFile>.from(
+                    controller.selectedCatalogs,
+                  );
+                  updated[index] = SelectedFile(
+                    fileName: name,
+                    bytes: bytes,
+                    filePath: path,
+                  );
+                  controller.setSelectedCatalogs(updated);
+                },
+                onRemove: controller.selectedCatalogs.length > 1
+                    ? () => controller.removeSelectedCatalog(index)
+                    : null,
+              ),
+            );
+          }),
+
+          // Initial catalog picker (when none selected yet)
+          if (controller.selectedCatalogs.isEmpty)
+            _FileSelectionCard(
+              title: 'Catalog',
+              subtitle: '.cat file',
+              icon: Icons.folder_open,
+              allowedExtension: 'cat',
+              selectedFile: null,
+              onFilePicked: (name, bytes, path) {
+                controller.addSelectedCatalog(
+                  SelectedFile(fileName: name, bytes: bytes, filePath: path),
+                );
+              },
+            ),
+
+          // "Add Catalog" button (when under max and at least one exists)
+          if (controller.selectedCatalogs.isNotEmpty &&
+              controller.selectedCatalogs.length < kMaxSelectedCatalogs)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: OutlinedButton.icon(
+                onPressed: () => _pickAndAddCatalog(context, controller),
+                icon: const Icon(Icons.add),
+                label: Text(
+                  'Add Catalog (${controller.selectedCatalogs.length}/$kMaxSelectedCatalogs)',
+                ),
+              ),
+            ),
           const SizedBox(height: 24),
 
           // Repository Configuration (collapsible)
@@ -192,18 +236,70 @@ class _FilePickerViewState extends State<FilePickerView> {
             animation: controller,
             builder: (context, _) {
               final canImport = controller.gameSystemFile != null &&
-                  controller.primaryCatalogFile != null;
+                  controller.selectedCatalogs.isNotEmpty;
 
               return FilledButton.icon(
                 onPressed: canImport ? widget.onFilesSelected : null,
                 icon: const Icon(Icons.upload_file),
-                label: const Text('Import Pack'),
+                label: Text(
+                  controller.selectedCatalogs.length <= 1
+                      ? 'Import Pack'
+                      : 'Import ${controller.selectedCatalogs.length} Packs',
+                ),
               );
             },
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _pickAndAddCatalog(
+    BuildContext context,
+    ImportSessionController controller,
+  ) async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['cat'],
+        withData: true,
+      );
+
+      if (result == null || result.files.isEmpty) return;
+
+      final file = result.files.first;
+      final bytes = file.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not read file data.')),
+        );
+        return;
+      }
+
+      final added = controller.addSelectedCatalog(
+        SelectedFile(
+          fileName: file.name,
+          bytes: Uint8List.fromList(bytes),
+          filePath: file.path,
+        ),
+      );
+
+      if (!added && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Maximum $kMaxSelectedCatalogs catalogs already selected.',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to pick file: $e')),
+      );
+    }
   }
 
   void _updateSourceLocator(ImportSessionController controller) {
@@ -235,6 +331,7 @@ class _FileSelectionCard extends StatelessWidget {
   final SelectedFile? selectedFile;
   final String allowedExtension;
   final void Function(String name, Uint8List bytes, String? path) onFilePicked;
+  final VoidCallback? onRemove;
 
   const _FileSelectionCard({
     required this.title,
@@ -243,6 +340,7 @@ class _FileSelectionCard extends StatelessWidget {
     required this.selectedFile,
     required this.allowedExtension,
     required this.onFilePicked,
+    this.onRemove,
   });
 
   @override
@@ -298,10 +396,19 @@ class _FileSelectionCard extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(
-                Icons.upload_file,
-                color: Theme.of(context).colorScheme.primary,
-              ),
+              if (onRemove != null)
+                IconButton(
+                  icon: const Icon(Icons.close, size: 18),
+                  onPressed: onRemove,
+                  tooltip: 'Remove',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                )
+              else
+                Icon(
+                  Icons.upload_file,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
             ],
           ),
         ),
