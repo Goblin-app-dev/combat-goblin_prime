@@ -92,7 +92,19 @@ class ImportWizardScreen extends StatelessWidget {
     BuildContext context,
     ImportSessionController controller,
   ) {
-    final indexBundle = controller.indexBundle;
+    final bundles = controller.indexBundles;
+    final packCount = bundles.length;
+
+    // Aggregate stats across all bundles
+    var totalUnits = 0;
+    var totalWeapons = 0;
+    var totalRules = 0;
+    for (final bundle in bundles.values) {
+      totalUnits += bundle.units.length;
+      totalWeapons += bundle.weapons.length;
+      totalRules += bundle.rules.length;
+    }
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -105,16 +117,19 @@ class ImportWizardScreen extends StatelessWidget {
               color: Colors.green,
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Import Complete',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            Text(
+              packCount == 1
+                  ? 'Import Complete'
+                  : '$packCount Packs Imported',
+              style: const TextStyle(
+                  fontSize: 24, fontWeight: FontWeight.bold),
             ),
-            if (indexBundle != null) ...[
+            if (bundles.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(
-                '${indexBundle.units.length} units, '
-                '${indexBundle.weapons.length} weapons, '
-                '${indexBundle.rules.length} rules',
+                '$totalUnits units, '
+                '$totalWeapons weapons, '
+                '$totalRules rules',
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
             ],

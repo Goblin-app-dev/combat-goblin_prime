@@ -271,4 +271,45 @@ Service that builds search index from BoundPackBundle. Provides buildIndex() met
 
 ---
 
+## Tracked File (Phase 11B — GitHub Sync)
+Tracked file entry in GitHub sync state. Stores both GitHub blob SHA (for update detection) and local storage metadata (localStoredPath, localFileId). Contains repoPath, fileType ('gst'/'cat'), rootId, blobSha, localStoredPath, localFileId, lastCheckedAt. Part of GitHubSyncState, not M1 engine metadata.
+
+## Session Pack State (Phase 11B — GitHub Sync)
+Session pack state tracking user's selected primary catalogs and their resolved dependencies. Contains selectedPrimaryRootIds (max 3), dependencyRootIds (auto-resolved closure), indexBuiltAt timestamp. Used for session persistence and update detection.
+
+## Repo Sync State (Phase 11B — GitHub Sync)
+Per-repository GitHub sync state. Contains repoUrl, branch, trackedFiles map (keyed by repoPath), lastTreeFetchAt. Part of GitHubSyncState.
+
+## GitHub Sync State (Phase 11B — GitHub Sync)
+Complete GitHub sync state across all repositories. Contains repos map (keyed by sourceKey) and sessionPack. Stored in `appDataRoot/github_sync_state.json`. This is UI-feature metadata, separate from M1 engine storage metadata.
+
+## GitHub Sync State Service (Phase 11B — GitHub Sync)
+Persistence service for GitHubSyncState. Provides loadState(), saveState(), updateRepoState(), updateTrackedFile(), updateSessionPack(), clearState(), getFilesNeedingUpdate() methods. File location: `appDataRoot/github_sync_state.json`.
+
+## Multi-Pack Search Hit (Phase 11B — Multi-Catalog)
+Extended search hit that includes source pack attribution. Wraps M10 SearchHit with sourcePackKey and sourcePackIndex for deterministic tie-breaking and deduplication during multi-bundle search.
+
+## Multi-Pack Search Result (Phase 11B — Multi-Catalog)
+Result of searching across multiple IndexBundles. Contains merged hits (deduplicated), merged diagnostics, resultLimitApplied flag, totalHitsBeforeLimit. Produced by MultiPackSearchService.
+
+## Multi-Pack Search Service (Phase 11B — Multi-Catalog)
+Stateless service for searching across multiple IndexBundles. Implements deterministic merge algorithm: run M10 per bundle → merge hits → stable sort (docType → canonicalKey → docId → sourcePackKey) → deduplicate by docId → apply limit → emit single resultLimitApplied diagnostic.
+
+## Max Selected Catalogs (Phase 11B — Multi-Catalog)
+Constant `kMaxSelectedCatalogs = 3`. Maximum number of user-selected primary catalogs. Dependencies (library catalogs) are auto-resolved and do NOT count toward this limit.
+
+## Selected Catalogs (Phase 11B — Multi-Catalog)
+List of user-selected primary catalog files in ImportSessionController. Max 3 per kMaxSelectedCatalogs. Each runs M1-M9 pipeline independently, producing separate IndexBundle. Replaces deprecated single `primaryCatalogFile`.
+
+## Index Bundles (Phase 11B — Multi-Catalog)
+Map of IndexBundle instances keyed by catalog identifier (rootId or index). Produced by running M1-M9 independently for each selected catalog. Used by SearchScreen and MultiPackSearchService for cross-bundle search.
+
+## Repo Tree Entry (Phase 11B — BsdResolver Extension)
+Single file entry from GitHub Trees API response. Contains path, blobSha, size. Used for building blob SHA mapping during fetchRepoTree().
+
+## Repo Tree Result (Phase 11B — BsdResolver Extension)
+Complete result of fetching GitHub repository tree. Contains entries list, pathToBlobSha map, targetIdToBlobSha map. Extends BsdResolverService capabilities for update detection.
+
+---
+
 Any concept used in code must appear here first.
