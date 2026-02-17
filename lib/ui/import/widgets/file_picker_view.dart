@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import 'package:combat_goblin_prime/modules/m1_acquire/models/source_locator.dart';
@@ -53,10 +54,11 @@ class _FilePickerViewState extends State<FilePickerView> {
             title: 'Game System',
             subtitle: '.gst file',
             icon: Icons.sports_esports,
+            allowedExtension: 'gst',
             selectedFile: controller.gameSystemFile,
-            onFilePicked: (name, bytes) {
+            onFilePicked: (name, bytes, path) {
               controller.setGameSystemFile(
-                SelectedFile(fileName: name, bytes: bytes),
+                SelectedFile(fileName: name, bytes: bytes, filePath: path),
               );
             },
           ),
@@ -67,10 +69,11 @@ class _FilePickerViewState extends State<FilePickerView> {
             title: 'Primary Catalog',
             subtitle: '.cat file',
             icon: Icons.folder_open,
+            allowedExtension: 'cat',
             selectedFile: controller.primaryCatalogFile,
-            onFilePicked: (name, bytes) {
+            onFilePicked: (name, bytes, path) {
               controller.setPrimaryCatalogFile(
-                SelectedFile(fileName: name, bytes: bytes),
+                SelectedFile(fileName: name, bytes: bytes, filePath: path),
               );
             },
           ),
@@ -230,13 +233,15 @@ class _FileSelectionCard extends StatelessWidget {
   final String subtitle;
   final IconData icon;
   final SelectedFile? selectedFile;
-  final void Function(String name, Uint8List bytes) onFilePicked;
+  final String allowedExtension;
+  final void Function(String name, Uint8List bytes, String? path) onFilePicked;
 
   const _FileSelectionCard({
     required this.title,
     required this.subtitle,
     required this.icon,
     required this.selectedFile,
+    required this.allowedExtension,
     required this.onFilePicked,
   });
 
@@ -305,26 +310,32 @@ class _FileSelectionCard extends StatelessWidget {
   }
 
   Future<void> _pickFile(BuildContext context) async {
-    // Note: In a real implementation, use file_picker package
-    // For demo, show a dialog explaining file picker would go here
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Select $title'),
-        content: const Text(
-          'In a production app, this would open a file picker.\n\n'
-          'For the demo, files would be loaded via:\n'
-          '- file_picker package on mobile/desktop\n'
-          '- File API on web',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: [allowedExtension],
+        withData: true,
+      );
+
+      if (result == null || result.files.isEmpty) return;
+
+      final file = result.files.first;
+      final bytes = file.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not read file data.')),
+        );
+        return;
+      }
+
+      onFilePicked(file.name, Uint8List.fromList(bytes), file.path);
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to pick file: $e')),
+      );
+    }
   }
 
   String _formatBytes(int bytes) {
