@@ -1,0 +1,9 @@
+export 'models/repo_search_diagnostics.dart';
+export 'models/repo_search_error.dart';
+export 'models/repo_search_exception.dart';
+export 'models/repo_search_page.dart';
+export 'models/repo_search_query.dart';
+export 'models/repo_summary.dart';
+export 'services/github_query_builder.dart';
+export 'services/github_repository_search_service.dart';
+export 'services/github_repository_search_service_http.dart';
