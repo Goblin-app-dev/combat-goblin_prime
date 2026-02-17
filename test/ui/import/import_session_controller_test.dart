@@ -30,6 +30,12 @@ class MockBsdResolverService extends BsdResolverService {
       targetIdToPath: {
         for (final id in _mockResponses.keys) id: '$id.cat',
       },
+      pathToBlobSha: {
+        for (final id in _mockResponses.keys) '$id.cat': 'mock_sha_$id',
+      },
+      targetIdToBlobSha: {
+        for (final id in _mockResponses.keys) id: 'mock_sha_$id',
+      },
       unparsedFiles: [],
     );
   }
@@ -80,7 +86,7 @@ void main() {
       await controller.attemptBuild();
 
       expect(controller.status, equals(ImportStatus.failed));
-      expect(controller.errorMessage, contains('select both'));
+      expect(controller.errorMessage, contains('select'));
     });
 
     test('attemptBuild transitions to preparing state immediately', () async {
@@ -95,17 +101,20 @@ void main() {
         fileName: 'test.gst',
         bytes: Uint8List.fromList([1, 2, 3]),
       ));
-      controller.setPrimaryCatalogFile(SelectedFile(
-        fileName: 'test.cat',
-        bytes: Uint8List.fromList([1, 2, 3]),
-      ));
+      controller.setSelectedCatalogs([
+        SelectedFile(
+          fileName: 'test.cat',
+          bytes: Uint8List.fromList([1, 2, 3]),
+        ),
+      ]);
 
       // Start the build but don't await it (to capture state changes)
       final future = controller.attemptBuild();
 
       // First state should be preparing
       expect(statusChanges.contains(ImportStatus.preparing), isTrue);
-      expect(controller.statusMessage, equals('Preparing pack storage...'));
+      // Status message now shows catalog build progress
+      expect(controller.statusMessage, isNotNull);
 
       // Wait for completion
       await future;
@@ -407,6 +416,9 @@ void main() {
       expect(controller.statusMessage, isNull);
     });
   });
+
+  // Register additional multi-catalog tests
+  registerMultiCatalogTests();
 }
 
 extension IterableExtension on Iterable<String?> {
@@ -419,4 +431,176 @@ extension IterableExtension on Iterable<String?> {
     }
     return result;
   }
+}
+
+// ============================================================================
+// Multi-catalog selection tests (registered in main() above)
+// ============================================================================
+
+void registerMultiCatalogTests() {
+  group('ImportSessionController: multi-catalog selection', () {
+    test('selectedCatalogs starts empty', () {
+      final controller = ImportSessionController();
+
+      expect(controller.selectedCatalogs, isEmpty);
+    });
+
+    test('setSelectedCatalogs sets catalogs', () {
+      final controller = ImportSessionController();
+
+      controller.setSelectedCatalogs([
+        SelectedFile(
+          fileName: 'catalog1.cat',
+          bytes: Uint8List.fromList([1]),
+          rootId: 'cat-1',
+        ),
+        SelectedFile(
+          fileName: 'catalog2.cat',
+          bytes: Uint8List.fromList([2]),
+          rootId: 'cat-2',
+        ),
+      ]);
+
+      expect(controller.selectedCatalogs.length, equals(2));
+      expect(controller.selectedCatalogs[0].fileName, equals('catalog1.cat'));
+      expect(controller.selectedCatalogs[1].rootId, equals('cat-2'));
+    });
+
+    test('setSelectedCatalogs throws when exceeding max', () {
+      final controller = ImportSessionController();
+
+      expect(
+        () => controller.setSelectedCatalogs([
+          SelectedFile(fileName: 'c1.cat', bytes: Uint8List.fromList([1])),
+          SelectedFile(fileName: 'c2.cat', bytes: Uint8List.fromList([2])),
+          SelectedFile(fileName: 'c3.cat', bytes: Uint8List.fromList([3])),
+          SelectedFile(fileName: 'c4.cat', bytes: Uint8List.fromList([4])),
+        ]),
+        throwsArgumentError,
+      );
+    });
+
+    test('addSelectedCatalog adds catalog', () {
+      final controller = ImportSessionController();
+
+      final added = controller.addSelectedCatalog(
+        SelectedFile(
+          fileName: 'catalog1.cat',
+          bytes: Uint8List.fromList([1]),
+        ),
+      );
+
+      expect(added, isTrue);
+      expect(controller.selectedCatalogs.length, equals(1));
+    });
+
+    test('addSelectedCatalog returns false when at max', () {
+      final controller = ImportSessionController();
+
+      // Add 3 catalogs (max)
+      controller.setSelectedCatalogs([
+        SelectedFile(fileName: 'c1.cat', bytes: Uint8List.fromList([1])),
+        SelectedFile(fileName: 'c2.cat', bytes: Uint8List.fromList([2])),
+        SelectedFile(fileName: 'c3.cat', bytes: Uint8List.fromList([3])),
+      ]);
+
+      // Try to add a 4th
+      final added = controller.addSelectedCatalog(
+        SelectedFile(fileName: 'c4.cat', bytes: Uint8List.fromList([4])),
+      );
+
+      expect(added, isFalse);
+      expect(controller.selectedCatalogs.length, equals(3));
+    });
+
+    test('removeSelectedCatalog removes by index', () {
+      final controller = ImportSessionController();
+
+      controller.setSelectedCatalogs([
+        SelectedFile(fileName: 'c1.cat', bytes: Uint8List.fromList([1])),
+        SelectedFile(fileName: 'c2.cat', bytes: Uint8List.fromList([2])),
+        SelectedFile(fileName: 'c3.cat', bytes: Uint8List.fromList([3])),
+      ]);
+
+      controller.removeSelectedCatalog(1);
+
+      expect(controller.selectedCatalogs.length, equals(2));
+      expect(controller.selectedCatalogs[0].fileName, equals('c1.cat'));
+      expect(controller.selectedCatalogs[1].fileName, equals('c3.cat'));
+    });
+
+    test('selectedCatalogs is unmodifiable', () {
+      final controller = ImportSessionController();
+
+      controller.setSelectedCatalogs([
+        SelectedFile(fileName: 'c1.cat', bytes: Uint8List.fromList([1])),
+      ]);
+
+      expect(
+        () => controller.selectedCatalogs.add(
+          SelectedFile(fileName: 'c2.cat', bytes: Uint8List.fromList([2])),
+        ),
+        throwsUnsupportedError,
+      );
+    });
+
+    test('clear() clears selectedCatalogs', () {
+      final controller = ImportSessionController();
+
+      controller.setSelectedCatalogs([
+        SelectedFile(fileName: 'c1.cat', bytes: Uint8List.fromList([1])),
+        SelectedFile(fileName: 'c2.cat', bytes: Uint8List.fromList([2])),
+      ]);
+
+      controller.clear();
+
+      expect(controller.selectedCatalogs, isEmpty);
+    });
+
+    test('indexBundles starts empty', () {
+      final controller = ImportSessionController();
+
+      expect(controller.indexBundles, isEmpty);
+    });
+
+    test('kMaxSelectedCatalogs constant is 3', () {
+      expect(kMaxSelectedCatalogs, equals(3));
+    });
+  });
+
+  group('ImportSessionController: legacy compatibility', () {
+    // ignore: deprecated_member_use_from_same_package
+    test('primaryCatalogFile returns first selected catalog', () {
+      final controller = ImportSessionController();
+
+      controller.setSelectedCatalogs([
+        SelectedFile(fileName: 'c1.cat', bytes: Uint8List.fromList([1])),
+        SelectedFile(fileName: 'c2.cat', bytes: Uint8List.fromList([2])),
+      ]);
+
+      // ignore: deprecated_member_use_from_same_package
+      expect(controller.primaryCatalogFile?.fileName, equals('c1.cat'));
+    });
+
+    // ignore: deprecated_member_use_from_same_package
+    test('primaryCatalogFile returns null when no catalogs', () {
+      final controller = ImportSessionController();
+
+      // ignore: deprecated_member_use_from_same_package
+      expect(controller.primaryCatalogFile, isNull);
+    });
+
+    // ignore: deprecated_member_use_from_same_package
+    test('setPrimaryCatalogFile sets single catalog', () {
+      final controller = ImportSessionController();
+
+      // ignore: deprecated_member_use_from_same_package
+      controller.setPrimaryCatalogFile(
+        SelectedFile(fileName: 'c1.cat', bytes: Uint8List.fromList([1])),
+      );
+
+      expect(controller.selectedCatalogs.length, equals(1));
+      expect(controller.selectedCatalogs[0].fileName, equals('c1.cat'));
+    });
+  });
 }
