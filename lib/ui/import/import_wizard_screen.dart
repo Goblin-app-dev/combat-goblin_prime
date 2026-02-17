@@ -51,9 +51,7 @@ class ImportWizardScreen extends StatelessWidget {
   Widget _buildBody(BuildContext context, ImportSessionController controller) {
     switch (controller.status) {
       case ImportStatus.idle:
-        return FilePickerView(
-          onFilesSelected: () => controller.attemptBuild(),
-        );
+        return const GitHubCatalogPickerView();
 
       case ImportStatus.preparing:
       case ImportStatus.building:

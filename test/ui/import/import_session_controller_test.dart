@@ -603,4 +603,346 @@ void registerMultiCatalogTests() {
       expect(controller.selectedCatalogs[0].fileName, equals('c1.cat'));
     });
   });
+
+  _loadRepoCatalogTreeTests();
+  _importFromGitHubTests();
 }
+
+// --- Enhanced mock for GitHub import tests ---
+
+/// Mock that supports fetchRepoTree() and fetchFileByPath() overrides.
+class _MockGitHubResolverService extends BsdResolverService {
+  RepoTreeResult? _mockTreeResult;
+  BsdResolverException? _mockTreeError;
+  BsdResolverException? _mockFileError;
+  BsdResolverException? _mockLastError;
+
+  /// Recorded paths passed to fetchFileByPath(), in call order.
+  final List<String> downloadedPaths = [];
+
+  /// File bytes to return, keyed by path. null value → failure.
+  final Map<String, Uint8List?> _fileBytes = {};
+
+  @override
+  BsdResolverException? get lastError => _mockLastError;
+
+  void setTree(RepoTreeResult tree) {
+    _mockTreeResult = tree;
+    _mockTreeError = null;
+  }
+
+  void setTreeError(BsdResolverException error) {
+    _mockTreeResult = null;
+    _mockTreeError = error;
+  }
+
+  /// Register bytes for a path. Pass null to simulate download failure.
+  void setFile(String path, Uint8List? bytes) {
+    _fileBytes[path] = bytes;
+  }
+
+  /// Error returned when a path is not in [_fileBytes] or its value is null.
+  void setFileError(BsdResolverException error) {
+    _mockFileError = error;
+  }
+
+  @override
+  Future<RepoTreeResult?> fetchRepoTree(SourceLocator sourceLocator) async {
+    if (_mockTreeError != null) {
+      _mockLastError = _mockTreeError;
+      return null;
+    }
+    _mockLastError = null;
+    return _mockTreeResult;
+  }
+
+  @override
+  Future<Uint8List?> fetchFileByPath(
+    SourceLocator sourceLocator,
+    String path,
+  ) async {
+    _mockLastError = null;
+    downloadedPaths.add(path);
+    final bytes = _fileBytes[path];
+    if (bytes == null) {
+      _mockLastError = _mockFileError;
+    }
+    return bytes;
+  }
+
+  @override
+  Future<Uint8List?> fetchCatalogBytes({
+    required SourceLocator sourceLocator,
+    required String targetId,
+  }) async =>
+      null;
+
+  @override
+  Future<RepoIndexResult?> buildRepoIndex(SourceLocator sourceLocator) async {
+    return const RepoIndexResult(
+      targetIdToPath: {},
+      pathToBlobSha: {},
+      targetIdToBlobSha: {},
+      unparsedFiles: [],
+    );
+  }
+}
+
+// --- Helpers ---
+
+const _kTestLocator = SourceLocator(
+  sourceKey: 'bsdata_wh40k',
+  sourceUrl: 'https://github.com/BSData/wh40k-10e',
+  branch: 'main',
+);
+
+final _emptyTree = RepoTreeResult(
+  entries: [],
+  fetchedAt: DateTime(2026, 2, 17),
+);
+
+RepoTreeResult _makeTree(List<String> paths) {
+  return RepoTreeResult(
+    entries: paths
+        .map((p) => RepoTreeEntry(
+              path: p,
+              blobSha: 'sha_${p.hashCode.abs()}',
+              extension: p.endsWith('.gst') ? '.gst' : '.cat',
+            ))
+        .toList(),
+    fetchedAt: DateTime(2026, 2, 17),
+  );
+}
+
+// --- loadRepoCatalogTree tests ---
+
+void _loadRepoCatalogTreeTests() {
+  group('ImportSessionController: loadRepoCatalogTree', () {
+    test('returns sorted RepoTreeResult on success', () async {
+      final mock = _MockGitHubResolverService();
+      mock.setTree(_makeTree([
+        'z-catalog.cat',
+        'a-catalog.cat',
+        'game.gst',
+        'b-catalog.cat',
+      ]));
+      final controller = ImportSessionController(bsdResolver: mock);
+
+      final result = await controller.loadRepoCatalogTree(_kTestLocator);
+
+      expect(result, isNotNull);
+      final paths = result!.entries.map((e) => e.path).toList();
+      expect(paths, equals([
+        'a-catalog.cat',
+        'b-catalog.cat',
+        'game.gst',
+        'z-catalog.cat',
+      ]));
+    });
+
+    test('does not change ImportStatus', () async {
+      final mock = _MockGitHubResolverService();
+      mock.setTree(_makeTree(['game.gst']));
+      final controller = ImportSessionController(bsdResolver: mock);
+
+      expect(controller.status, equals(ImportStatus.idle));
+      await controller.loadRepoCatalogTree(_kTestLocator);
+      expect(controller.status, equals(ImportStatus.idle));
+    });
+
+    test('sets resolverError on rate-limit failure and returns null', () async {
+      const rateLimit = BsdResolverException(
+        code: BsdResolverErrorCode.rateLimitExceeded,
+        message: 'Rate limit exceeded',
+      );
+      final mock = _MockGitHubResolverService();
+      mock.setTreeError(rateLimit);
+      final controller = ImportSessionController(bsdResolver: mock);
+
+      final result = await controller.loadRepoCatalogTree(_kTestLocator);
+
+      expect(result, isNull);
+      expect(controller.resolverError, isNotNull);
+      expect(
+        controller.resolverError!.code,
+        equals(BsdResolverErrorCode.rateLimitExceeded),
+      );
+      // Status must remain idle — tree browsing is view-local state
+      expect(controller.status, equals(ImportStatus.idle));
+    });
+
+    test('clears resolverError before each call', () async {
+      const rateLimit = BsdResolverException(
+        code: BsdResolverErrorCode.rateLimitExceeded,
+        message: 'Rate limit exceeded',
+      );
+      final mock = _MockGitHubResolverService();
+      final controller = ImportSessionController(bsdResolver: mock);
+
+      // First call fails
+      mock.setTreeError(rateLimit);
+      await controller.loadRepoCatalogTree(_kTestLocator);
+      expect(controller.resolverError, isNotNull);
+
+      // Second call succeeds — resolverError must be cleared
+      mock.setTree(_makeTree(['game.gst']));
+      final result = await controller.loadRepoCatalogTree(_kTestLocator);
+      expect(result, isNotNull);
+      expect(controller.resolverError, isNull);
+    });
+
+    test('returns only gst and cat files sorted lexicographically', () async {
+      final mock = _MockGitHubResolverService();
+      mock.setTree(_makeTree(['Chaos.cat', 'Alpha.cat', 'Wh40k.gst']));
+      final controller = ImportSessionController(bsdResolver: mock);
+
+      final result = await controller.loadRepoCatalogTree(_kTestLocator);
+
+      expect(result, isNotNull);
+      expect(result!.gameSystemFiles.map((e) => e.path).toList(),
+          equals(['Wh40k.gst']));
+      expect(result.catalogFiles.map((e) => e.path).toList(),
+          equals(['Alpha.cat', 'Chaos.cat']));
+    });
+  });
+}
+
+// --- importFromGitHub tests ---
+
+void _importFromGitHubTests() {
+  group('ImportSessionController: importFromGitHub', () {
+    test('throws ArgumentError when catPaths exceeds kMaxSelectedCatalogs',
+        () async {
+      final mock = _MockGitHubResolverService();
+      final controller = ImportSessionController(bsdResolver: mock);
+
+      expect(
+        () => controller.importFromGitHub(
+          sourceLocator: _kTestLocator,
+          gstPath: 'game.gst',
+          catPaths: ['a.cat', 'b.cat', 'c.cat', 'd.cat'],
+          repoTree: _emptyTree,
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('transitions to failed when .gst download fails', () async {
+      const networkError = BsdResolverException(
+        code: BsdResolverErrorCode.networkError,
+        message: 'Network error',
+      );
+      final mock = _MockGitHubResolverService();
+      mock.setFileError(networkError);
+      final controller = ImportSessionController(bsdResolver: mock);
+
+      await controller.importFromGitHub(
+        sourceLocator: _kTestLocator,
+        gstPath: 'game.gst',
+        catPaths: ['a.cat'],
+        repoTree: _emptyTree,
+      );
+
+      expect(controller.status, equals(ImportStatus.failed));
+      expect(controller.resolverError, isNotNull);
+      expect(controller.indexBundles, isEmpty);
+    });
+
+    test('transitions to failed when .cat download fails (no partial state)',
+        () async {
+      final mock = _MockGitHubResolverService();
+      // .gst succeeds
+      mock.setFile('game.gst', Uint8List.fromList([1, 2, 3]));
+      // .cat not registered → returns null
+      mock.setFileError(const BsdResolverException(
+        code: BsdResolverErrorCode.notFound,
+        message: 'File not found',
+      ));
+      final controller = ImportSessionController(bsdResolver: mock);
+
+      await controller.importFromGitHub(
+        sourceLocator: _kTestLocator,
+        gstPath: 'game.gst',
+        catPaths: ['a.cat'],
+        repoTree: _emptyTree,
+      );
+
+      expect(controller.status, equals(ImportStatus.failed));
+      expect(controller.indexBundles, isEmpty);
+    });
+
+    test('sets sourceLocator from argument', () async {
+      final mock = _MockGitHubResolverService();
+      // fail fast so we don't run the pipeline
+      mock.setFileError(const BsdResolverException(
+        code: BsdResolverErrorCode.networkError,
+        message: 'fail',
+      ));
+      final controller = ImportSessionController(bsdResolver: mock);
+
+      await controller.importFromGitHub(
+        sourceLocator: _kTestLocator,
+        gstPath: 'game.gst',
+        catPaths: ['a.cat'],
+        repoTree: _emptyTree,
+      );
+
+      expect(controller.sourceLocator, equals(_kTestLocator));
+    });
+
+    test('downloads .gst before .cat files, in catPaths order', () async {
+      final mock = _MockGitHubResolverService();
+      mock.setFile('game.gst', Uint8List.fromList([1]));
+      // cats fail so pipeline doesn't run
+      mock.setFileError(const BsdResolverException(
+        code: BsdResolverErrorCode.networkError,
+        message: 'fail',
+      ));
+      final controller = ImportSessionController(bsdResolver: mock);
+
+      await controller.importFromGitHub(
+        sourceLocator: _kTestLocator,
+        gstPath: 'game.gst',
+        catPaths: ['a.cat', 'b.cat'],
+        repoTree: _emptyTree,
+      );
+
+      // .gst downloaded first; cats in provided order
+      expect(mock.downloadedPaths.first, equals('game.gst'));
+      // Only one .cat attempted before failure
+      expect(mock.downloadedPaths.length, greaterThanOrEqualTo(2));
+      expect(mock.downloadedPaths[1], equals('a.cat'));
+    });
+
+    test('enforces max kMaxSelectedCatalogs strictly', () async {
+      final mock = _MockGitHubResolverService();
+      final controller = ImportSessionController(bsdResolver: mock);
+
+      // Exactly at limit — should not throw
+      mock.setFileError(const BsdResolverException(
+        code: BsdResolverErrorCode.networkError,
+        message: 'fail',
+      ));
+
+      await controller.importFromGitHub(
+        sourceLocator: _kTestLocator,
+        gstPath: 'game.gst',
+        catPaths: ['a.cat', 'b.cat', 'c.cat'],
+        repoTree: _emptyTree,
+      );
+
+      // Over limit — must throw
+      expect(
+        () => controller.importFromGitHub(
+          sourceLocator: _kTestLocator,
+          gstPath: 'game.gst',
+          catPaths: ['a.cat', 'b.cat', 'c.cat', 'd.cat'],
+          repoTree: _emptyTree,
+        ),
+        throwsArgumentError,
+      );
+    });
+  });
+}
+
+

@@ -1,34 +1,164 @@
-import 'dart:typed_data';
-
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import 'package:combat_goblin_prime/modules/m1_acquire/models/source_locator.dart';
 import '../import_session_controller.dart';
 import '../import_session_provider.dart';
 
-/// View for selecting game system and catalog files.
-class FilePickerView extends StatefulWidget {
-  final VoidCallback? onFilesSelected;
+/// Phase of the GitHub catalog picker UI.
+enum _PickerPhase {
+  /// User typing repo URL.
+  entering,
 
-  const FilePickerView({
-    super.key,
-    this.onFilesSelected,
-  });
+  /// Tree fetch in progress.
+  loading,
 
-  @override
-  State<FilePickerView> createState() => _FilePickerViewState();
+  /// Tree fetched; user selecting files.
+  selecting,
+
+  /// Fetch failed; showing error with retry.
+  error,
 }
 
-class _FilePickerViewState extends State<FilePickerView> {
-  final _repoUrlController = TextEditingController();
-  bool _showRepoConfig = false;
+/// Primary import entry point — fetches a GitHub repository tree,
+/// auto-selects the .gst if exactly one exists, shows .cat checkboxes
+/// (max [kMaxSelectedCatalogs]), then triggers [importFromGitHub].
+///
+/// Boundary: must NOT import HTTP or storage classes.
+/// All network and storage delegation goes through [ImportSessionController].
+class GitHubCatalogPickerView extends StatefulWidget {
+  const GitHubCatalogPickerView({super.key});
+
+  @override
+  State<GitHubCatalogPickerView> createState() =>
+      _GitHubCatalogPickerViewState();
+}
+
+class _GitHubCatalogPickerViewState extends State<GitHubCatalogPickerView> {
+  static const _defaultRepoUrl = 'https://github.com/BSData/wh40k-10e';
+
+  final _urlController =
+      TextEditingController(text: _defaultRepoUrl);
+  final _tokenController = TextEditingController();
+
+  _PickerPhase _phase = _PickerPhase.entering;
+  RepoTreeResult? _tree;
+  String? _selectedGstPath;
+  final Set<String> _selectedCatPaths = {};
+  String? _errorMessage;
 
   @override
   void dispose() {
-    _repoUrlController.dispose();
+    _urlController.dispose();
+    _tokenController.dispose();
     super.dispose();
   }
+
+  // --- Source locator helpers ---
+
+  SourceLocator? _buildSourceLocator(String url) {
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null || uri.host != 'github.com') return null;
+    final segments = uri.pathSegments;
+    if (segments.length < 2) return null;
+    return SourceLocator(
+      sourceKey: '${segments[0]}_${segments[1]}',
+      sourceUrl: url.trim(),
+    );
+  }
+
+  // --- Actions ---
+
+  Future<void> _doFetch() async {
+    final loc = _buildSourceLocator(_urlController.text);
+    if (loc == null) {
+      setState(() {
+        _phase = _PickerPhase.error;
+        _errorMessage =
+            'Enter a valid GitHub URL (e.g. https://github.com/owner/repo).';
+      });
+      return;
+    }
+
+    setState(() {
+      _phase = _PickerPhase.loading;
+      _errorMessage = null;
+    });
+
+    final controller = ImportSessionProvider.of(context);
+
+    // Apply token if entered
+    final token = _tokenController.text.trim();
+    controller.setAuthToken(token.isEmpty ? null : token);
+
+    final tree = await controller.loadRepoCatalogTree(loc);
+
+    if (!mounted) return;
+
+    if (tree == null) {
+      setState(() {
+        _phase = _PickerPhase.error;
+        _errorMessage = controller.resolverError?.userMessage ??
+            'Failed to fetch repository tree.';
+      });
+      return;
+    }
+
+    // Auto-select .gst if exactly one exists
+    String? autoGst;
+    if (tree.gameSystemFiles.length == 1) {
+      autoGst = tree.gameSystemFiles.first.path;
+    }
+
+    setState(() {
+      _phase = _PickerPhase.selecting;
+      _tree = tree;
+      _selectedGstPath = autoGst;
+      _selectedCatPaths.clear();
+    });
+  }
+
+  Future<void> _doImport() async {
+    final tree = _tree;
+    final gstPath = _selectedGstPath;
+    if (tree == null || gstPath == null || _selectedCatPaths.isEmpty) return;
+
+    final loc = _buildSourceLocator(_urlController.text);
+    if (loc == null) return;
+
+    final controller = ImportSessionProvider.of(context);
+
+    // catPaths in deterministic order: sort selected paths lexicographically
+    final catPaths = _selectedCatPaths.toList()..sort();
+
+    await controller.importFromGitHub(
+      sourceLocator: loc,
+      gstPath: gstPath,
+      catPaths: catPaths,
+      repoTree: tree,
+    );
+  }
+
+  void _toggleCat(String path) {
+    setState(() {
+      if (_selectedCatPaths.contains(path)) {
+        _selectedCatPaths.remove(path);
+      } else if (_selectedCatPaths.length < kMaxSelectedCatalogs) {
+        _selectedCatPaths.add(path);
+      } else {
+        // Show snackbar — do not add
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Maximum $kMaxSelectedCatalogs catalogs selected.',
+            ),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    });
+  }
+
+  // --- Build ---
 
   @override
   Widget build(BuildContext context) {
@@ -39,420 +169,392 @@ class _FilePickerViewState extends State<FilePickerView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Previous session card (preserved; shown at top when available)
+          AnimatedBuilder(
+            animation: controller,
+            builder: (context, _) => _buildSessionCard(context, controller),
+          ),
+
           const Text(
-            'Select Files',
+            'Import from GitHub',
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           const Text(
-            'Choose a game system file (.gst) and up to 3 catalog files (.cat) to import.',
+            'Enter a BSData-format GitHub repository URL to browse and import catalogs.',
           ),
           const SizedBox(height: 24),
 
-          // Game System File
-          _FileSelectionCard(
-            title: 'Game System',
-            subtitle: '.gst file',
-            icon: Icons.sports_esports,
-            allowedExtension: 'gst',
-            selectedFile: controller.gameSystemFile,
-            onFilePicked: (name, bytes, path) {
-              controller.setGameSystemFile(
-                SelectedFile(fileName: name, bytes: bytes, filePath: path),
-              );
-            },
+          // URL field
+          TextField(
+            controller: _urlController,
+            decoration: const InputDecoration(
+              labelText: 'GitHub Repository URL',
+              hintText: 'https://github.com/BSData/wh40k-10e',
+              prefixIcon: Icon(Icons.link),
+              border: OutlineInputBorder(),
+            ),
+            onSubmitted: (_) => _doFetch(),
+            enabled: _phase != _PickerPhase.loading,
+          ),
+          const SizedBox(height: 12),
+
+          // Auth token field (optional, inline)
+          TextField(
+            controller: _tokenController,
+            decoration: const InputDecoration(
+              labelText: 'Personal Access Token (optional)',
+              hintText: 'ghp_...',
+              prefixIcon: Icon(Icons.key),
+              border: OutlineInputBorder(),
+            ),
+            obscureText: true,
+            enabled: _phase != _PickerPhase.loading,
           ),
           const SizedBox(height: 16),
 
-          // Selected Catalogs (up to kMaxSelectedCatalogs)
-          ...List.generate(controller.selectedCatalogs.length, (index) {
-            final catalog = controller.selectedCatalogs[index];
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: _FileSelectionCard(
-                title: 'Catalog ${index + 1}',
-                subtitle: '.cat file',
-                icon: Icons.folder_open,
-                allowedExtension: 'cat',
-                selectedFile: catalog,
-                onFilePicked: (name, bytes, path) {
-                  final updated = List<SelectedFile>.from(
-                    controller.selectedCatalogs,
-                  );
-                  updated[index] = SelectedFile(
-                    fileName: name,
-                    bytes: bytes,
-                    filePath: path,
-                  );
-                  controller.setSelectedCatalogs(updated);
-                },
-                onRemove: controller.selectedCatalogs.length > 1
-                    ? () => controller.removeSelectedCatalog(index)
-                    : null,
-              ),
-            );
-          }),
-
-          // Initial catalog picker (when none selected yet)
-          if (controller.selectedCatalogs.isEmpty)
-            _FileSelectionCard(
-              title: 'Catalog',
-              subtitle: '.cat file',
-              icon: Icons.folder_open,
-              allowedExtension: 'cat',
-              selectedFile: null,
-              onFilePicked: (name, bytes, path) {
-                controller.addSelectedCatalog(
-                  SelectedFile(fileName: name, bytes: bytes, filePath: path),
-                );
-              },
+          // Fetch button
+          if (_phase == _PickerPhase.entering ||
+              _phase == _PickerPhase.error) ...[
+            FilledButton.icon(
+              onPressed: _doFetch,
+              icon: const Icon(Icons.cloud_download),
+              label: const Text('Fetch Repository'),
             ),
+          ],
 
-          // "Add Catalog" button (when under max and at least one exists)
-          if (controller.selectedCatalogs.isNotEmpty &&
-              controller.selectedCatalogs.length < kMaxSelectedCatalogs)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: OutlinedButton.icon(
-                onPressed: () => _pickAndAddCatalog(context, controller),
-                icon: const Icon(Icons.add),
-                label: Text(
-                  'Add Catalog (${controller.selectedCatalogs.length}/$kMaxSelectedCatalogs)',
-                ),
+          // Loading indicator
+          if (_phase == _PickerPhase.loading) ...[
+            const Center(
+              child: Column(
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 12),
+                  Text('Fetching repository tree...'),
+                ],
               ),
             ),
-          const SizedBox(height: 24),
+          ],
 
-          // Repository Configuration (collapsible)
-          Card(
-            child: ExpansionTile(
-              leading: const Icon(Icons.cloud_download),
-              title: const Text('Repository Configuration'),
-              subtitle: Text(
-                _showRepoConfig
-                    ? 'Configure BSData repository for auto-resolution'
-                    : 'Optional: auto-resolve dependencies',
-              ),
-              initiallyExpanded: _showRepoConfig,
-              onExpansionChanged: (expanded) {
-                setState(() => _showRepoConfig = expanded);
-              },
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      TextField(
-                        controller: _repoUrlController,
-                        decoration: const InputDecoration(
-                          labelText: 'GitHub Repository URL',
-                          hintText: 'https://github.com/BSData/wh40k-10e',
-                          prefixIcon: Icon(Icons.link),
-                          border: OutlineInputBorder(),
-                        ),
-                        onChanged: (_) => _updateSourceLocator(controller),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'If provided, missing dependencies will be automatically '
-                        'fetched from this repository.',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 32),
+          // Error state
+          if (_phase == _PickerPhase.error && _errorMessage != null) ...[
+            _buildErrorBanner(context),
+          ],
 
-          // Reload Last Session Button (if available)
-          AnimatedBuilder(
-            animation: controller,
-            builder: (context, _) {
-              if (!controller.hasPersistedSession) {
-                return const SizedBox.shrink();
-              }
-
-              final session = controller.persistedSession;
-              return Card(
-                color: Theme.of(context).colorScheme.secondaryContainer,
-                margin: const EdgeInsets.only(bottom: 16),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.history,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSecondaryContainer,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Previous Session Available',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSecondaryContainer,
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.close),
-                            iconSize: 18,
-                            onPressed: () => controller.clearPersistedSession(),
-                            tooltip: 'Dismiss',
-                          ),
-                        ],
-                      ),
-                      if (session != null) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          'Last used: ${_formatDate(session.savedAt)}',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      FilledButton.tonal(
-                        onPressed: () => controller.reloadLastSession(),
-                        child: const Text('Reload Last Pack'),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-
-          // Import Button
-          AnimatedBuilder(
-            animation: controller,
-            builder: (context, _) {
-              final canImport = controller.gameSystemFile != null &&
-                  controller.selectedCatalogs.isNotEmpty;
-
-              return FilledButton.icon(
-                onPressed: canImport ? widget.onFilesSelected : null,
-                icon: const Icon(Icons.upload_file),
-                label: Text(
-                  controller.selectedCatalogs.length <= 1
-                      ? 'Import Pack'
-                      : 'Import ${controller.selectedCatalogs.length} Packs',
-                ),
-              );
-            },
-          ),
+          // Selection UI
+          if (_phase == _PickerPhase.selecting && _tree != null) ...[
+            _buildSelectionUI(context, _tree!),
+          ],
         ],
       ),
     );
   }
 
-  Future<void> _pickAndAddCatalog(
-    BuildContext context,
-    ImportSessionController controller,
-  ) async {
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['cat'],
-        withData: true,
-      );
-
-      if (result == null || result.files.isEmpty) return;
-
-      final file = result.files.first;
-      final bytes = file.bytes;
-      if (bytes == null || bytes.isEmpty) {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not read file data.')),
-        );
-        return;
-      }
-
-      final added = controller.addSelectedCatalog(
-        SelectedFile(
-          fileName: file.name,
-          bytes: Uint8List.fromList(bytes),
-          filePath: file.path,
-        ),
-      );
-
-      if (!added && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Maximum $kMaxSelectedCatalogs catalogs already selected.',
+  Widget _buildErrorBanner(BuildContext context) {
+    return Column(
+      children: [
+        Card(
+          color: Theme.of(context).colorScheme.errorContainer,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  color: Theme.of(context).colorScheme.onErrorContainer,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    _errorMessage!,
+                    style: TextStyle(
+                      color:
+                          Theme.of(context).colorScheme.onErrorContainer,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-        );
-      }
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to pick file: $e')),
-      );
-    }
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: _doFetch,
+          icon: const Icon(Icons.refresh),
+          label: const Text('Retry'),
+        ),
+      ],
+    );
   }
 
-  void _updateSourceLocator(ImportSessionController controller) {
-    final url = _repoUrlController.text.trim();
-    if (url.isEmpty) {
-      return;
-    }
+  Widget _buildSelectionUI(BuildContext context, RepoTreeResult tree) {
+    final gstFiles = tree.gameSystemFiles;
+    final catFiles = tree.catalogFiles;
 
-    // Extract sourceKey from URL
-    final uri = Uri.tryParse(url);
-    if (uri == null || uri.host != 'github.com') return;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 8),
+        const Divider(),
+        const SizedBox(height: 8),
 
-    final segments = uri.pathSegments;
-    if (segments.length < 2) return;
+        // Game System section
+        _buildSectionHeader(
+          context,
+          icon: Icons.sports_esports,
+          label: 'Game System (.gst)',
+        ),
+        const SizedBox(height: 8),
 
-    final sourceKey = '${segments[0]}_${segments[1]}';
-    controller.setSourceLocator(SourceLocator(
-      sourceKey: sourceKey,
-      sourceUrl: url,
-    ));
-  }
-}
+        if (gstFiles.isEmpty)
+          _buildWarningText(context, 'No .gst file found in this repository.')
+        else if (gstFiles.length == 1)
+          _buildAutoSelectedGst(context, gstFiles.first.path)
+        else
+          _buildGstRadioList(context, gstFiles),
 
-/// Card for selecting a single file.
-class _FileSelectionCard extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final SelectedFile? selectedFile;
-  final String allowedExtension;
-  final void Function(String name, Uint8List bytes, String? path) onFilePicked;
-  final VoidCallback? onRemove;
+        const SizedBox(height: 16),
 
-  const _FileSelectionCard({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.selectedFile,
-    required this.allowedExtension,
-    required this.onFilePicked,
-    this.onRemove,
-  });
+        // Catalogs section
+        _buildSectionHeader(
+          context,
+          icon: Icons.folder_open,
+          label: 'Catalogs (.cat) — select up to $kMaxSelectedCatalogs',
+        ),
+        const SizedBox(height: 8),
 
-  @override
-  Widget build(BuildContext context) {
-    final hasFile = selectedFile != null;
+        if (catFiles.isEmpty)
+          _buildWarningText(context, 'No .cat files found in this repository.')
+        else
+          _buildCatCheckboxList(context, catFiles),
 
-    return Card(
-      child: InkWell(
-        onTap: () => _pickFile(context),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: hasFile
-                      ? Theme.of(context).colorScheme.primaryContainer
-                      : Theme.of(context).colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  hasFile ? Icons.check : icon,
-                  color: hasFile
-                      ? Theme.of(context).colorScheme.onPrimaryContainer
-                      : Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      hasFile ? selectedFile!.fileName : subtitle,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    if (hasFile)
-                      Text(
-                        _formatBytes(selectedFile!.bytes.length),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant,
-                            ),
-                      ),
-                  ],
-                ),
-              ),
-              if (onRemove != null)
-                IconButton(
-                  icon: const Icon(Icons.close, size: 18),
-                  onPressed: onRemove,
-                  tooltip: 'Remove',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                )
-              else
-                Icon(
-                  Icons.upload_file,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-            ],
+        const SizedBox(height: 24),
+
+        // Refetch option
+        TextButton.icon(
+          onPressed: () => setState(() {
+            _phase = _PickerPhase.entering;
+            _tree = null;
+            _selectedGstPath = null;
+            _selectedCatPaths.clear();
+          }),
+          icon: const Icon(Icons.edit),
+          label: const Text('Change repository'),
+        ),
+        const SizedBox(height: 8),
+
+        // Import button
+        FilledButton.icon(
+          onPressed: _canImport ? _doImport : null,
+          icon: const Icon(Icons.download),
+          label: Text(
+            _selectedCatPaths.isEmpty
+                ? 'Select catalogs to import'
+                : 'Import ${_selectedCatPaths.length == 1 ? '1 pack' : '${_selectedCatPaths.length} packs'}',
           ),
+        ),
+      ],
+    );
+  }
+
+  bool get _canImport =>
+      _selectedGstPath != null && _selectedCatPaths.isNotEmpty;
+
+  Widget _buildSectionHeader(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWarningText(BuildContext context, String message) {
+    return Text(
+      message,
+      style: TextStyle(
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+        fontStyle: FontStyle.italic,
+      ),
+    );
+  }
+
+  Widget _buildAutoSelectedGst(BuildContext context, String path) {
+    final fileName = path.split('/').last;
+    return Card(
+      color: Theme.of(context).colorScheme.primaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Icon(
+              Icons.check_circle,
+              color: Theme.of(context).colorScheme.onPrimaryContainer,
+              size: 20,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    fileName,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                  Text(
+                    'Auto-selected (only .gst in repo)',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onPrimaryContainer,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Future<void> _pickFile(BuildContext context) async {
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: [allowedExtension],
-        withData: true,
-      );
-
-      if (result == null || result.files.isEmpty) return;
-
-      final file = result.files.first;
-      final bytes = file.bytes;
-      if (bytes == null || bytes.isEmpty) {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not read file data.')),
+  Widget _buildGstRadioList(BuildContext context, List<RepoTreeEntry> gstFiles) {
+    return Column(
+      children: gstFiles.map((entry) {
+        final path = entry.path;
+        final fileName = path.split('/').last;
+        return RadioListTile<String>(
+          title: Text(fileName),
+          subtitle: Text(
+            path,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          value: path,
+          groupValue: _selectedGstPath,
+          onChanged: (v) => setState(() => _selectedGstPath = v),
+          dense: true,
+          contentPadding: EdgeInsets.zero,
         );
-        return;
-      }
-
-      onFilePicked(file.name, Uint8List.fromList(bytes), file.path);
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to pick file: $e')),
-      );
-    }
+      }).toList(),
+    );
   }
 
-  String _formatBytes(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  Widget _buildCatCheckboxList(
+    BuildContext context,
+    List<RepoTreeEntry> catFiles,
+  ) {
+    return Column(
+      children: catFiles.map((entry) {
+        final path = entry.path;
+        final fileName = path.split('/').last;
+        final isSelected = _selectedCatPaths.contains(path);
+        final atMax = _selectedCatPaths.length >= kMaxSelectedCatalogs;
+
+        return CheckboxListTile(
+          title: Text(fileName),
+          subtitle: path != fileName
+              ? Text(
+                  path,
+                  style: Theme.of(context).textTheme.bodySmall,
+                )
+              : null,
+          value: isSelected,
+          onChanged: (!isSelected && atMax)
+              ? (_) => ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Maximum $kMaxSelectedCatalogs catalogs selected.',
+                      ),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  )
+              : (_) => _toggleCat(path),
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildSessionCard(
+    BuildContext context,
+    ImportSessionController controller,
+  ) {
+    if (!controller.hasPersistedSession) {
+      return const SizedBox.shrink();
+    }
+
+    final session = controller.persistedSession;
+    return Card(
+      color: Theme.of(context).colorScheme.secondaryContainer,
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.history,
+                  color:
+                      Theme.of(context).colorScheme.onSecondaryContainer,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Previous Session Available',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSecondaryContainer,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  iconSize: 18,
+                  onPressed: () => controller.clearPersistedSession(),
+                  tooltip: 'Dismiss',
+                ),
+              ],
+            ),
+            if (session != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Last used: ${_formatDate(session.savedAt)}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+            const SizedBox(height: 12),
+            FilledButton.tonal(
+              onPressed: () => controller.reloadLastSession(),
+              child: const Text('Reload Last Pack'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
-/// Formats a DateTime for display.
+/// Formats a [DateTime] as a relative or absolute string for display.
 String _formatDate(DateTime date) {
   final now = DateTime.now();
   final diff = now.difference(date);
