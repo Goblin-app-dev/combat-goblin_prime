@@ -2,15 +2,58 @@ import 'package:flutter/material.dart';
 
 import 'package:combat_goblin_prime/modules/m9_index/m9_index.dart';
 import 'package:combat_goblin_prime/modules/m10_structured_search/m10_structured_search.dart';
+import 'package:combat_goblin_prime/services/multi_pack_search_service.dart';
 
-/// Search screen using M10 StructuredSearchService.
+/// Search screen supporting multiple IndexBundles.
+///
+/// When multiple bundles are provided, results are merged deterministically
+/// using [MultiPackSearchService].
 class SearchScreen extends StatefulWidget {
-  final IndexBundle indexBundle;
+  /// Single index bundle (legacy support).
+  @Deprecated('Use indexBundles instead for multi-pack support')
+  final IndexBundle? indexBundle;
+
+  /// Multiple index bundles keyed by pack identifier.
+  final Map<String, IndexBundle>? indexBundles;
+
+  /// Order of bundle keys for deterministic merging.
+  /// Defaults to alphabetical if not provided.
+  final List<String>? bundleOrder;
 
   const SearchScreen({
     super.key,
-    required this.indexBundle,
-  });
+    @Deprecated('Use indexBundles instead') this.indexBundle,
+    this.indexBundles,
+    this.bundleOrder,
+  }) : assert(
+          indexBundle != null || indexBundles != null,
+          'Either indexBundle or indexBundles must be provided',
+        );
+
+  /// Creates a search screen for a single index bundle.
+  factory SearchScreen.single({
+    Key? key,
+    required IndexBundle indexBundle,
+  }) {
+    return SearchScreen(
+      key: key,
+      indexBundles: {'default': indexBundle},
+      bundleOrder: const ['default'],
+    );
+  }
+
+  /// Creates a search screen for multiple index bundles.
+  factory SearchScreen.multi({
+    Key? key,
+    required Map<String, IndexBundle> indexBundles,
+    List<String>? bundleOrder,
+  }) {
+    return SearchScreen(
+      key: key,
+      indexBundles: indexBundles,
+      bundleOrder: bundleOrder,
+    );
+  }
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
@@ -18,11 +61,24 @@ class SearchScreen extends StatefulWidget {
 
 class _SearchScreenState extends State<SearchScreen> {
   final _searchController = TextEditingController();
-  final _searchService = StructuredSearchService();
+  final _multiPackService = MultiPackSearchService();
 
-  SearchResult? _result;
+  MultiPackSearchResult? _result;
   List<String> _suggestions = [];
   bool _showSuggestions = false;
+
+  /// Resolved bundles map.
+  Map<String, IndexBundle> get _bundles {
+    if (widget.indexBundles != null) {
+      return widget.indexBundles!;
+    }
+    // ignore: deprecated_member_use_from_same_package
+    if (widget.indexBundle != null) {
+      // ignore: deprecated_member_use_from_same_package
+      return {'default': widget.indexBundle!};
+    }
+    return const {};
+  }
 
   @override
   void dispose() {
@@ -39,9 +95,9 @@ class _SearchScreenState extends State<SearchScreen> {
       return;
     }
 
-    // Get suggestions for autocomplete
-    final suggestions = _searchService.suggest(
-      widget.indexBundle,
+    // Get suggestions for autocomplete across all bundles
+    final suggestions = _multiPackService.suggest(
+      _bundles,
       query,
       limit: 8,
     );
@@ -67,7 +123,11 @@ class _SearchScreenState extends State<SearchScreen> {
       sort: SearchSort.relevance,
     );
 
-    final result = _searchService.search(widget.indexBundle, request);
+    final result = _multiPackService.search(
+      _bundles,
+      request,
+      bundleOrder: widget.bundleOrder,
+    );
 
     setState(() {
       _result = result;
@@ -174,13 +234,29 @@ class _SearchScreenState extends State<SearchScreen> {
       itemCount: _result!.hits.length,
       itemBuilder: (context, index) {
         final hit = _result!.hits[index];
-        return _SearchResultCard(hit: hit);
+        return _MultiPackSearchResultCard(
+          hit: hit,
+          showPackInfo: _bundles.length > 1,
+        );
       },
     );
   }
 
   Widget _buildIndexSummary() {
-    final index = widget.indexBundle;
+    // Aggregate stats across all bundles
+    var totalUnits = 0;
+    var totalWeapons = 0;
+    var totalRules = 0;
+
+    for (final bundle in _bundles.values) {
+      totalUnits += bundle.units.length;
+      totalWeapons += bundle.weapons.length;
+      totalRules += bundle.rules.length;
+    }
+
+    final packCount = _bundles.length;
+    final packLabel = packCount == 1 ? 'Pack' : 'Packs';
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -194,14 +270,14 @@ class _SearchScreenState extends State<SearchScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              'Pack Loaded',
+              '$packCount $packLabel Loaded',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
             Text(
-              '${index.units.length} units, '
-              '${index.weapons.length} weapons, '
-              '${index.rules.length} rules',
+              '$totalUnits units, '
+              '$totalWeapons weapons, '
+              '$totalRules rules',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 24),
@@ -216,11 +292,15 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 }
 
-/// Card displaying a single search result.
-class _SearchResultCard extends StatelessWidget {
-  final SearchHit hit;
+/// Card displaying a multi-pack search result.
+class _MultiPackSearchResultCard extends StatelessWidget {
+  final MultiPackSearchHit hit;
+  final bool showPackInfo;
 
-  const _SearchResultCard({required this.hit});
+  const _MultiPackSearchResultCard({
+    required this.hit,
+    this.showPackInfo = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -230,13 +310,24 @@ class _SearchResultCard extends StatelessWidget {
         leading: _buildTypeIcon(),
         title: Text(hit.displayName),
         subtitle: Text(
-          '${hit.docType.name} • ${_formatMatchReasons()}',
+          _buildSubtitle(),
           style: Theme.of(context).textTheme.bodySmall,
         ),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => _showDetail(context),
       ),
     );
+  }
+
+  String _buildSubtitle() {
+    final parts = <String>[
+      hit.docType.name,
+      _formatMatchReasons(),
+    ];
+    if (showPackInfo) {
+      parts.add(hit.sourcePackKey);
+    }
+    return parts.join(' • ');
   }
 
   Widget _buildTypeIcon() {
@@ -293,6 +384,7 @@ class _SearchResultCard extends StatelessWidget {
             Text('Type: ${hit.docType.name}'),
             Text('ID: ${hit.docId}'),
             Text('Key: ${hit.canonicalKey}'),
+            if (showPackInfo) Text('Pack: ${hit.sourcePackKey}'),
             const SizedBox(height: 16),
             Text(
               'Match reasons: ${_formatMatchReasons()}',

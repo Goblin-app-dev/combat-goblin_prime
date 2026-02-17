@@ -6,16 +6,74 @@ import 'package:http/http.dart' as http;
 
 import 'package:combat_goblin_prime/modules/m1_acquire/models/source_locator.dart';
 
+/// Entry in the repository tree with path and blob SHA.
+class RepoTreeEntry {
+  /// Repository file path (e.g., "Imperium - Space Marines.cat").
+  final String path;
+
+  /// GitHub blob SHA for this file.
+  final String blobSha;
+
+  /// File extension (.gst or .cat).
+  final String extension;
+
+  const RepoTreeEntry({
+    required this.path,
+    required this.blobSha,
+    required this.extension,
+  });
+
+  /// Returns true if this is a game system file.
+  bool get isGameSystem => extension == '.gst';
+
+  /// Returns true if this is a catalog file.
+  bool get isCatalog => extension == '.cat';
+}
+
+/// Result of fetching repository tree.
+class RepoTreeResult {
+  /// All .gst and .cat files in the repository.
+  final List<RepoTreeEntry> entries;
+
+  /// Timestamp when tree was fetched.
+  final DateTime fetchedAt;
+
+  const RepoTreeResult({
+    required this.entries,
+    required this.fetchedAt,
+  });
+
+  /// Returns only game system files.
+  List<RepoTreeEntry> get gameSystemFiles =>
+      entries.where((e) => e.isGameSystem).toList();
+
+  /// Returns only catalog files.
+  List<RepoTreeEntry> get catalogFiles =>
+      entries.where((e) => e.isCatalog).toList();
+
+  /// Returns a map of path → blobSha for all entries.
+  Map<String, String> get pathToBlobSha =>
+      {for (final e in entries) e.path: e.blobSha};
+}
+
 /// Result of indexing a BSData repository.
 class RepoIndexResult {
   /// Maps targetId → repository file path (e.g., "Imperium - Space Marines.cat").
   final Map<String, String> targetIdToPath;
+
+  /// Maps path → blobSha for update detection.
+  final Map<String, String> pathToBlobSha;
+
+  /// Maps targetId → blobSha for efficient lookup.
+  final Map<String, String> targetIdToBlobSha;
 
   /// Files that could not be parsed (for diagnostics).
   final List<String> unparsedFiles;
 
   const RepoIndexResult({
     required this.targetIdToPath,
+    required this.pathToBlobSha,
+    required this.targetIdToBlobSha,
     required this.unparsedFiles,
   });
 }
@@ -160,10 +218,77 @@ class BsdResolverService {
     return result.targetIdToPath;
   }
 
+  /// Fetches the repository tree with all .gst and .cat files.
+  ///
+  /// Returns tree entries with blob SHAs for update detection.
+  /// Throws [BsdResolverException] on rate limit or network errors.
+  Future<RepoTreeResult?> fetchRepoTree(SourceLocator sourceLocator) async {
+    _lastError = null;
+
+    if (sourceLocator.sourceUrl.isEmpty) return null;
+
+    final repoInfo = _parseGitHubUrl(sourceLocator.sourceUrl);
+    if (repoInfo == null) return null;
+
+    final (owner, repo) = repoInfo;
+    final branch = sourceLocator.branch ?? 'main';
+
+    final treeUrl = Uri.parse(
+      'https://api.github.com/repos/$owner/$repo/git/trees/$branch?recursive=1',
+    );
+
+    final treeResponse = await _fetchWithRetry(
+      treeUrl,
+      headers: _buildApiHeaders(),
+      timeout: _treesTimeout,
+    );
+
+    if (treeResponse == null) {
+      return null;
+    }
+
+    if (treeResponse.statusCode != 200) {
+      _handleErrorResponse(treeResponse.statusCode, 'Trees API');
+      return null;
+    }
+
+    final treeData = json.decode(treeResponse.body) as Map<String, dynamic>;
+    final tree = treeData['tree'] as List<dynamic>? ?? [];
+
+    final entries = <RepoTreeEntry>[];
+    for (final item in tree) {
+      final path = item['path'] as String? ?? '';
+      final type = item['type'] as String? ?? '';
+      final sha = item['sha'] as String? ?? '';
+
+      if (type == 'blob') {
+        if (path.endsWith('.cat')) {
+          entries.add(RepoTreeEntry(
+            path: path,
+            blobSha: sha,
+            extension: '.cat',
+          ));
+        } else if (path.endsWith('.gst')) {
+          entries.add(RepoTreeEntry(
+            path: path,
+            blobSha: sha,
+            extension: '.gst',
+          ));
+        }
+      }
+    }
+
+    return RepoTreeResult(
+      entries: entries,
+      fetchedAt: DateTime.now().toUtc(),
+    );
+  }
+
   /// Builds repository index by fetching Trees API and parsing catalog ids.
   ///
   /// Uses Range header to fetch only first N bytes of each .cat file,
   /// then parses the root element to extract the catalogue id.
+  /// Also captures blob SHAs for update detection.
   ///
   /// Throws [BsdResolverException] on rate limit or network errors.
   Future<RepoIndexResult?> buildRepoIndex(SourceLocator sourceLocator) async {
@@ -201,24 +326,32 @@ class BsdResolverService {
     final treeData = json.decode(treeResponse.body) as Map<String, dynamic>;
     final tree = treeData['tree'] as List<dynamic>? ?? [];
 
-    // Find all .cat files
-    final catFiles = <String>[];
+    // Find all .cat files and capture blob SHAs
+    final catFiles = <String, String>{}; // path → blobSha
     for (final item in tree) {
       final path = item['path'] as String? ?? '';
       final type = item['type'] as String? ?? '';
+      final sha = item['sha'] as String? ?? '';
       if (type == 'blob' && path.endsWith('.cat')) {
-        catFiles.add(path);
+        catFiles[path] = sha;
       }
     }
 
     // Build targetId → path mapping
     final targetIdToPath = <String, String>{};
+    final targetIdToBlobSha = <String, String>{};
+    final pathToBlobSha = <String, String>{};
     final unparsedFiles = <String>[];
 
-    for (final path in catFiles) {
+    for (final entry in catFiles.entries) {
+      final path = entry.key;
+      final blobSha = entry.value;
+      pathToBlobSha[path] = blobSha;
+
       final targetId = await _extractCatalogId(owner, repo, branch, path);
       if (targetId != null) {
         targetIdToPath[targetId] = path;
+        targetIdToBlobSha[targetId] = blobSha;
       } else {
         unparsedFiles.add(path);
       }
@@ -226,6 +359,8 @@ class BsdResolverService {
 
     return RepoIndexResult(
       targetIdToPath: targetIdToPath,
+      pathToBlobSha: pathToBlobSha,
+      targetIdToBlobSha: targetIdToBlobSha,
       unparsedFiles: unparsedFiles,
     );
   }

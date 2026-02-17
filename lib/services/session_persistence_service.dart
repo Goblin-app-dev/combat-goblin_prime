@@ -3,13 +3,44 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+/// Persisted catalog entry for multi-catalog sessions.
+class PersistedCatalog {
+  /// Absolute path to the catalog file.
+  final String path;
+
+  /// Root ID extracted from the catalog (optional).
+  final String? rootId;
+
+  const PersistedCatalog({
+    required this.path,
+    this.rootId,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'path': path,
+        'rootId': rootId,
+      };
+
+  factory PersistedCatalog.fromJson(Map<String, dynamic> json) {
+    return PersistedCatalog(
+      path: json['path'] as String,
+      rootId: json['rootId'] as String?,
+    );
+  }
+}
+
 /// Persisted session state for reload functionality.
 class PersistedSession {
   /// Absolute path to the game system file.
   final String gameSystemPath;
 
-  /// Absolute path to the primary catalog file.
-  final String primaryCatalogPath;
+  /// Selected primary catalogs (up to 3).
+  final List<PersistedCatalog> selectedCatalogs;
+
+  /// Legacy: absolute path to primary catalog (for backwards compat).
+  @Deprecated('Use selectedCatalogs instead')
+  String get primaryCatalogPath =>
+      selectedCatalogs.isNotEmpty ? selectedCatalogs.first.path : '';
 
   /// Repository URL for BSData auto-resolution (optional).
   final String? repoUrl;
@@ -25,26 +56,66 @@ class PersistedSession {
 
   const PersistedSession({
     required this.gameSystemPath,
-    required this.primaryCatalogPath,
+    required this.selectedCatalogs,
     this.repoUrl,
     this.branch,
     this.dependencyPaths = const {},
     required this.savedAt,
   });
 
+  /// Legacy constructor for backwards compatibility.
+  factory PersistedSession.legacy({
+    required String gameSystemPath,
+    required String primaryCatalogPath,
+    String? repoUrl,
+    String? branch,
+    Map<String, String> dependencyPaths = const {},
+    required DateTime savedAt,
+  }) {
+    return PersistedSession(
+      gameSystemPath: gameSystemPath,
+      selectedCatalogs: [PersistedCatalog(path: primaryCatalogPath)],
+      repoUrl: repoUrl,
+      branch: branch,
+      dependencyPaths: dependencyPaths,
+      savedAt: savedAt,
+    );
+  }
+
   Map<String, dynamic> toJson() => {
         'gameSystemPath': gameSystemPath,
-        'primaryCatalogPath': primaryCatalogPath,
+        'selectedCatalogs':
+            selectedCatalogs.map((c) => c.toJson()).toList(),
         'repoUrl': repoUrl,
         'branch': branch,
         'dependencyPaths': dependencyPaths,
         'savedAt': savedAt.toIso8601String(),
+        // Legacy field for backwards compat
+        'primaryCatalogPath': selectedCatalogs.isNotEmpty
+            ? selectedCatalogs.first.path
+            : null,
       };
 
   factory PersistedSession.fromJson(Map<String, dynamic> json) {
+    // Handle legacy format (single primaryCatalogPath)
+    List<PersistedCatalog> catalogs;
+    if (json.containsKey('selectedCatalogs')) {
+      final catalogsList = json['selectedCatalogs'] as List<dynamic>;
+      catalogs = catalogsList
+          .map((c) => PersistedCatalog.fromJson(c as Map<String, dynamic>))
+          .toList();
+    } else if (json.containsKey('primaryCatalogPath')) {
+      // Legacy format
+      catalogs = [
+        PersistedCatalog(path: json['primaryCatalogPath'] as String),
+      ];
+    } else {
+      catalogs = const [];
+    }
+
     return PersistedSession(
       gameSystemPath: json['gameSystemPath'] as String,
-      primaryCatalogPath: json['primaryCatalogPath'] as String,
+      selectedCatalogs: catalogs,
       repoUrl: json['repoUrl'] as String?,
       branch: json['branch'] as String?,
       dependencyPaths: (json['dependencyPaths'] as Map<String, dynamic>?)
@@ -57,8 +128,13 @@ class PersistedSession {
   /// Checks if the persisted files still exist.
   Future<bool> validatePaths() async {
     final gsExists = await File(gameSystemPath).exists();
-    final catExists = await File(primaryCatalogPath).exists();
-    return gsExists && catExists;
+    if (!gsExists) return false;
+
+    for (final catalog in selectedCatalogs) {
+      final catExists = await File(catalog.path).exists();
+      if (!catExists) return false;
+    }
+    return true;
   }
 }
 

@@ -45,21 +45,50 @@ class SelectedFile {
   /// Absolute file path (for session persistence).
   final String? filePath;
 
+  /// Root ID extracted from the file (catalogue/gameSystem id attribute).
+  final String? rootId;
+
   const SelectedFile({
     required this.fileName,
     required this.bytes,
     this.filePath,
+    this.rootId,
   });
+
+  /// Creates a copy with updated fields.
+  SelectedFile copyWith({
+    String? fileName,
+    Uint8List? bytes,
+    String? filePath,
+    String? rootId,
+  }) {
+    return SelectedFile(
+      fileName: fileName ?? this.fileName,
+      bytes: bytes ?? this.bytes,
+      filePath: filePath ?? this.filePath,
+      rootId: rootId ?? this.rootId,
+    );
+  }
 }
+
+/// Maximum number of user-selected primary catalogs.
+const int kMaxSelectedCatalogs = 3;
 
 /// Controller for import session state.
 ///
 /// Manages:
-/// - Selected files (game system, primary catalog)
+/// - Selected files (game system, up to 3 primary catalogs)
 /// - Missing target IDs during dependency resolution
 /// - Build status progression
-/// - Cached BoundPackBundle and IndexBundle
+/// - Cached BoundPackBundle and IndexBundle (per catalog)
 /// - Repo mapping cache for BSData resolution
+///
+/// ## Multi-Catalog Support
+///
+/// Users may select up to [kMaxSelectedCatalogs] primary catalogs.
+/// Each selected catalog runs the M1-M9 pipeline independently,
+/// producing its own [IndexBundle]. Dependencies (library catalogs)
+/// are auto-resolved and do NOT count toward the 3-catalog limit.
 ///
 /// Uses ChangeNotifier for minimal state management without external deps.
 class ImportSessionController extends ChangeNotifier {
@@ -68,8 +97,15 @@ class ImportSessionController extends ChangeNotifier {
   SelectedFile? _gameSystemFile;
   SelectedFile? get gameSystemFile => _gameSystemFile;
 
-  SelectedFile? _primaryCatalogFile;
-  SelectedFile? get primaryCatalogFile => _primaryCatalogFile;
+  /// Selected primary catalogs (max [kMaxSelectedCatalogs]).
+  List<SelectedFile> _selectedCatalogs = const [];
+  List<SelectedFile> get selectedCatalogs => List.unmodifiable(_selectedCatalogs);
+
+  /// Legacy accessor for single-catalog compatibility.
+  /// Returns the first selected catalog, or null if none selected.
+  @Deprecated('Use selectedCatalogs instead for multi-catalog support')
+  SelectedFile? get primaryCatalogFile =>
+      _selectedCatalogs.isNotEmpty ? _selectedCatalogs.first : null;
 
   // --- Build State ---
 
@@ -93,14 +129,32 @@ class ImportSessionController extends ChangeNotifier {
 
   // --- Cached Bundles ---
 
-  RawPackBundle? _rawBundle;
-  RawPackBundle? get rawBundle => _rawBundle;
+  /// Raw bundles per selected catalog (keyed by catalog rootId or index).
+  final Map<String, RawPackBundle> _rawBundles = {};
+  Map<String, RawPackBundle> get rawBundles => Map.unmodifiable(_rawBundles);
 
-  BoundPackBundle? _boundBundle;
-  BoundPackBundle? get boundBundle => _boundBundle;
+  /// Bound bundles per selected catalog.
+  final Map<String, BoundPackBundle> _boundBundles = {};
+  Map<String, BoundPackBundle> get boundBundles => Map.unmodifiable(_boundBundles);
 
-  IndexBundle? _indexBundle;
-  IndexBundle? get indexBundle => _indexBundle;
+  /// Index bundles per selected catalog.
+  final Map<String, IndexBundle> _indexBundles = {};
+  Map<String, IndexBundle> get indexBundles => Map.unmodifiable(_indexBundles);
+
+  /// Legacy accessor for single-bundle compatibility.
+  @Deprecated('Use rawBundles instead for multi-catalog support')
+  RawPackBundle? get rawBundle =>
+      _rawBundles.isNotEmpty ? _rawBundles.values.first : null;
+
+  /// Legacy accessor for single-bundle compatibility.
+  @Deprecated('Use boundBundles instead for multi-catalog support')
+  BoundPackBundle? get boundBundle =>
+      _boundBundles.isNotEmpty ? _boundBundles.values.first : null;
+
+  /// Legacy accessor for single-bundle compatibility.
+  @Deprecated('Use indexBundles instead for multi-catalog support')
+  IndexBundle? get indexBundle =>
+      _indexBundles.isNotEmpty ? _indexBundles.values.first : null;
 
   // --- Resolved Dependencies Cache ---
 
@@ -176,10 +230,47 @@ class ImportSessionController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setPrimaryCatalogFile(SelectedFile file) {
-    _primaryCatalogFile = file;
+  /// Sets selected catalogs (replaces all).
+  ///
+  /// Throws [ArgumentError] if more than [kMaxSelectedCatalogs] catalogs.
+  void setSelectedCatalogs(List<SelectedFile> catalogs) {
+    if (catalogs.length > kMaxSelectedCatalogs) {
+      throw ArgumentError(
+        'Cannot select more than $kMaxSelectedCatalogs catalogs. '
+        'Got ${catalogs.length}.',
+      );
+    }
+    _selectedCatalogs = List.unmodifiable(catalogs);
     _reset();
     notifyListeners();
+  }
+
+  /// Adds a catalog to the selection.
+  ///
+  /// Returns false if already at max capacity.
+  bool addSelectedCatalog(SelectedFile catalog) {
+    if (_selectedCatalogs.length >= kMaxSelectedCatalogs) {
+      return false;
+    }
+    _selectedCatalogs = List.unmodifiable([..._selectedCatalogs, catalog]);
+    _reset();
+    notifyListeners();
+    return true;
+  }
+
+  /// Removes a catalog from the selection by index.
+  void removeSelectedCatalog(int index) {
+    if (index < 0 || index >= _selectedCatalogs.length) return;
+    final updated = List<SelectedFile>.from(_selectedCatalogs)..removeAt(index);
+    _selectedCatalogs = List.unmodifiable(updated);
+    _reset();
+    notifyListeners();
+  }
+
+  /// Legacy single-catalog setter for compatibility.
+  @Deprecated('Use setSelectedCatalogs instead for multi-catalog support')
+  void setPrimaryCatalogFile(SelectedFile file) {
+    setSelectedCatalogs([file]);
   }
 
   void setSourceLocator(SourceLocator locator) {
@@ -190,7 +281,7 @@ class ImportSessionController extends ChangeNotifier {
   /// Clear all state and start fresh.
   void clear() {
     _gameSystemFile = null;
-    _primaryCatalogFile = null;
+    _selectedCatalogs = const [];
     _sourceLocator = null;
     _reset();
     notifyListeners();
@@ -202,24 +293,25 @@ class ImportSessionController extends ChangeNotifier {
     _errorMessage = null;
     _missingTargetIds = const [];
     _resolvedCount = 0;
-    _rawBundle = null;
-    _boundBundle = null;
-    _indexBundle = null;
+    _rawBundles.clear();
+    _boundBundles.clear();
+    _indexBundles.clear();
     _resolvedDependencies.clear();
     _resolverError = null;
   }
 
   // --- Build Methods ---
 
-  /// Attempts to build the bundle.
+  /// Attempts to build bundles for all selected catalogs.
   ///
+  /// Each selected catalog runs the M1-M9 pipeline independently.
   /// On missing dependencies, transitions to [ImportStatus.resolvingDeps]
   /// and populates [missingTargetIds].
   ///
-  /// On success, runs full pipeline and caches IndexBundle.
+  /// On success, runs full pipeline for each catalog and caches IndexBundles.
   Future<void> attemptBuild() async {
-    if (_gameSystemFile == null || _primaryCatalogFile == null) {
-      _errorMessage = 'Please select both game system and catalog files.';
+    if (_gameSystemFile == null || _selectedCatalogs.isEmpty) {
+      _errorMessage = 'Please select a game system and at least one catalog.';
       _status = ImportStatus.failed;
       notifyListeners();
       return;
@@ -230,38 +322,68 @@ class ImportSessionController extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
 
-    try {
-      final acquireService = AcquireService();
+    // Build each selected catalog independently
+    final allMissingIds = <String>{};
 
-      final rawBundle = await acquireService.buildBundle(
-        gameSystemBytes: _gameSystemFile!.bytes,
-        gameSystemExternalFileName: _gameSystemFile!.fileName,
-        primaryCatalogBytes: _primaryCatalogFile!.bytes,
-        primaryCatalogExternalFileName: _primaryCatalogFile!.fileName,
-        requestDependencyBytes: _requestDependencyBytes,
-        source: _sourceLocator ?? _defaultSourceLocator(),
-      );
+    for (var i = 0; i < _selectedCatalogs.length; i++) {
+      final catalog = _selectedCatalogs[i];
+      final catalogKey = catalog.rootId ?? 'catalog_$i';
 
-      _rawBundle = rawBundle;
-      await _runPipeline(rawBundle);
-    } on AcquireFailure catch (e) {
-      if (e.missingTargetIds.isNotEmpty) {
-        _missingTargetIds = List.unmodifiable(e.missingTargetIds);
-        _status = ImportStatus.resolvingDeps;
-        _statusMessage =
-            'Finding dependencies... (0/${_missingTargetIds.length})';
-        notifyListeners();
-      } else {
+      // Skip if already built
+      if (_indexBundles.containsKey(catalogKey)) continue;
+
+      _statusMessage = 'Building catalog ${i + 1}/${_selectedCatalogs.length}...';
+      notifyListeners();
+
+      try {
+        final acquireService = AcquireService();
+
+        final rawBundle = await acquireService.buildBundle(
+          gameSystemBytes: _gameSystemFile!.bytes,
+          gameSystemExternalFileName: _gameSystemFile!.fileName,
+          primaryCatalogBytes: catalog.bytes,
+          primaryCatalogExternalFileName: catalog.fileName,
+          requestDependencyBytes: _requestDependencyBytes,
+          source: _sourceLocator ?? _defaultSourceLocator(),
+        );
+
+        _rawBundles[catalogKey] = rawBundle;
+        await _runPipeline(rawBundle, catalogKey);
+      } on AcquireFailure catch (e) {
+        if (e.missingTargetIds.isNotEmpty) {
+          allMissingIds.addAll(e.missingTargetIds);
+        } else {
+          _status = ImportStatus.failed;
+          _errorMessage = 'Catalog ${catalog.fileName}: ${e.message}';
+          _statusMessage = null;
+          notifyListeners();
+          return;
+        }
+      } catch (e) {
         _status = ImportStatus.failed;
-        _errorMessage = e.message;
+        _errorMessage = 'Catalog ${catalog.fileName}: $e';
         _statusMessage = null;
         notifyListeners();
+        return;
       }
-    } catch (e) {
-      _status = ImportStatus.failed;
-      _errorMessage = e.toString();
+    }
+
+    // If any missing dependencies, transition to resolution
+    if (allMissingIds.isNotEmpty) {
+      _missingTargetIds = List.unmodifiable(allMissingIds.toList()..sort());
+      _status = ImportStatus.resolvingDeps;
+      _statusMessage =
+          'Finding dependencies... (0/${_missingTargetIds.length})';
+      notifyListeners();
+      return;
+    }
+
+    // All catalogs built successfully
+    if (_indexBundles.length == _selectedCatalogs.length) {
+      _status = ImportStatus.success;
       _statusMessage = null;
       notifyListeners();
+      await _saveSession();
     }
   }
 
@@ -374,7 +496,7 @@ class ImportSessionController extends ChangeNotifier {
     return null;
   }
 
-  Future<void> _runPipeline(RawPackBundle rawBundle) async {
+  Future<void> _runPipeline(RawPackBundle rawBundle, String catalogKey) async {
     _status = ImportStatus.building;
     _statusMessage = 'Parsing files...';
     notifyListeners();
@@ -403,7 +525,7 @@ class ImportSessionController extends ChangeNotifier {
     // M5: Bind
     final bindService = BindService();
     final boundBundle = await bindService.bindBundle(linkedBundle: linkedBundle);
-    _boundBundle = boundBundle;
+    _boundBundles[catalogKey] = boundBundle;
 
     _statusMessage = 'Building search index...';
     notifyListeners();
@@ -411,14 +533,10 @@ class ImportSessionController extends ChangeNotifier {
     // M9: Index
     final indexService = IndexService();
     final indexBundle = indexService.buildIndex(boundBundle);
-    _indexBundle = indexBundle;
+    _indexBundles[catalogKey] = indexBundle;
 
-    _status = ImportStatus.success;
-    _statusMessage = null;
-    notifyListeners();
-
-    // Save session for future reload
-    await _saveSession();
+    // Note: Don't set success status here - let attemptBuild handle it
+    // after all catalogs are built
   }
 
   SourceLocator _defaultSourceLocator() {
@@ -453,12 +571,22 @@ class ImportSessionController extends ChangeNotifier {
       }
       final gsBytes = await gsFile.readAsBytes();
 
-      // Read primary catalog file
-      final catFile = File(_persistedSession!.primaryCatalogPath);
-      if (!await catFile.exists()) {
-        throw Exception('Primary catalog file no longer exists');
+      // Read all selected catalog files
+      final loadedCatalogs = <SelectedFile>[];
+      for (final persistedCatalog in _persistedSession!.selectedCatalogs) {
+        final catFile = File(persistedCatalog.path);
+        if (!await catFile.exists()) {
+          throw Exception(
+              'Catalog file no longer exists: ${persistedCatalog.path}');
+        }
+        final catBytes = await catFile.readAsBytes();
+        loadedCatalogs.add(SelectedFile(
+          fileName: catFile.uri.pathSegments.last,
+          bytes: catBytes,
+          filePath: persistedCatalog.path,
+          rootId: persistedCatalog.rootId,
+        ));
       }
-      final catBytes = await catFile.readAsBytes();
 
       // Set files
       _gameSystemFile = SelectedFile(
@@ -466,11 +594,7 @@ class ImportSessionController extends ChangeNotifier {
         bytes: gsBytes,
         filePath: _persistedSession!.gameSystemPath,
       );
-      _primaryCatalogFile = SelectedFile(
-        fileName: catFile.uri.pathSegments.last,
-        bytes: catBytes,
-        filePath: _persistedSession!.primaryCatalogPath,
-      );
+      _selectedCatalogs = List.unmodifiable(loadedCatalogs);
 
       // Set source locator if available
       if (_persistedSession!.repoUrl != null &&
@@ -513,14 +637,24 @@ class ImportSessionController extends ChangeNotifier {
   /// Called automatically on successful build if file paths are available.
   Future<void> _saveSession() async {
     if (_persistenceService == null) return;
-    if (_gameSystemFile?.filePath == null ||
-        _primaryCatalogFile?.filePath == null) {
-      return;
+    if (_gameSystemFile?.filePath == null) return;
+
+    // Build list of persisted catalogs (only those with file paths)
+    final persistedCatalogs = <PersistedCatalog>[];
+    for (final catalog in _selectedCatalogs) {
+      if (catalog.filePath != null) {
+        persistedCatalogs.add(PersistedCatalog(
+          path: catalog.filePath!,
+          rootId: catalog.rootId,
+        ));
+      }
     }
+
+    if (persistedCatalogs.isEmpty) return;
 
     final session = PersistedSession(
       gameSystemPath: _gameSystemFile!.filePath!,
-      primaryCatalogPath: _primaryCatalogFile!.filePath!,
+      selectedCatalogs: persistedCatalogs,
       repoUrl: _sourceLocator?.sourceUrl,
       branch: _sourceLocator?.branch,
       dependencyPaths: {}, // TODO: Track dependency paths if needed
