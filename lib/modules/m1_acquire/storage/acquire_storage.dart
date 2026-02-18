@@ -9,6 +9,11 @@ import '../models/source_file_metadata.dart';
 import '../models/source_file_type.dart';
 
 class AcquireStorage {
+  final Directory appDataRoot;
+
+  AcquireStorage({Directory? appDataRoot})
+      : appDataRoot = appDataRoot ?? Directory('appDataRoot');
+
   /// Rejects path segments that could escape the storage root.
   static void _validateSegment(String segment, String label) {
     if (segment.isEmpty) {
@@ -59,7 +64,6 @@ class AcquireStorage {
     final importedAt = DateTime.now().toUtc();
     final normalizedFileExtension =
         fileExtension.startsWith('.') ? fileExtension : '.${fileExtension}';
-    final appDataRoot = Directory('appDataRoot');
     final storedPath = fileType == SourceFileType.gst
         ? p.join(appDataRoot.path, 'gamesystem_cache', rootId,
             '$fileId$normalizedFileExtension')
@@ -154,15 +158,16 @@ class AcquireStorage {
   }
 
   Future<void> deleteCachedGameSystem() async {
-    final gamesystemCache = Directory('appDataRoot/gamesystem_cache');
+    final gamesystemCache =
+        Directory('${appDataRoot.path}/gamesystem_cache');
     if (await gamesystemCache.exists()) {
       await gamesystemCache.delete(recursive: true);
     }
   }
 
   Future<SourceFileMetadata?> readCachedGameSystemMetadata() async {
-    final metadataFile =
-        File('appDataRoot/gamesystem_cache/gamesystem_metadata.json');
+    final metadataFile = File(
+        '${appDataRoot.path}/gamesystem_cache/gamesystem_metadata.json');
     if (!await metadataFile.exists()) {
       return null;
     }

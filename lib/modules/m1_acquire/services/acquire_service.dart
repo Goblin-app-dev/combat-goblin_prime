@@ -12,6 +12,11 @@ import '../services/preflight_scan_service.dart';
 import '../storage/acquire_storage.dart';
 
 class AcquireService {
+  final AcquireStorage _storage;
+
+  AcquireService({AcquireStorage? storage})
+      : _storage = storage ?? AcquireStorage();
+
   Future<RawPackBundle> buildBundle({
     required List<int> gameSystemBytes,
     required String gameSystemExternalFileName,
@@ -22,7 +27,7 @@ class AcquireService {
     required SourceLocator source,
   }) async {
     final preflightScanService = PreflightScanService();
-    final acquireStorage = AcquireStorage();
+    final acquireStorage = _storage;
 
     final gameSystemPreflight = await preflightScanService.scanBytes(
       bytes: gameSystemBytes,
