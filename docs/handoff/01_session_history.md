@@ -6,7 +6,32 @@
 
 ---
 
-## What Happened in This Session
+## Session 3 — 2026-02-18
+
+**Branch:** `claude/github-catalog-picker-Py9xI`
+**Commits:** `484caa8`, `8b47baa`
+
+### What Happened
+
+#### 1. Icon Font Fix
+
+All icons in the app were rendering as boxes-with-X. Root cause: `pubspec.yaml` was missing the `flutter: uses-material-design: true` flag, so the Material icon font was never bundled. Added the flag; no external icon pack required.
+
+**File changed:** `pubspec.yaml` — added `flutter: uses-material-design: true`
+
+#### 2. Dependency Pre-Fetch Before Slot Ready
+
+Bug: when the user selected a catalog (e.g. `Tyranids.cat`), the slot would transition to `ready` without downloading its `catalogueLinks` dependencies (e.g. `Library - Tyranids`). The pipeline then discovered the missing deps, threw `AcquireFailure`, and `_autoResolveSlotDeps` attempted recovery — but this reactive cycle could leave deps undownloaded if rate-limited or if transitive deps were involved.
+
+Fix: `assignCatalogToSlot` now runs `PreflightScanService.scanBytes` on the downloaded primary bytes immediately after fetch, extracts all `catalogueLinks` targetIds, and calls `_bsdResolver.fetchCatalogBytes` for any not already in `_resolvedDependencies`. The slot only transitions to `SlotStatus.ready` after all reachable deps have been cached. The `_autoResolveSlotDeps` path is preserved as a safety net.
+
+**File changed:** `lib/ui/import/import_session_controller.dart`
+- Added import for `preflight_scan_service.dart`
+- Modified `assignCatalogToSlot` to pre-fetch deps before `SlotStatus.ready`
+
+---
+
+## What Happened in This Session (Session 2 — 2026-02-17)
 
 ### 1. Context Recovery
 
@@ -91,11 +116,11 @@ This was NOT started. This is where the next session should resume.
 
 - **"Did not boot to main screen"** — User reported app worked but no visible changes from multi-catalog feature. Root cause: the UI was wired to deprecated single-catalog APIs. This was fixed in commit `da3dfbe` (main.dart now uses `controller.indexBundles` + `SearchScreen.multi()`).
 - **Mojibake** — Encoding corruption in data/text assets. Documented in `CODEX_TASKS.md` as post-M10 follow-up. Not investigated this session.
-- **TODO at line 660** — `import_session_controller.dart`: dependency path tracking for session persistence is stubbed with empty map.
+- **TODO at line ~1420** — `import_session_controller.dart`: dependency path tracking for session persistence is stubbed with empty map.
 
 ---
 
-## File Change Summary
+## File Change Summary (Session 2 — 2026-02-17)
 
 | File | Change |
 |------|--------|
@@ -111,3 +136,10 @@ This was NOT started. This is where the next session should resume.
 | `lib/ui/search/search_screen.dart` | Multi-bundle support |
 | `lib/main.dart` | Updated to use indexBundles + SearchScreen.multi() |
 | `test/ui/import/import_session_controller_test.dart` | 38 tests (13 new) |
+
+## File Change Summary (Session 3 — 2026-02-18)
+
+| File | Change |
+|------|--------|
+| `pubspec.yaml` | Added `flutter: uses-material-design: true` to fix broken icons |
+| `lib/ui/import/import_session_controller.dart` | Pre-fetch catalogueLink deps in `assignCatalogToSlot` |

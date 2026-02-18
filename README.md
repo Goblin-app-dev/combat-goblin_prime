@@ -51,12 +51,12 @@ The Flutter app uses an **AppShell** with a navigation drawer hosting two screen
 
 The app manages `kMaxSelectedCatalogs` (currently 2) independent catalog slots. Each slot has a 1.5-step lifecycle:
 
-1. **Fetch-on-select** — assigning a catalog from the picker auto-fetches its bytes from GitHub
-2. **Explicit Load** — the user clicks Load (or Load All) to run the M2-M9 pipeline
+1. **Fetch-on-select** — assigning a catalog downloads the primary `.cat` bytes, then immediately scans its `catalogueLinks` and pre-fetches all declared dependency catalogs (e.g. `Library - Tyranids`) into the session cache. The slot only becomes `ready` once all reachable deps are cached.
+2. **Explicit Load** — the user clicks Load (or Load All) to run the M2-M9 pipeline. All required dependency bytes are already in cache, so the pipeline succeeds on its first attempt.
 
 Slot states: `empty → fetching → ready → building → loaded` (or `error` on failure).
 
-Slots are independent: one can be loaded while another is fetching.
+`SlotStatus.fetching` spans both the primary file download and dependency pre-fetch. Slots are independent: one can be loaded while another is fetching.
 
 #### Update Check
 
