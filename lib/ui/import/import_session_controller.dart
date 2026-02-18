@@ -9,10 +9,11 @@ import 'package:combat_goblin_prime/modules/m4_link/m4_link.dart';
 import 'package:combat_goblin_prime/modules/m5_bind/m5_bind.dart';
 import 'package:combat_goblin_prime/modules/m9_index/m9_index.dart';
 import 'package:combat_goblin_prime/services/bsd_resolver_service.dart';
+import 'package:combat_goblin_prime/services/github_sync_state.dart';
 import 'package:combat_goblin_prime/services/session_persistence_service.dart';
 
 export 'package:combat_goblin_prime/services/bsd_resolver_service.dart'
-    show BsdResolverException, BsdResolverErrorCode;
+    show BsdResolverException, BsdResolverErrorCode, RepoTreeEntry, RepoTreeResult;
 export 'package:combat_goblin_prime/services/session_persistence_service.dart'
     show PersistedSession, SessionPersistenceService;
 
@@ -173,6 +174,7 @@ class ImportSessionController extends ChangeNotifier {
 
   final BsdResolverService _bsdResolver;
   SessionPersistenceService? _persistenceService;
+  GitHubSyncStateService? _gitHubSyncStateService;
 
   // --- Rate Limit State ---
 
@@ -193,8 +195,10 @@ class ImportSessionController extends ChangeNotifier {
   ImportSessionController({
     BsdResolverService? bsdResolver,
     SessionPersistenceService? persistenceService,
+    GitHubSyncStateService? gitHubSyncStateService,
   })  : _bsdResolver = bsdResolver ?? BsdResolverService(),
-        _persistenceService = persistenceService;
+        _persistenceService = persistenceService,
+        _gitHubSyncStateService = gitHubSyncStateService;
 
   /// Sets the persistence service and checks for existing session.
   Future<void> initPersistence(SessionPersistenceService service) async {
@@ -221,6 +225,210 @@ class ImportSessionController extends ChangeNotifier {
 
   /// Returns true if an auth token is configured.
   bool get hasAuthToken => _bsdResolver.hasAuthToken;
+
+  // --- GitHub Import Methods ---
+
+  /// Fetches the repository tree for catalog browsing.
+  ///
+  /// Returns a [RepoTreeResult] with .gst and .cat entries sorted
+  /// lexicographically by path. Returns null on failure.
+  ///
+  /// Does NOT change [ImportStatus]; tree browsing is view-local state.
+  /// Sets [resolverError] on failure so the view can display it inline.
+  /// Idempotent: re-calling with the same locator makes a new fetch but
+  /// does not accumulate side effects.
+  Future<RepoTreeResult?> loadRepoCatalogTree(
+    SourceLocator sourceLocator,
+  ) async {
+    _resolverError = null;
+    final result = await _bsdResolver.fetchRepoTree(sourceLocator);
+    if (_bsdResolver.lastError != null) {
+      _resolverError = _bsdResolver.lastError;
+      notifyListeners();
+      return null;
+    }
+    if (result == null) return null;
+    // Return entries sorted lexicographically by path (determinism requirement).
+    final sortedEntries = result.entries.toList()
+      ..sort((a, b) => a.path.compareTo(b.path));
+    return RepoTreeResult(
+      entries: sortedEntries,
+      fetchedAt: result.fetchedAt,
+    );
+  }
+
+  /// Downloads selected .gst and .cat files from GitHub and runs the pipeline.
+  ///
+  /// Deterministic failure policy:
+  /// - .gst download failure → [ImportStatus.failed], return immediately
+  /// - Any .cat download failure → [ImportStatus.failed], return immediately
+  /// - Dep resolution failure after pipeline → [ImportStatus.resolvingDeps]
+  ///   with missing list stable-sorted; no partial index build
+  ///
+  /// Enforces [kMaxSelectedCatalogs]: throws [ArgumentError] if
+  /// catPaths.length > kMaxSelectedCatalogs.
+  ///
+  /// Catalogs are sorted lexicographically by path before processing,
+  /// ensuring deterministic order regardless of caller-provided ordering.
+  Future<void> importFromGitHub({
+    required SourceLocator sourceLocator,
+    required String gstPath,
+    required List<String> catPaths,
+    required RepoTreeResult repoTree,
+  }) async {
+    if (catPaths.length > kMaxSelectedCatalogs) {
+      throw ArgumentError(
+        'Cannot import more than $kMaxSelectedCatalogs catalogs. '
+        'Got ${catPaths.length}.',
+      );
+    }
+
+    // Sort locally for deterministic processing regardless of input order.
+    final sortedCatPaths = List<String>.of(catPaths)..sort();
+
+    _sourceLocator = sourceLocator;
+    _status = ImportStatus.preparing;
+    _statusMessage = 'Downloading game system...';
+    _errorMessage = null;
+    _resolverError = null;
+    notifyListeners();
+
+    // Download .gst (failure = abort entire flow)
+    final gstBytes =
+        await _bsdResolver.fetchFileByPath(sourceLocator, gstPath);
+    if (gstBytes == null) {
+      _resolverError = _bsdResolver.lastError;
+      _status = ImportStatus.failed;
+      _errorMessage =
+          _resolverError?.userMessage ?? 'Failed to download game system.';
+      _statusMessage = null;
+      notifyListeners();
+      return;
+    }
+
+    // Download each .cat (any failure = abort entire flow)
+    final catFiles = <SelectedFile>[];
+    for (var i = 0; i < sortedCatPaths.length; i++) {
+      final path = sortedCatPaths[i];
+      _statusMessage =
+          'Downloading catalog ${i + 1}/${sortedCatPaths.length}...';
+      notifyListeners();
+
+      final bytes =
+          await _bsdResolver.fetchFileByPath(sourceLocator, path);
+      if (bytes == null) {
+        _resolverError = _bsdResolver.lastError;
+        _status = ImportStatus.failed;
+        _errorMessage = _resolverError?.userMessage ??
+            'Failed to download: ${path.split('/').last}';
+        _statusMessage = null;
+        notifyListeners();
+        return;
+      }
+
+      catFiles.add(SelectedFile(
+        fileName: path.split('/').last,
+        bytes: bytes,
+      ));
+    }
+
+    // Install downloaded files into controller state
+    _gameSystemFile = SelectedFile(
+      fileName: gstPath.split('/').last,
+      bytes: gstBytes,
+    );
+    _selectedCatalogs = List.unmodifiable(catFiles);
+    _rawBundles.clear();
+    _boundBundles.clear();
+    _indexBundles.clear();
+    _resolvedDependencies.clear();
+    _missingTargetIds = const [];
+
+    // Run M1-M9 pipeline for each catalog
+    _statusMessage = 'Building catalogs...';
+    notifyListeners();
+    await attemptBuild();
+
+    // Auto-resolve dependencies if pipeline flagged missing deps
+    if (_status == ImportStatus.resolvingDeps) {
+      await resolveDependencies();
+    }
+
+    // On success, persist sync state with blob SHAs from the provided tree
+    if (_status == ImportStatus.success &&
+        _gitHubSyncStateService != null) {
+      await _persistGitHubSyncState(
+        sourceLocator: sourceLocator,
+        gstPath: gstPath,
+        catPaths: sortedCatPaths,
+        repoTree: repoTree,
+      );
+    }
+  }
+
+  /// Persists GitHub sync state after a successful import.
+  Future<void> _persistGitHubSyncState({
+    required SourceLocator sourceLocator,
+    required String gstPath,
+    required List<String> catPaths,
+    required RepoTreeResult repoTree,
+  }) async {
+    final service = _gitHubSyncStateService;
+    if (service == null) return;
+
+    final now = DateTime.now().toUtc();
+    final pathToBlobSha = repoTree.pathToBlobSha;
+
+    // Ensure repo entry exists before updating individual files
+    await service.updateRepoState(
+      sourceLocator.sourceKey,
+      RepoSyncState(
+        repoUrl: sourceLocator.sourceUrl,
+        branch: sourceLocator.branch ?? 'main',
+        lastTreeFetchAt: repoTree.fetchedAt,
+      ),
+    );
+
+    // Track .gst
+    final gstSha = pathToBlobSha[gstPath];
+    if (gstSha != null) {
+      await service.updateTrackedFile(
+        sourceLocator.sourceKey,
+        TrackedFile(
+          repoPath: gstPath,
+          fileType: 'gst',
+          blobSha: gstSha,
+          lastCheckedAt: now,
+        ),
+      );
+    }
+
+    // Track each .cat
+    for (final path in catPaths) {
+      final sha = pathToBlobSha[path];
+      if (sha != null) {
+        await service.updateTrackedFile(
+          sourceLocator.sourceKey,
+          TrackedFile(
+            repoPath: path,
+            fileType: 'cat',
+            blobSha: sha,
+            lastCheckedAt: now,
+          ),
+        );
+      }
+    }
+
+    // Persist session pack state
+    final primaryRootIds = _selectedCatalogs
+        .map((f) => f.rootId)
+        .whereType<String>()
+        .toList();
+    await service.updateSessionPack(SessionPackState(
+      selectedPrimaryRootIds: primaryRootIds,
+      indexBuiltAt: now,
+    ));
+  }
 
   // --- File Selection Methods ---
 

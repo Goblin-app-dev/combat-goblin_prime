@@ -165,14 +165,33 @@ The following are deprecated but preserved for backward compatibility:
 
 ---
 
+### GitHub Catalog Picker (Phase 11B — GitHub Import UI — APPROVED 2026-02-17)
+
+| Name | Type | Location | Purpose |
+|------|------|----------|---------|
+| `GitHubCatalogPickerView` | Widget class | `lib/ui/import/widgets/file_picker_view.dart` | Replaces FilePickerView; GitHub-primary import UI. No HTTP/storage imports. |
+| `loadRepoCatalogTree(SourceLocator)` | Method on ImportSessionController | `lib/ui/import/import_session_controller.dart` | Returns sorted RepoTreeResult?; idempotent; no ImportStatus change |
+| `importFromGitHub({sourceLocator, gstPath, catPaths, repoTree})` | Method on ImportSessionController | `lib/ui/import/import_session_controller.dart` | Downloads files in one pass; enforces 3-catalog limit; deterministic failure policy |
+| `fetchFileByPath(SourceLocator, String)` | Public method on BsdResolverService | `lib/services/bsd_resolver_service.dart` | Returns raw bytes; no storage side effects; replaces private _fetchFileContent() for external callers |
+
+### GitHub Catalog Picker — Constraints
+
+- `GitHubCatalogPickerView` must not import `package:http/http.dart` or any storage service
+- `loadRepoCatalogTree()` must return entries sorted lexicographically by path
+- `importFromGitHub()` must enforce `catPaths.length <= kMaxSelectedCatalogs`
+- `fetchFileByPath()` must clear `_lastError` before each call (consistent with existing service pattern)
+
+---
+
 ## File Locations
 
 | File | Purpose |
 |------|---------|
 | `lib/services/github_sync_state.dart` | GitHub sync state types and persistence |
 | `lib/services/multi_pack_search_service.dart` | Multi-pack search service |
-| `lib/services/bsd_resolver_service.dart` | Extended with tree fetch methods |
-| `lib/ui/import/import_session_controller.dart` | Extended with multi-catalog support |
+| `lib/services/bsd_resolver_service.dart` | Extended with tree fetch methods + fetchFileByPath() |
+| `lib/ui/import/import_session_controller.dart` | Extended with multi-catalog support + loadRepoCatalogTree() + importFromGitHub() |
+| `lib/ui/import/widgets/file_picker_view.dart` | GitHubCatalogPickerView (replaces FilePickerView) |
 | `lib/ui/search/search_screen.dart` | Extended with multi-bundle support |
 
 ---
@@ -182,6 +201,7 @@ The following are deprecated but preserved for backward compatibility:
 - [x] Names reviewed and approved (2026-02-17)
 - [x] Glossary entries added (2026-02-17)
 - [x] Name change log updated (2026-02-17)
+- [x] GitHub Catalog Picker names approved (2026-02-17)
 - [x] Implementation may proceed
 
 ---

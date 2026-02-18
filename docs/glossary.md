@@ -310,6 +310,18 @@ Single file entry from GitHub Trees API response. Contains path, blobSha, size. 
 ## Repo Tree Result (Phase 11B — BsdResolver Extension)
 Complete result of fetching GitHub repository tree. Contains entries list, pathToBlobSha map, targetIdToBlobSha map. Extends BsdResolverService capabilities for update detection.
 
+## GitHub Catalog Picker View (Phase 11B — GitHub Import UI)
+Widget replacing FilePickerView as the primary import entry point. Presents a GitHub URL field (prepopulated with BSData/wh40k-10e), fetches repository tree, auto-selects the .gst if exactly one exists, shows a .cat checkbox list (max 3 selectable), then triggers importFromGitHub(). Does not import HTTP or storage classes; delegates to controller only.
+
+## loadRepoCatalogTree (Phase 11B — ImportSessionController)
+Controller method on ImportSessionController. Wraps _bsdResolver.fetchRepoTree() for view use. Returns RepoTreeResult? with .gst and .cat lists sorted lexicographically. Does not change ImportStatus; tree browsing is view-local state. Sets resolverError on failure. Idempotent: no duplicate fetch side effects.
+
+## importFromGitHub (Phase 11B — ImportSessionController)
+Controller method on ImportSessionController. Downloads selected .gst + .cat files (and auto-resolves dependencies) in one pass via fetchFileByPath(), then calls attemptBuild(). Enforces max 3 primary catalogs (kMaxSelectedCatalogs). Processes catalogs in deterministic order. On any download failure, sets ImportStatus.failed immediately with no partial state. Dependency failures transition to ImportStatus.resolvingDeps with missing list stable-sorted.
+
+## fetchFileByPath (Phase 11B — BsdResolverService)
+Public method on BsdResolverService. Returns raw Uint8List bytes for a repository file path. No storage side effects; does not write, cache, or log beyond setting lastError on failure. Delegates to internal _fetchFileContent(). Used by importFromGitHub() to download .gst and .cat files by path.
+
 ---
 
 Any concept used in code must appear here first.

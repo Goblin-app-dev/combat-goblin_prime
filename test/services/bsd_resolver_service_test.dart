@@ -599,4 +599,85 @@ void main() {
       expect(bytes, isNull);
     });
   });
+
+  group('BsdResolverService: fetchFileByPath', () {
+    test('returns bytes on 200 response', () async {
+      const content = 'game data file content';
+
+      final mockClient = MockClient((request) async {
+        if (request.url.host == 'raw.githubusercontent.com') {
+          return http.Response(content, 200);
+        }
+        return http.Response('Not found', 404);
+      });
+
+      final service = BsdResolverService(client: mockClient);
+      final bytes = await service.fetchFileByPath(
+        testSourceLocator,
+        'Imperium - Space Marines.cat',
+      );
+
+      expect(bytes, isNotNull);
+      expect(String.fromCharCodes(bytes!), equals(content));
+    });
+
+    test('returns null on 404 and sets lastError', () async {
+      final mockClient = MockClient((request) async {
+        return http.Response('Not found', 404);
+      });
+
+      final service = BsdResolverService(client: mockClient);
+      expect(service.lastError, isNull);
+
+      final bytes = await service.fetchFileByPath(
+        testSourceLocator,
+        'missing.cat',
+      );
+
+      expect(bytes, isNull);
+      expect(service.lastError, isNotNull);
+      expect(
+        service.lastError!.code,
+        equals(BsdResolverErrorCode.notFound),
+      );
+    });
+
+    test('clears lastError before each call', () async {
+      var callCount = 0;
+      final mockClient = MockClient((request) async {
+        callCount++;
+        if (callCount == 1) return http.Response('Not found', 404);
+        return http.Response('content', 200);
+      });
+
+      final service = BsdResolverService(client: mockClient);
+
+      // First call fails — sets lastError
+      await service.fetchFileByPath(testSourceLocator, 'missing.cat');
+      expect(service.lastError, isNotNull);
+
+      // Second call succeeds — lastError must be cleared
+      final bytes =
+          await service.fetchFileByPath(testSourceLocator, 'found.cat');
+      expect(bytes, isNotNull);
+      expect(service.lastError, isNull);
+    });
+
+    test('has no storage side effects (does not populate index cache)', () async {
+      final mockClient = MockClient((request) async {
+        if (request.url.host == 'raw.githubusercontent.com') {
+          return http.Response('content', 200);
+        }
+        return http.Response('Not found', 404);
+      });
+
+      final service = BsdResolverService(client: mockClient);
+
+      await service.fetchFileByPath(testSourceLocator, 'file.cat');
+      await service.fetchFileByPath(testSourceLocator, 'file.cat');
+
+      // fetchFileByPath must not populate the repo index cache
+      expect(service.getCachedIndex(testSourceLocator.sourceKey), isNull);
+    });
+  });
 }

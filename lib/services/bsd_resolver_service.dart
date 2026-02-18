@@ -585,6 +585,21 @@ class BsdResolverService {
     return (segments[0], segments[1]);
   }
 
+  /// Downloads the full content of a repository file by path.
+  ///
+  /// Returns raw bytes only. No storage side effects.
+  /// Clears [lastError] before each call; sets it on failure.
+  ///
+  /// Used by [ImportSessionController.importFromGitHub] to download
+  /// .gst and .cat files after the caller has already fetched the repo tree.
+  Future<Uint8List?> fetchFileByPath(
+    SourceLocator sourceLocator,
+    String path,
+  ) async {
+    _lastError = null;
+    return _fetchFileContent(sourceLocator, path);
+  }
+
   /// Clears the session cache.
   void clearCache() {
     _repoIndexCache.clear();

@@ -304,3 +304,27 @@ No silent renames are permitted.
 - New name: SearchScreen.indexBundles, SearchScreen.bundleOrder, SearchScreen.single(), SearchScreen.multi()
 - Reason: Multi-pack search support: single bundle → multiple bundles with deterministic ordering. Legacy indexBundle deprecated.
 - Approval reference: Phase 11B Multi-Catalog names proposal
+
+## 2026-02-17 (Phase 11B — GitHub Catalog Picker — APPROVED)
+- Old name: FilePickerView
+- New name: GitHubCatalogPickerView
+- Reason: Replace local file picker with GitHub-primary import flow. GitHubCatalogPickerView fetches repo tree, auto-selects .gst, shows .cat checkbox list (max 3), triggers importFromGitHub(). FilePickerView class deprecated; file kept at same path.
+- Approval reference: User approval (Phase 11B GitHub Catalog Picker, 2026-02-17)
+
+## 2026-02-17 (Phase 11B — GitHub Catalog Picker — APPROVED)
+- Old name: N/A
+- New name: loadRepoCatalogTree()
+- Reason: New ImportSessionController method. Wraps _bsdResolver.fetchRepoTree() for view use. Returns sorted RepoTreeResult?. Idempotent; no ImportStatus change.
+- Approval reference: User approval (Phase 11B GitHub Catalog Picker, 2026-02-17)
+
+## 2026-02-17 (Phase 11B — GitHub Catalog Picker — APPROVED)
+- Old name: N/A
+- New name: importFromGitHub()
+- Reason: New ImportSessionController method. Downloads .gst + .cat files via fetchFileByPath(), pre-populates dependencies, calls attemptBuild(). Enforces 3-catalog limit. Deterministic failure policy: fail-all on download failure; stable-sorted resolvingDeps on dep failure.
+- Approval reference: User approval (Phase 11B GitHub Catalog Picker, 2026-02-17)
+
+## 2026-02-17 (Phase 11B — GitHub Catalog Picker — APPROVED)
+- Old name: N/A (previously private _fetchFileContent())
+- New name: fetchFileByPath()
+- Reason: Expose public download method on BsdResolverService for use by importFromGitHub(). Returns raw bytes only; no storage side effects.
+- Approval reference: User approval (Phase 11B GitHub Catalog Picker, 2026-02-17)
