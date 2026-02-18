@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import 'package:combat_goblin_prime/modules/m1_acquire/m1_acquire.dart';
+import 'package:combat_goblin_prime/modules/m1_acquire/services/preflight_scan_service.dart';
 import 'package:combat_goblin_prime/modules/m2_parse/m2_parse.dart';
 import 'package:combat_goblin_prime/modules/m3_wrap/m3_wrap.dart';
 import 'package:combat_goblin_prime/modules/m4_link/m4_link.dart';
@@ -829,15 +830,42 @@ class ImportSessionController extends ChangeNotifier {
               _bsdResolver.lastError?.userMessage ?? 'Download failed',
         ),
       );
-    } else {
-      _setSlot(
-        slot,
-        _slots[slot].copyWith(
-          status: SlotStatus.ready,
-          fetchedBytes: bytes,
-        ),
-      );
+      return;
     }
+
+    // Scan the catalog for declared catalogueLink dependencies and pre-fetch
+    // any that are not already cached, so the pipeline succeeds on first run.
+    try {
+      final preflight = await PreflightScanService().scanBytes(
+        bytes: bytes,
+        fileType: SourceFileType.cat,
+      );
+      final missingIds = preflight.importDependencies
+          .map((d) => d.targetId)
+          .where((id) => !_resolvedDependencies.containsKey(id))
+          .toList();
+      for (final targetId in missingIds) {
+        final depBytes = await _bsdResolver.fetchCatalogBytes(
+          sourceLocator: locator,
+          targetId: targetId,
+        );
+        if (depBytes != null) {
+          _resolvedDependencies[targetId] = depBytes;
+        }
+        // If a dep can't be fetched, continue — the AcquireFailure +
+        // _autoResolveSlotDeps path will surface and retry it.
+      }
+    } catch (_) {
+      // Scan/fetch errors are non-fatal here; pipeline handles missing deps.
+    }
+
+    _setSlot(
+      slot,
+      _slots[slot].copyWith(
+        status: SlotStatus.ready,
+        fetchedBytes: bytes,
+      ),
+    );
   }
 
   /// Runs the M2-M9 pipeline for slot [slot].
