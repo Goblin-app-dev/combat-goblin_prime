@@ -12,6 +12,8 @@ import 'package:combat_goblin_prime/services/bsd_resolver_service.dart';
 import 'package:combat_goblin_prime/services/github_sync_state.dart';
 import 'package:combat_goblin_prime/services/session_persistence_service.dart';
 
+export 'package:combat_goblin_prime/modules/m1_acquire/models/source_locator.dart'
+    show SourceLocator;
 export 'package:combat_goblin_prime/services/bsd_resolver_service.dart'
     show BsdResolverException, BsdResolverErrorCode, RepoTreeEntry, RepoTreeResult;
 export 'package:combat_goblin_prime/services/session_persistence_service.dart'
@@ -110,6 +112,10 @@ class SlotState {
 
   final String? errorMessage;
 
+  /// Missing dependency target IDs (sorted), populated when the pipeline
+  /// encounters unresolved references. Non-empty only in [SlotStatus.error].
+  final List<String> missingTargetIds;
+
   /// Built index, available after [SlotStatus.loaded].
   final IndexBundle? indexBundle;
 
@@ -120,6 +126,7 @@ class SlotState {
     this.sourceLocator,
     this.fetchedBytes,
     this.errorMessage,
+    this.missingTargetIds = const [],
     this.indexBundle,
   });
 
@@ -130,6 +137,7 @@ class SlotState {
     SourceLocator? sourceLocator,
     Uint8List? fetchedBytes,
     String? errorMessage,
+    List<String>? missingTargetIds,
     IndexBundle? indexBundle,
   }) {
     return SlotState(
@@ -139,15 +147,38 @@ class SlotState {
       sourceLocator: sourceLocator ?? this.sourceLocator,
       fetchedBytes: fetchedBytes ?? this.fetchedBytes,
       errorMessage: errorMessage ?? this.errorMessage,
+      missingTargetIds: missingTargetIds ?? this.missingTargetIds,
       indexBundle: indexBundle ?? this.indexBundle,
     );
   }
 
   /// Whether this slot has a searchable IndexBundle.
   bool get isSearchable => indexBundle != null;
+
+  /// Whether this slot has unresolved dependencies.
+  bool get hasMissingDeps => missingTargetIds.isNotEmpty;
+}
+
+/// Result of the non-blocking update check.
+enum UpdateCheckStatus {
+  /// Check has not run or is still in progress.
+  unknown,
+
+  /// Check completed and found no updates.
+  upToDate,
+
+  /// Check completed and found at least one changed blob SHA.
+  updatesAvailable,
+
+  /// Check failed (network error, no sync state, etc.).
+  failed,
 }
 
 /// Maximum number of user-selected primary catalogs.
+///
+/// This is a **demo limitation**. The per-slot architecture supports
+/// arbitrary N; the constant is intentionally low for the initial release
+/// to keep memory and network usage bounded during testing.
 const int kMaxSelectedCatalogs = 2;
 
 /// Controller for import session state.
@@ -177,6 +208,23 @@ const int kMaxSelectedCatalogs = 2;
 /// auto-resolved and do NOT count toward the catalog limit.
 ///
 /// Uses ChangeNotifier for minimal state management without external deps.
+///
+/// ## Public API surface
+///
+/// Types defined in this file:
+/// - [ImportStatus] — global build lifecycle enum
+/// - [SelectedFile] — file bytes + metadata for import
+/// - [SlotStatus] — per-slot lifecycle enum
+/// - [SlotState] — immutable snapshot of a single catalog slot
+/// - [UpdateCheckStatus] — tri-state enum for background update check
+/// - [kMaxSelectedCatalogs] — demo-limited slot count
+///
+/// Re-exported from other packages for consumer convenience:
+/// - [SourceLocator] (from m1_acquire)
+/// - [BsdResolverException], [BsdResolverErrorCode], [RepoTreeEntry],
+///   [RepoTreeResult] (from bsd_resolver_service)
+/// - [PersistedSession], [SessionPersistenceService]
+///   (from session_persistence_service)
 class ImportSessionController extends ChangeNotifier {
   // --- File Selection ---
 
@@ -306,10 +354,14 @@ class ImportSessionController extends ChangeNotifier {
 
   // --- Update Check State ---
 
-  bool _updateAvailable = false;
+  UpdateCheckStatus _updateCheckStatus = UpdateCheckStatus.unknown;
 
-  /// Whether updates are available for tracked catalogs.
-  bool get updateAvailable => _updateAvailable;
+  /// Current status of the background update check.
+  UpdateCheckStatus get updateCheckStatus => _updateCheckStatus;
+
+  /// Convenience: true only when the check completed and found updates.
+  bool get updateAvailable =>
+      _updateCheckStatus == UpdateCheckStatus.updatesAvailable;
 
   ImportSessionController({
     Directory? appDataRoot,
@@ -358,23 +410,38 @@ class ImportSessionController extends ChangeNotifier {
     if (_sourceLocator == null) return;
     try {
       final tree = await _bsdResolver.fetchRepoTree(_sourceLocator!);
-      if (tree == null) return;
+      if (tree == null) {
+        _updateCheckStatus = UpdateCheckStatus.failed;
+        notifyListeners();
+        return;
+      }
       final service = _gitHubSyncStateService;
-      if (service == null) return;
+      if (service == null) {
+        _updateCheckStatus = UpdateCheckStatus.failed;
+        notifyListeners();
+        return;
+      }
       final syncState = await service.loadState();
       final repoState = syncState.repos[_sourceLocator!.sourceKey];
-      if (repoState == null) return;
+      if (repoState == null) {
+        _updateCheckStatus = UpdateCheckStatus.failed;
+        notifyListeners();
+        return;
+      }
       // Compare SHAs from the fresh tree against persisted tracked files
       for (final entry in tree.entries) {
         final tracked = repoState.trackedFiles[entry.path];
         if (tracked != null && tracked.blobSha != entry.blobSha) {
-          _updateAvailable = true;
+          _updateCheckStatus = UpdateCheckStatus.updatesAvailable;
           notifyListeners();
           return;
         }
       }
+      _updateCheckStatus = UpdateCheckStatus.upToDate;
+      notifyListeners();
     } catch (_) {
-      // Fail silently
+      _updateCheckStatus = UpdateCheckStatus.failed;
+      notifyListeners();
     }
   }
 
@@ -794,13 +861,28 @@ class ImportSessionController extends ChangeNotifier {
       );
       await _saveSession();
     } on AcquireFailure catch (e) {
-      _setSlot(
-        slot,
-        _slots[slot].copyWith(
-          status: SlotStatus.error,
-          errorMessage: e.message,
-        ),
-      );
+      if (e.missingTargetIds.isNotEmpty) {
+        final sorted = List<String>.of(e.missingTargetIds)..sort();
+        _setSlot(
+          slot,
+          _slots[slot].copyWith(
+            status: SlotStatus.error,
+            errorMessage:
+                '${sorted.length} missing dependenc${sorted.length == 1 ? 'y' : 'ies'}',
+            missingTargetIds: List.unmodifiable(sorted),
+          ),
+        );
+        // Attempt auto-resolution via BsdResolver
+        await _autoResolveSlotDeps(slot, sorted);
+      } else {
+        _setSlot(
+          slot,
+          _slots[slot].copyWith(
+            status: SlotStatus.error,
+            errorMessage: e.message,
+          ),
+        );
+      }
     } catch (e) {
       _setSlot(
         slot,
@@ -809,6 +891,64 @@ class ImportSessionController extends ChangeNotifier {
           errorMessage: e.toString(),
         ),
       );
+    }
+  }
+
+  /// Attempts to auto-resolve missing dependencies for a slot.
+  ///
+  /// On success, caches the resolved bytes and retries loading the slot.
+  /// On partial/total failure, leaves the slot in error with the remaining
+  /// missing list visible for the user.
+  Future<void> _autoResolveSlotDeps(
+    int slot,
+    List<String> missingIds,
+  ) async {
+    final locator = _slots[slot].sourceLocator ?? _sourceLocator;
+    if (locator == null) return; // can't resolve without a locator
+
+    var resolved = 0;
+    for (final targetId in missingIds) {
+      if (_resolvedDependencies.containsKey(targetId)) {
+        resolved++;
+        continue;
+      }
+      final bytes = await _bsdResolver.fetchCatalogBytes(
+        sourceLocator: locator,
+        targetId: targetId,
+      );
+      if (_bsdResolver.lastError != null) {
+        // Rate limit or network error — stop resolution, keep error visible
+        _setSlot(
+          slot,
+          _slots[slot].copyWith(
+            errorMessage:
+                'Dependency resolution stopped: '
+                '${_bsdResolver.lastError?.userMessage ?? 'network error'}. '
+                '${missingIds.length - resolved} '
+                'dependenc${(missingIds.length - resolved) == 1 ? 'y' : 'ies'} '
+                'still missing.',
+          ),
+        );
+        return;
+      }
+      if (bytes != null) {
+        _resolvedDependencies[targetId] = bytes;
+        resolved++;
+      }
+    }
+
+    // If all resolved, retry loading the slot
+    if (missingIds.every((id) => _resolvedDependencies.containsKey(id))) {
+      // Transition back to ready so loadSlot can run again
+      _setSlot(
+        slot,
+        _slots[slot].copyWith(
+          status: SlotStatus.ready,
+          errorMessage: null,
+          missingTargetIds: const [],
+        ),
+      );
+      await loadSlot(slot);
     }
   }
 

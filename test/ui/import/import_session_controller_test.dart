@@ -1143,6 +1143,42 @@ void _slotStateTests() {
       final controller = ImportSessionController();
 
       expect(controller.updateAvailable, isFalse);
+      expect(controller.updateCheckStatus, equals(UpdateCheckStatus.unknown));
+    });
+
+    test('UpdateCheckStatus starts as unknown', () {
+      final controller = ImportSessionController();
+
+      expect(controller.updateCheckStatus, equals(UpdateCheckStatus.unknown));
+    });
+
+    test('SlotState.missingTargetIds defaults to empty', () {
+      const state = SlotState();
+
+      expect(state.missingTargetIds, isEmpty);
+      expect(state.hasMissingDeps, isFalse);
+    });
+
+    test('SlotState.hasMissingDeps is true when list is non-empty', () {
+      const state = SlotState(
+        status: SlotStatus.error,
+        missingTargetIds: ['id-a', 'id-b'],
+      );
+
+      expect(state.hasMissingDeps, isTrue);
+      expect(state.missingTargetIds, equals(['id-a', 'id-b']));
+    });
+
+    test('SlotState.copyWith preserves missingTargetIds when not overridden',
+        () {
+      const state = SlotState(
+        status: SlotStatus.error,
+        missingTargetIds: ['id-a'],
+      );
+
+      final copied = state.copyWith(status: SlotStatus.ready);
+
+      expect(copied.missingTargetIds, equals(['id-a']));
     });
 
     test('fetchAndSetGameSystem sets game system on success', () async {

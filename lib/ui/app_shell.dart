@@ -34,15 +34,10 @@ class _AppShellState extends State<AppShell> {
         appBar: AppBar(
           title: const Text('Combat Goblin'),
           actions: [
-            if (controller.updateAvailable)
-              IconButton(
-                icon: const Badge(
-                  smallSize: 8,
-                  child: Icon(Icons.system_update),
-                ),
-                tooltip: 'Updates available',
-                onPressed: () => setState(() => _selectedIndex = 1),
-              ),
+            _UpdateCheckIndicator(
+              status: controller.updateCheckStatus,
+              onTap: () => setState(() => _selectedIndex = 1),
+            ),
           ],
         ),
         drawer: Drawer(
@@ -79,5 +74,47 @@ class _AppShellState extends State<AppShell> {
             : const DownloadsScreen(),
       ),
     );
+  }
+}
+
+/// Shows update status in the AppBar with distinct states:
+///
+/// - [UpdateCheckStatus.unknown] — hidden (check hasn't run yet)
+/// - [UpdateCheckStatus.upToDate] — no icon shown
+/// - [UpdateCheckStatus.updatesAvailable] — badge with update icon
+/// - [UpdateCheckStatus.failed] — warning icon with explanatory tooltip
+class _UpdateCheckIndicator extends StatelessWidget {
+  final UpdateCheckStatus status;
+  final VoidCallback onTap;
+
+  const _UpdateCheckIndicator({
+    required this.status,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return switch (status) {
+      UpdateCheckStatus.unknown ||
+      UpdateCheckStatus.upToDate =>
+        const SizedBox.shrink(),
+      UpdateCheckStatus.updatesAvailable => IconButton(
+          icon: const Badge(
+            smallSize: 8,
+            child: Icon(Icons.system_update),
+          ),
+          tooltip: 'Updates available',
+          onPressed: onTap,
+        ),
+      UpdateCheckStatus.failed => IconButton(
+          icon: Icon(
+            Icons.cloud_off,
+            color: Colors.grey.shade500,
+            size: 20,
+          ),
+          tooltip: 'Update check failed — could not reach repository',
+          onPressed: onTap,
+        ),
+    };
   }
 }

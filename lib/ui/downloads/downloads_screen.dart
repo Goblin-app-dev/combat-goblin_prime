@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'package:combat_goblin_prime/modules/m1_acquire/models/source_locator.dart';
 import 'package:combat_goblin_prime/ui/import/import_session_controller.dart';
 import 'package:combat_goblin_prime/ui/import/import_session_provider.dart';
 
@@ -126,6 +125,35 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
               ),
               const SizedBox(height: 16),
             ],
+
+            // --- Demo limitation banner ---
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.amber.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: Colors.amber.withValues(alpha: 0.4),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, size: 16, color: Colors.amber.shade800),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Demo: $kMaxSelectedCatalogs catalog slots. '
+                      'More slots in a future release.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.amber.shade900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
 
             // --- Slot Panels ---
             for (var i = 0; i < kMaxSelectedCatalogs; i++) ...[
@@ -399,7 +427,7 @@ class _SlotPanel extends StatelessWidget {
                   style: const TextStyle(color: Colors.green),
                 ),
               ),
-            if (slotState.status == SlotStatus.error)
+            if (slotState.status == SlotStatus.error) ...[
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
@@ -407,6 +435,33 @@ class _SlotPanel extends StatelessWidget {
                   style: TextStyle(color: Colors.red.shade700, fontSize: 12),
                 ),
               ),
+              // Show sorted missing dependency list when present
+              if (slotState.hasMissingDeps) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'Missing dependencies (${slotState.missingTargetIds.length}):',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.red.shade800,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                ...slotState.missingTargetIds.map(
+                  (id) => Padding(
+                    padding: const EdgeInsets.only(left: 12),
+                    child: Text(
+                      id,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                        color: Colors.red.shade600,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ],
         ),
       ),
