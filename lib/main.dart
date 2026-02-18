@@ -4,10 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import 'ui/app_shell.dart';
 import 'ui/import/import_session_controller.dart';
 import 'ui/import/import_session_provider.dart';
-import 'ui/import/import_wizard_screen.dart';
-import 'ui/search/search_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,6 +32,18 @@ class _CombatGoblinAppState extends State<CombatGoblinApp> {
     super.initState();
     _importController =
         ImportSessionController(appDataRoot: widget.appDataRoot);
+    _bootstrap();
+  }
+
+  Future<void> _bootstrap() async {
+    final persistDir =
+        Directory(p.join(widget.appDataRoot.path, 'session'));
+    final persistService =
+        SessionPersistenceService(storageRoot: persistDir.path);
+    // Auto-restore last session on boot (fails silently)
+    await _importController.initPersistenceAndRestore(persistService);
+    // Non-blocking update check (fails silently)
+    _importController.checkForUpdatesAsync();
   }
 
   @override
@@ -51,53 +62,8 @@ class _CombatGoblinAppState extends State<CombatGoblinApp> {
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
           useMaterial3: true,
         ),
-        home: const _AppNavigator(),
+        home: const AppShell(),
       ),
-    );
-  }
-}
-
-/// Handles navigation between Import and Search screens.
-class _AppNavigator extends StatefulWidget {
-  const _AppNavigator();
-
-  @override
-  State<_AppNavigator> createState() => _AppNavigatorState();
-}
-
-class _AppNavigatorState extends State<_AppNavigator> {
-  bool _showSearch = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = ImportSessionProvider.of(context);
-
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (context, child) {
-        // Navigate to search when import succeeds
-        if (controller.status == ImportStatus.success &&
-            controller.indexBundles.isNotEmpty &&
-            !_showSearch) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            setState(() => _showSearch = true);
-          });
-        }
-
-        if (_showSearch && controller.indexBundles.isNotEmpty) {
-          return SearchScreen.multi(
-            indexBundles: controller.indexBundles,
-          );
-        }
-
-        return ImportWizardScreen(
-          onImportSuccess: () {
-            if (controller.indexBundles.isNotEmpty) {
-              setState(() => _showSearch = true);
-            }
-          },
-        );
-      },
     );
   }
 }

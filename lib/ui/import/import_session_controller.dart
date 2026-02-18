@@ -72,24 +72,109 @@ class SelectedFile {
   }
 }
 
+/// Status of an individual catalog slot.
+enum SlotStatus {
+  /// No catalog assigned.
+  empty,
+
+  /// Downloading catalog bytes from GitHub.
+  fetching,
+
+  /// Bytes in memory, awaiting pipeline.
+  ready,
+
+  /// Running M2-M9 pipeline.
+  building,
+
+  /// IndexBundle built and available for search.
+  loaded,
+
+  /// Download or pipeline failed.
+  error,
+}
+
+/// Immutable state for a single catalog slot.
+class SlotState {
+  final SlotStatus status;
+
+  /// GitHub repo path (e.g. "path/to/Foo.cat").
+  final String? catalogPath;
+
+  /// Display name (filename only).
+  final String? catalogName;
+
+  final SourceLocator? sourceLocator;
+
+  /// Bytes fetched from GitHub (available after [SlotStatus.ready]).
+  final Uint8List? fetchedBytes;
+
+  final String? errorMessage;
+
+  /// Built index, available after [SlotStatus.loaded].
+  final IndexBundle? indexBundle;
+
+  const SlotState({
+    this.status = SlotStatus.empty,
+    this.catalogPath,
+    this.catalogName,
+    this.sourceLocator,
+    this.fetchedBytes,
+    this.errorMessage,
+    this.indexBundle,
+  });
+
+  SlotState copyWith({
+    SlotStatus? status,
+    String? catalogPath,
+    String? catalogName,
+    SourceLocator? sourceLocator,
+    Uint8List? fetchedBytes,
+    String? errorMessage,
+    IndexBundle? indexBundle,
+  }) {
+    return SlotState(
+      status: status ?? this.status,
+      catalogPath: catalogPath ?? this.catalogPath,
+      catalogName: catalogName ?? this.catalogName,
+      sourceLocator: sourceLocator ?? this.sourceLocator,
+      fetchedBytes: fetchedBytes ?? this.fetchedBytes,
+      errorMessage: errorMessage ?? this.errorMessage,
+      indexBundle: indexBundle ?? this.indexBundle,
+    );
+  }
+
+  /// Whether this slot has a searchable IndexBundle.
+  bool get isSearchable => indexBundle != null;
+}
+
 /// Maximum number of user-selected primary catalogs.
-const int kMaxSelectedCatalogs = 3;
+const int kMaxSelectedCatalogs = 2;
 
 /// Controller for import session state.
 ///
 /// Manages:
-/// - Selected files (game system, up to 3 primary catalogs)
+/// - Selected files (game system, up to [kMaxSelectedCatalogs] primary catalogs)
+/// - Per-slot download and pipeline state ([SlotState])
 /// - Missing target IDs during dependency resolution
 /// - Build status progression
 /// - Cached BoundPackBundle and IndexBundle (per catalog)
 /// - Repo mapping cache for BSData resolution
+/// - Non-blocking update checks
 ///
-/// ## Multi-Catalog Support
+/// ## Per-Slot Model
 ///
-/// Users may select up to [kMaxSelectedCatalogs] primary catalogs.
-/// Each selected catalog runs the M1-M9 pipeline independently,
-/// producing its own [IndexBundle]. Dependencies (library catalogs)
-/// are auto-resolved and do NOT count toward the 3-catalog limit.
+/// The controller manages [kMaxSelectedCatalogs] independent catalog slots.
+/// Each slot follows a 1.5-step lifecycle:
+/// 1. **Fetch-on-select** — assigning a catalog auto-fetches its bytes
+/// 2. **Explicit Load** — user clicks Load to run the M2-M9 pipeline
+///
+/// Slots are independent: one slot can be loaded while another is fetching.
+///
+/// ## Legacy Multi-Catalog Support
+///
+/// The [selectedCatalogs]/[setSelectedCatalogs] API is preserved for
+/// backward compatibility. Dependencies (library catalogs) are
+/// auto-resolved and do NOT count toward the catalog limit.
 ///
 /// Uses ChangeNotifier for minimal state management without external deps.
 class ImportSessionController extends ChangeNotifier {
@@ -194,6 +279,38 @@ class ImportSessionController extends ChangeNotifier {
 
   final Directory? _appDataRoot;
 
+  // --- Per-Slot State ---
+
+  List<SlotState> _slots = const [SlotState(), SlotState()];
+
+  /// Returns the state of the slot at [index].
+  SlotState slotState(int index) => _slots[index];
+
+  /// All slot states (read-only view).
+  List<SlotState> get slots => List.unmodifiable(_slots);
+
+  /// All loaded IndexBundles from slots, keyed by slot identifier.
+  Map<String, IndexBundle> get slotIndexBundles {
+    final result = <String, IndexBundle>{};
+    for (var i = 0; i < _slots.length; i++) {
+      final bundle = _slots[i].indexBundle;
+      if (bundle != null) {
+        result['slot_$i'] = bundle;
+      }
+    }
+    return result;
+  }
+
+  /// Whether any slot has a loaded IndexBundle.
+  bool get hasAnyLoaded => _slots.any((s) => s.status == SlotStatus.loaded);
+
+  // --- Update Check State ---
+
+  bool _updateAvailable = false;
+
+  /// Whether updates are available for tracked catalogs.
+  bool get updateAvailable => _updateAvailable;
+
   ImportSessionController({
     Directory? appDataRoot,
     BsdResolverService? bsdResolver,
@@ -208,6 +325,57 @@ class ImportSessionController extends ChangeNotifier {
   Future<void> initPersistence(SessionPersistenceService service) async {
     _persistenceService = service;
     await _checkForPersistedSession();
+  }
+
+  /// Sets the persistence service and auto-restores the last session on boot.
+  ///
+  /// Unlike [initPersistence], this immediately reloads the persisted session
+  /// if one exists, without requiring a separate [reloadLastSession] call.
+  /// Fails silently if restoration fails.
+  Future<void> initPersistenceAndRestore(
+    SessionPersistenceService service,
+  ) async {
+    _persistenceService = service;
+    await _checkForPersistedSession();
+    if (_hasPersistedSession) {
+      try {
+        await reloadLastSession();
+      } catch (_) {
+        // Fail silently on auto-restore
+      }
+    }
+  }
+
+  /// Fires a non-blocking update check. Fails silently on any error.
+  ///
+  /// Sets [updateAvailable] to true if any tracked catalog has a
+  /// different blob SHA than the last-known version.
+  void checkForUpdatesAsync() {
+    _performUpdateCheck();
+  }
+
+  Future<void> _performUpdateCheck() async {
+    if (_sourceLocator == null) return;
+    try {
+      final tree = await _bsdResolver.fetchRepoTree(_sourceLocator!);
+      if (tree == null) return;
+      final service = _gitHubSyncStateService;
+      if (service == null) return;
+      final syncState = await service.loadState();
+      final repoState = syncState.repos[_sourceLocator!.sourceKey];
+      if (repoState == null) return;
+      // Compare SHAs from the fresh tree against persisted tracked files
+      for (final entry in tree.entries) {
+        final tracked = repoState.trackedFiles[entry.path];
+        if (tracked != null && tracked.blobSha != entry.blobSha) {
+          _updateAvailable = true;
+          notifyListeners();
+          return;
+        }
+      }
+    } catch (_) {
+      // Fail silently
+    }
   }
 
   Future<void> _checkForPersistedSession() async {
@@ -259,6 +427,44 @@ class ImportSessionController extends ChangeNotifier {
       entries: sortedEntries,
       fetchedAt: result.fetchedAt,
     );
+  }
+
+  /// Fetches a .gst file from GitHub and sets it as the game system.
+  ///
+  /// Returns true on success. On failure, sets [resolverError] and
+  /// transitions to [ImportStatus.failed].
+  Future<bool> fetchAndSetGameSystem(
+    SourceLocator locator,
+    String gstPath,
+  ) async {
+    _status = ImportStatus.preparing;
+    _statusMessage = 'Downloading game system...';
+    _errorMessage = null;
+    _resolverError = null;
+    notifyListeners();
+
+    final bytes = await _bsdResolver.fetchFileByPath(locator, gstPath);
+    if (bytes == null) {
+      _resolverError = _bsdResolver.lastError;
+      _status = ImportStatus.failed;
+      _errorMessage =
+          _resolverError?.userMessage ?? 'Failed to download game system.';
+      _statusMessage = null;
+      notifyListeners();
+      return false;
+    }
+
+    _gameSystemFile = SelectedFile(
+      fileName: gstPath.split('/').last,
+      bytes: bytes,
+    );
+    _sourceLocator = locator;
+    _status = ImportStatus.idle;
+    _statusMessage = null;
+    // Demote any loaded slots back to ready (game system changed)
+    _demoteSlotBuildState();
+    notifyListeners();
+    return true;
   }
 
   /// Downloads selected .gst and .cat files from GitHub and runs the pipeline.
@@ -499,6 +705,159 @@ class ImportSessionController extends ChangeNotifier {
     notifyListeners();
   }
 
+  // --- Per-Slot Methods ---
+
+  /// Assigns a catalog to a slot and immediately fetches its bytes.
+  ///
+  /// Transitions: empty/error/ready → fetching → ready or error.
+  Future<void> assignCatalogToSlot(
+    int slot,
+    String catPath,
+    SourceLocator locator,
+  ) async {
+    assert(slot >= 0 && slot < kMaxSelectedCatalogs, 'Invalid slot index');
+    _setSlot(
+      slot,
+      SlotState(
+        status: SlotStatus.fetching,
+        catalogPath: catPath,
+        catalogName: catPath.split('/').last,
+        sourceLocator: locator,
+      ),
+    );
+
+    final bytes = await _bsdResolver.fetchFileByPath(locator, catPath);
+    if (bytes == null) {
+      _setSlot(
+        slot,
+        _slots[slot].copyWith(
+          status: SlotStatus.error,
+          errorMessage:
+              _bsdResolver.lastError?.userMessage ?? 'Download failed',
+        ),
+      );
+    } else {
+      _setSlot(
+        slot,
+        _slots[slot].copyWith(
+          status: SlotStatus.ready,
+          fetchedBytes: bytes,
+        ),
+      );
+    }
+  }
+
+  /// Runs the M2-M9 pipeline for slot [slot].
+  ///
+  /// Slot must be in [SlotStatus.ready]. Requires [gameSystemFile] to be set.
+  /// On success transitions to [SlotStatus.loaded] with an IndexBundle.
+  Future<void> loadSlot(int slot) async {
+    assert(slot >= 0 && slot < kMaxSelectedCatalogs, 'Invalid slot index');
+    final s = _slots[slot];
+    if (s.status != SlotStatus.ready) return;
+    if (_gameSystemFile == null) {
+      _setSlot(
+        slot,
+        s.copyWith(
+          status: SlotStatus.error,
+          errorMessage: 'Game system file not set.',
+        ),
+      );
+      return;
+    }
+
+    _setSlot(slot, s.copyWith(status: SlotStatus.building));
+
+    try {
+      final acquireService = AcquireService(
+        storage: AcquireStorage(appDataRoot: _appDataRoot),
+      );
+
+      final rawBundle = await acquireService.buildBundle(
+        gameSystemBytes: _gameSystemFile!.bytes,
+        gameSystemExternalFileName: _gameSystemFile!.fileName,
+        primaryCatalogBytes: s.fetchedBytes!,
+        primaryCatalogExternalFileName: s.catalogName!,
+        requestDependencyBytes: _requestDependencyBytes,
+        source: s.sourceLocator ?? _defaultSourceLocator(),
+      );
+
+      final indexBundle = await _runPipelineForBundle(rawBundle);
+      _indexBundles['slot_$slot'] = indexBundle;
+
+      _setSlot(
+        slot,
+        _slots[slot].copyWith(
+          status: SlotStatus.loaded,
+          indexBundle: indexBundle,
+        ),
+      );
+      await _saveSession();
+    } on AcquireFailure catch (e) {
+      _setSlot(
+        slot,
+        _slots[slot].copyWith(
+          status: SlotStatus.error,
+          errorMessage: e.message,
+        ),
+      );
+    } catch (e) {
+      _setSlot(
+        slot,
+        _slots[slot].copyWith(
+          status: SlotStatus.error,
+          errorMessage: e.toString(),
+        ),
+      );
+    }
+  }
+
+  /// Loads all slots that are in [SlotStatus.ready].
+  Future<void> loadAllReadySlots() async {
+    for (var i = 0; i < kMaxSelectedCatalogs; i++) {
+      if (_slots[i].status == SlotStatus.ready) {
+        await loadSlot(i);
+      }
+    }
+  }
+
+  /// Clears a slot back to [SlotStatus.empty].
+  void clearSlot(int slot) {
+    assert(slot >= 0 && slot < kMaxSelectedCatalogs, 'Invalid slot index');
+    _indexBundles.remove('slot_$slot');
+    _setSlot(slot, const SlotState());
+  }
+
+  void _setSlot(int slot, SlotState state) {
+    final updated = List<SlotState>.of(_slots);
+    updated[slot] = state;
+    _slots = List.unmodifiable(updated);
+    notifyListeners();
+  }
+
+  /// Demotes slot build state when the game system changes.
+  ///
+  /// Loaded/building/error slots with fetched bytes → ready.
+  /// Slots without fetched bytes are unaffected.
+  void _demoteSlotBuildState() {
+    final updated = _slots.map((s) {
+      if (s.fetchedBytes != null &&
+          (s.status == SlotStatus.loaded ||
+              s.status == SlotStatus.building ||
+              s.status == SlotStatus.error)) {
+        return SlotState(
+          status: SlotStatus.ready,
+          catalogPath: s.catalogPath,
+          catalogName: s.catalogName,
+          sourceLocator: s.sourceLocator,
+          fetchedBytes: s.fetchedBytes,
+        );
+      }
+      return s;
+    }).toList();
+    _slots = List.unmodifiable(updated);
+  }
+
   void _reset() {
     _status = ImportStatus.idle;
     _statusMessage = null;
@@ -510,6 +869,7 @@ class ImportSessionController extends ChangeNotifier {
     _indexBundles.clear();
     _resolvedDependencies.clear();
     _resolverError = null;
+    _demoteSlotBuildState();
   }
 
   // --- Build Methods ---
@@ -751,6 +1111,29 @@ class ImportSessionController extends ChangeNotifier {
 
     // Note: Don't set success status here - let attemptBuild handle it
     // after all catalogs are built
+  }
+
+  /// Runs the M2-M9 pipeline on a raw bundle and returns the IndexBundle.
+  ///
+  /// Does not update global status; used by per-slot loading.
+  Future<IndexBundle> _runPipelineForBundle(RawPackBundle rawBundle) async {
+    final parseService = ParseService();
+    final parsedBundle = await parseService.parseBundle(rawBundle: rawBundle);
+
+    final wrapService = WrapService();
+    final wrappedBundle =
+        await wrapService.wrapBundle(parsedBundle: parsedBundle);
+
+    final linkService = LinkService();
+    final linkedBundle =
+        await linkService.linkBundle(wrappedBundle: wrappedBundle);
+
+    final bindService = BindService();
+    final boundBundle =
+        await bindService.bindBundle(linkedBundle: linkedBundle);
+
+    final indexService = IndexService();
+    return indexService.buildIndex(boundBundle);
   }
 
   SourceLocator _defaultSourceLocator() {
