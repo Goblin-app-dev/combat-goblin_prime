@@ -13,6 +13,8 @@ Combat Goblin Prime is a voice-driven assistant backend that transforms raw XML 
 
 ## Architecture
 
+### Pipeline
+
 The system is organized into numbered modules (M1-M9+) that form a pipeline:
 
 ```
@@ -37,6 +39,35 @@ Source Files → M1 Acquire → M2 Parse → M3 Wrap → M4 Link → M5 Bind →
 | M8 | Modifiers | 6 | Value modification operations |
 | M9 | Index | - | Search-ready document generation |
 | Orchestrator | - | - | Coordinates M6/M7/M8 evaluation flow |
+
+### UI Architecture
+
+The Flutter app uses an **AppShell** with a navigation drawer hosting two screens:
+
+- **Home** (`HomeScreen`) — search bar + results + slot status bar
+- **Downloads** (`DownloadsScreen`) — GitHub repo picker, game system selector, and per-slot catalog management
+
+#### Per-Slot Catalog Model
+
+The app manages `kMaxSelectedCatalogs` (currently 2) independent catalog slots. Each slot has a 1.5-step lifecycle:
+
+1. **Fetch-on-select** — assigning a catalog from the picker auto-fetches its bytes from GitHub
+2. **Explicit Load** — the user clicks Load (or Load All) to run the M2-M9 pipeline
+
+Slot states: `empty → fetching → ready → building → loaded` (or `error` on failure).
+
+Slots are independent: one can be loaded while another is fetching.
+
+#### Update Check
+
+The AppBar shows an update badge when a background check detects that tracked blob SHAs have changed in the source repository. The check result is a tri-state `UpdateCheckStatus` enum:
+
+| Status | Meaning |
+|--------|---------|
+| `unknown` | Check has not run yet |
+| `upToDate` | No changes detected |
+| `updatesAvailable` | At least one tracked file changed |
+| `failed` | Network error or missing sync state |
 
 ## Prerequisites
 
@@ -73,17 +104,33 @@ flutter test test/pipeline/
 ```
 lib/
 ├── main.dart              # Flutter app entry point
-└── modules/
-    ├── m1_acquire/        # Source file acquisition
-    ├── m2_parse/          # XML parsing to DTOs
-    ├── m3_wrap/           # Node wrapping with identity
-    ├── m4_link/           # Cross-file linking
-    ├── m5_bind/           # Semantic binding
-    ├── m6_evaluate/       # Constraint evaluation
-    ├── m7_applicability/  # Condition evaluation
-    ├── m8_modifiers/      # Value modification
-    ├── m9_index/          # Search index generation
-    └── orchestrator/      # Evaluation coordination
+├── modules/
+│   ├── m1_acquire/        # Source file acquisition
+│   ├── m2_parse/          # XML parsing to DTOs
+│   ├── m3_wrap/           # Node wrapping with identity
+│   ├── m4_link/           # Cross-file linking
+│   ├── m5_bind/           # Semantic binding
+│   ├── m6_evaluate/       # Constraint evaluation
+│   ├── m7_applicability/  # Condition evaluation
+│   ├── m8_modifiers/      # Value modification
+│   ├── m9_index/          # Search index generation
+│   └── orchestrator/      # Evaluation coordination
+├── features/
+│   └── github_repository_search/  # GitHub repo search (models + service)
+├── services/
+│   ├── bsd_resolver_service.dart       # BSData dependency resolver
+│   ├── github_sync_state.dart          # Blob SHA tracking for update checks
+│   ├── multi_pack_search_service.dart  # Cross-slot search aggregation
+│   └── session_persistence_service.dart # Session save/restore
+└── ui/
+    ├── app_shell.dart           # Navigation drawer + AppBar with update badge
+    ├── home/
+    │   └── home_screen.dart     # Search bar, results, slot status bar
+    ├── downloads/
+    │   └── downloads_screen.dart  # GitHub picker, game system selector, slot panels
+    └── import/
+        ├── import_session_controller.dart  # ChangeNotifier — all session state
+        └── import_session_provider.dart    # InheritedWidget accessor
 
 docs/
 ├── design.md              # System design overview
