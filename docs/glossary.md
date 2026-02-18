@@ -295,11 +295,20 @@ Result of searching across multiple IndexBundles. Contains merged hits (deduplic
 ## Multi-Pack Search Service (Phase 11B — Multi-Catalog)
 Stateless service for searching across multiple IndexBundles. Implements deterministic merge algorithm: run M10 per bundle → merge hits → stable sort (docType → canonicalKey → docId → sourcePackKey) → deduplicate by docId → apply limit → emit single resultLimitApplied diagnostic.
 
-## Max Selected Catalogs (Phase 11B — Multi-Catalog)
-Constant `kMaxSelectedCatalogs = 3`. Maximum number of user-selected primary catalogs. Dependencies (library catalogs) are auto-resolved and do NOT count toward this limit.
+## Max Selected Catalogs (Phase 11B → 11C — Multi-Catalog)
+Constant `kMaxSelectedCatalogs = 2`. Maximum number of user-selected primary catalogs. **Demo limitation: 2 primaries in initial release.** The per-slot architecture supports arbitrary N; this constant is intentionally low for testing. Dependencies (library catalogs) are auto-resolved and do NOT count toward this limit.
 
 ## Selected Catalogs (Phase 11B — Multi-Catalog)
-List of user-selected primary catalog files in ImportSessionController. Max 3 per kMaxSelectedCatalogs. Each runs M1-M9 pipeline independently, producing separate IndexBundle. Replaces deprecated single `primaryCatalogFile`.
+List of user-selected primary catalog files in ImportSessionController. Max 2 per kMaxSelectedCatalogs (reduced from 3 in Phase 11C). Each runs M1-M9 pipeline independently, producing separate IndexBundle. Replaces deprecated single `primaryCatalogFile`.
+
+## Slot Status (Phase 11C — Per-Slot Model)
+Enum `SlotStatus` tracking per-slot lifecycle in ImportSessionController. Values: `empty` (no catalog assigned), `fetching` (downloading bytes from GitHub), `ready` (bytes in memory, pipeline not yet run), `building` (M2-M9 pipeline running), `loaded` (IndexBundle available for search), `error` (download or pipeline failed).
+
+## Slot State (Phase 11C — Per-Slot Model)
+Immutable data class `SlotState` carrying the full state of a single catalog slot. Fields: `status`, `catalogPath`, `catalogName`, `sourceLocator`, `fetchedBytes`, `errorMessage`, `missingTargetIds` (sorted, non-empty only on error), `indexBundle`. Produced by `assignCatalogToSlot()`, `loadSlot()`, `clearSlot()`. Exposed via `ImportSessionController.slotState(index)` and `.slots`.
+
+## Update Check Status (Phase 11C — Update Detection)
+Enum `UpdateCheckStatus` representing the result of the non-blocking update check. Values: `unknown` (check has not run, startup state), `upToDate` (check completed, no blob SHA differences found), `updatesAvailable` (check completed, at least one tracked file has changed SHA), `failed` (check could not complete — network error, no sync state, or no tracked repo). UI must not imply "up to date" when status is `unknown` or `failed`.
 
 ## Index Bundles (Phase 11B — Multi-Catalog)
 Map of IndexBundle instances keyed by catalog identifier (rootId or index). Produced by running M1-M9 independently for each selected catalog. Used by SearchScreen and MultiPackSearchService for cross-bundle search.
@@ -312,6 +321,15 @@ Complete result of fetching GitHub repository tree. Contains entries list, pathT
 
 ## GitHub Catalog Picker View (Phase 11B — GitHub Import UI)
 Widget replacing FilePickerView as the primary import entry point. Presents a GitHub URL field (prepopulated with BSData/wh40k-10e), fetches repository tree, auto-selects the .gst if exactly one exists, shows a .cat checkbox list (max 3 selectable), then triggers importFromGitHub(). Does not import HTTP or storage classes; delegates to controller only.
+
+## fetchAndSetGameSystem (Phase 11C — ImportSessionController)
+Controller method. Downloads a `.gst` file from GitHub via `fetchFileByPath()` and sets it as `gameSystemFile`. Returns `true` on success, `false` on failure (sets `resolverError`, transitions to `ImportStatus.failed`). On success, demotes any loaded/building/error slots that have fetched bytes back to `ready` so they can be re-run against the new game system.
+
+## assignCatalogToSlot (Phase 11C — ImportSessionController)
+Controller method. Assigns a catalog `.cat` path + locator to a slot and immediately fetches its bytes (fetch-on-select). Transitions: empty/error/ready → fetching → ready (on success) or error (on failure). Slot 0 and slot 1 are independent.
+
+## loadSlot (Phase 11C — ImportSessionController)
+Controller method. Runs the M2-M9 pipeline for a slot in `SlotStatus.ready`. Requires `gameSystemFile` to be set. On success: `SlotStatus.loaded` with `indexBundle`. On `AcquireFailure` with `missingTargetIds`: stores sorted missing list in `SlotState.missingTargetIds`, calls `_autoResolveSlotDeps()`. On other failure: `SlotStatus.error` with `errorMessage`.
 
 ## loadRepoCatalogTree (Phase 11B — ImportSessionController)
 Controller method on ImportSessionController. Wraps _bsdResolver.fetchRepoTree() for view use. Returns RepoTreeResult? with .gst and .cat lists sorted lexicographically. Does not change ImportStatus; tree browsing is view-local state. Sets resolverError on failure. Idempotent: no duplicate fetch side effects.
