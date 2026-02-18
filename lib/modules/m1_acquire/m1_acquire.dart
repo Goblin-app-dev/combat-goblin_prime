@@ -1,4 +1,5 @@
 export 'services/acquire_service.dart';
+export 'storage/acquire_storage.dart';
 export 'models/raw_pack_bundle.dart';
 export 'models/source_file_type.dart';
 export 'models/source_file_metadata.dart';

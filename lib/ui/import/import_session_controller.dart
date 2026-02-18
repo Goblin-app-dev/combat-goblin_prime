@@ -192,11 +192,15 @@ class ImportSessionController extends ChangeNotifier {
   PersistedSession? _persistedSession;
   PersistedSession? get persistedSession => _persistedSession;
 
+  final Directory? _appDataRoot;
+
   ImportSessionController({
+    Directory? appDataRoot,
     BsdResolverService? bsdResolver,
     SessionPersistenceService? persistenceService,
     GitHubSyncStateService? gitHubSyncStateService,
-  })  : _bsdResolver = bsdResolver ?? BsdResolverService(),
+  })  : _appDataRoot = appDataRoot,
+        _bsdResolver = bsdResolver ?? BsdResolverService(),
         _persistenceService = persistenceService,
         _gitHubSyncStateService = gitHubSyncStateService;
 
@@ -544,7 +548,9 @@ class ImportSessionController extends ChangeNotifier {
       notifyListeners();
 
       try {
-        final acquireService = AcquireService();
+        final acquireService = AcquireService(
+          storage: AcquireStorage(appDataRoot: _appDataRoot),
+        );
 
         final rawBundle = await acquireService.buildBundle(
           gameSystemBytes: _gameSystemFile!.bytes,
