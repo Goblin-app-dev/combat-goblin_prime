@@ -303,6 +303,15 @@ class ImportSessionController extends ChangeNotifier {
   SourceLocator? _sourceLocator;
   SourceLocator? get sourceLocator => _sourceLocator;
 
+  /// Sets [_sourceLocator] directly, for use in tests only.
+  ///
+  /// In production, [_sourceLocator] is always set via
+  /// [importFromGitHub] or [fetchAndSetGameSystem].
+  @visibleForTesting
+  void setSourceLocatorForTesting(SourceLocator locator) {
+    _sourceLocator = locator;
+  }
+
   // --- Services ---
 
   final BsdResolverService _bsdResolver;
@@ -363,15 +372,23 @@ class ImportSessionController extends ChangeNotifier {
   bool get updateAvailable =>
       _updateCheckStatus == UpdateCheckStatus.updatesAvailable;
 
+  /// Optional factory for creating [AcquireService] instances.
+  ///
+  /// Defaults to the production implementation. Inject a custom factory in
+  /// tests to simulate [AcquireFailure] without running the full pipeline.
+  final AcquireService Function(Directory? appDataRoot)? _acquireServiceFactory;
+
   ImportSessionController({
     Directory? appDataRoot,
     BsdResolverService? bsdResolver,
     SessionPersistenceService? persistenceService,
     GitHubSyncStateService? gitHubSyncStateService,
+    AcquireService Function(Directory? appDataRoot)? acquireServiceFactory,
   })  : _appDataRoot = appDataRoot,
         _bsdResolver = bsdResolver ?? BsdResolverService(),
         _persistenceService = persistenceService,
-        _gitHubSyncStateService = gitHubSyncStateService;
+        _gitHubSyncStateService = gitHubSyncStateService,
+        _acquireServiceFactory = acquireServiceFactory;
 
   /// Sets the persistence service and checks for existing session.
   Future<void> initPersistence(SessionPersistenceService service) async {
@@ -398,12 +415,21 @@ class ImportSessionController extends ChangeNotifier {
     }
   }
 
+  /// Runs the update check and returns when complete.
+  ///
+  /// Updates [updateCheckStatus] to [UpdateCheckStatus.upToDate],
+  /// [UpdateCheckStatus.updatesAvailable], or [UpdateCheckStatus.failed].
+  /// Never throws — all errors are converted to [UpdateCheckStatus.failed].
+  ///
+  /// Prefer [checkForUpdatesAsync] in production; use this in tests.
+  Future<void> checkForUpdates() => _performUpdateCheck();
+
   /// Fires a non-blocking update check. Fails silently on any error.
   ///
-  /// Sets [updateAvailable] to true if any tracked catalog has a
-  /// different blob SHA than the last-known version.
+  /// Equivalent to calling [checkForUpdates] without awaiting the result.
+  /// Updates [updateCheckStatus] asynchronously.
   void checkForUpdatesAsync() {
-    _performUpdateCheck();
+    checkForUpdates(); // intentionally not awaited
   }
 
   Future<void> _performUpdateCheck() async {
@@ -836,9 +862,9 @@ class ImportSessionController extends ChangeNotifier {
     _setSlot(slot, s.copyWith(status: SlotStatus.building));
 
     try {
-      final acquireService = AcquireService(
-        storage: AcquireStorage(appDataRoot: _appDataRoot),
-      );
+      final acquireService = _acquireServiceFactory != null
+          ? _acquireServiceFactory!(_appDataRoot)
+          : AcquireService(storage: AcquireStorage(appDataRoot: _appDataRoot));
 
       final rawBundle = await acquireService.buildBundle(
         gameSystemBytes: _gameSystemFile!.bytes,

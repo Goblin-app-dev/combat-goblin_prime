@@ -328,3 +328,45 @@ No silent renames are permitted.
 - New name: fetchFileByPath()
 - Reason: Expose public download method on BsdResolverService for use by importFromGitHub(). Returns raw bytes only; no storage side effects.
 - Approval reference: User approval (Phase 11B GitHub Catalog Picker, 2026-02-17)
+
+## 2026-02-18 (Phase 11C — Per-Slot UI Model — APPROVED)
+- Old name: kMaxSelectedCatalogs = 3
+- New name: kMaxSelectedCatalogs = 2
+- Reason: Demo limitation. Reducing from 3 to 2 slots for initial release to bound memory/network usage. Per-slot architecture is designed for arbitrary N.
+- Approval reference: Phase 11C review feedback (2026-02-18)
+
+## 2026-02-18 (Phase 11C — Per-Slot UI Model — APPROVED)
+- Old name: N/A
+- New name: SlotStatus
+- Reason: New enum for per-slot lifecycle: empty, fetching, ready, building, loaded, error.
+- Approval reference: Phase 11C review feedback (2026-02-18)
+
+## 2026-02-18 (Phase 11C — Per-Slot UI Model — APPROVED)
+- Old name: N/A
+- New name: SlotState (with missingTargetIds field)
+- Reason: New immutable data class for per-slot state snapshot. missingTargetIds field (sorted) surfaces unresolved dependency IDs when pipeline encounters AcquireFailure.
+- Approval reference: Phase 11C review feedback (2026-02-18)
+
+## 2026-02-18 (Phase 11C — Update Detection — APPROVED)
+- Old name: bool _updateAvailable (controller internal)
+- New name: UpdateCheckStatus enum (unknown / upToDate / updatesAvailable / failed)
+- Reason: bool conflated "not checked" and "no updates found". Tri-state (+ failed) required to avoid implying upToDate when check hasn't run or failed.
+- Approval reference: Phase 11C review feedback (2026-02-18)
+
+## 2026-02-18 (Phase 11C — ImportSessionController — APPROVED)
+- Old name: N/A
+- New name: fetchAndSetGameSystem(), assignCatalogToSlot(), loadSlot(), clearSlot(), loadAllReadySlots(), checkForUpdatesAsync(), checkForUpdates(), initPersistenceAndRestore()
+- Reason: New controller methods for per-slot lifecycle, game system download, and update check.
+- Approval reference: Phase 11C review feedback (2026-02-18)
+
+## 2026-02-18 (Phase 11C — Navigation — APPROVED)
+- Old name: ImportWizardScreen, SearchScreen (standalone)
+- New name: AppShell (Drawer + Home/Downloads), HomeScreen (search + slot status bar), DownloadsScreen (slot panels + catalog picker)
+- Reason: Replace single-flow wizard with persistent shell navigation. Search is always accessible; catalog management moved to Downloads tab.
+- Approval reference: Phase 11C review feedback (2026-02-18)
+
+## 2026-02-18 (Phase 11C — SourceLocator re-export — APPROVED)
+- Old name: SourceLocator (internal to m1_acquire; consumers must import directly)
+- New name: SourceLocator re-exported from import_session_controller.dart
+- Reason: UI consumers that construct SourceLocator should not need to reach into m1_acquire engine internals. Dependency direction preserved: UI → controller → m1_acquire.
+- Approval reference: Phase 11C review feedback (2026-02-18)

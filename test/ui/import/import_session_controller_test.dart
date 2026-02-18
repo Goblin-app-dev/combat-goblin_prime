@@ -2,8 +2,16 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:combat_goblin_prime/modules/m1_acquire/m1_acquire.dart'
+    show AcquireFailure, AcquireService, RawPackBundle;
 import 'package:combat_goblin_prime/modules/m1_acquire/models/source_locator.dart';
 import 'package:combat_goblin_prime/services/bsd_resolver_service.dart';
+import 'package:combat_goblin_prime/services/github_sync_state.dart'
+    show
+        GitHubSyncState,
+        GitHubSyncStateService,
+        RepoSyncState,
+        TrackedFile;
 import 'package:combat_goblin_prime/ui/import/import_session_controller.dart';
 
 /// Mock BsdResolverService for testing.
@@ -1226,6 +1234,394 @@ void _slotStateTests() {
 
       // Slot 0 should remain ready (it was already ready, not loaded)
       expect(controller.slotState(0).status, equals(SlotStatus.ready));
+    });
+  });
+
+  _updateCheckTests();
+  _loadSlotMissingDepsTests();
+}
+
+// ---------------------------------------------------------------------------
+// Mock helpers
+// ---------------------------------------------------------------------------
+
+/// In-memory GitHubSyncStateService that returns a fixed state.
+class _FakeGitHubSyncStateService extends GitHubSyncStateService {
+  GitHubSyncState _state;
+  bool throwOnLoad;
+
+  _FakeGitHubSyncStateService(this._state, {this.throwOnLoad = false})
+      : super(storageRoot: '/dev/null');
+
+  @override
+  Future<GitHubSyncState> loadState() async {
+    if (throwOnLoad) throw Exception('network error');
+    return _state;
+  }
+}
+
+/// AcquireService subclass that always throws a given AcquireFailure.
+class _ThrowingAcquireService extends AcquireService {
+  final AcquireFailure _failure;
+
+  _ThrowingAcquireService(this._failure);
+
+  @override
+  Future<RawPackBundle> buildBundle({
+    required List<int> gameSystemBytes,
+    required String gameSystemExternalFileName,
+    required List<int> primaryCatalogBytes,
+    required String primaryCatalogExternalFileName,
+    required Future<List<int>?> Function(String) requestDependencyBytes,
+    required SourceLocator source,
+  }) async {
+    throw _failure;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// UpdateCheckStatus state-transition tests
+// ---------------------------------------------------------------------------
+
+void _updateCheckTests() {
+  group('ImportSessionController: UpdateCheckStatus', () {
+    test('starts as unknown and updateAvailable is false', () {
+      final controller = ImportSessionController();
+
+      expect(controller.updateCheckStatus, equals(UpdateCheckStatus.unknown));
+      expect(controller.updateAvailable, isFalse);
+    });
+
+    test('successful check with no SHA diffs → upToDate', () async {
+      const sourceKey = 'bsdata_wh40k';
+      const path = 'game.gst';
+      const sha = 'abc123';
+
+      final tree = RepoTreeResult(
+        entries: [
+          RepoTreeEntry(path: path, blobSha: sha, extension: '.gst'),
+        ],
+        fetchedAt: DateTime(2026, 2, 18),
+      );
+
+      final syncState = GitHubSyncState(
+        repos: {
+          sourceKey: RepoSyncState(
+            repoUrl: 'https://github.com/BSData/wh40k-10e',
+            branch: 'main',
+            trackedFiles: {
+              path: TrackedFile(
+                repoPath: path,
+                fileType: 'gst',
+                blobSha: sha, // same SHA → no update
+                lastCheckedAt: DateTime(2026, 2, 17),
+              ),
+            },
+          ),
+        },
+      );
+
+      final mock = _MockGitHubResolverService()..setTree(tree);
+      final syncService = _FakeGitHubSyncStateService(syncState);
+      final controller = ImportSessionController(
+        bsdResolver: mock,
+        gitHubSyncStateService: syncService,
+      );
+      // _sourceLocator must be set for check to run
+      controller.setSourceLocatorForTesting(
+        const SourceLocator(
+          sourceKey: sourceKey,
+          sourceUrl: 'https://github.com/BSData/wh40k-10e',
+        ),
+      );
+
+      await controller.checkForUpdates();
+
+      expect(controller.updateCheckStatus, equals(UpdateCheckStatus.upToDate));
+      expect(controller.updateAvailable, isFalse);
+    });
+
+    test('successful check with changed blob SHA → updatesAvailable', () async {
+      const sourceKey = 'bsdata_wh40k';
+      const path = 'game.gst';
+
+      final tree = RepoTreeResult(
+        entries: [
+          RepoTreeEntry(
+            path: path,
+            blobSha: 'new_sha_456',
+            extension: '.gst',
+          ),
+        ],
+        fetchedAt: DateTime(2026, 2, 18),
+      );
+
+      final syncState = GitHubSyncState(
+        repos: {
+          sourceKey: RepoSyncState(
+            repoUrl: 'https://github.com/BSData/wh40k-10e',
+            branch: 'main',
+            trackedFiles: {
+              path: TrackedFile(
+                repoPath: path,
+                fileType: 'gst',
+                blobSha: 'old_sha_123', // different SHA → update available
+                lastCheckedAt: DateTime(2026, 2, 17),
+              ),
+            },
+          ),
+        },
+      );
+
+      final mock = _MockGitHubResolverService()..setTree(tree);
+      final syncService = _FakeGitHubSyncStateService(syncState);
+      final controller = ImportSessionController(
+        bsdResolver: mock,
+        gitHubSyncStateService: syncService,
+      );
+      controller.setSourceLocatorForTesting(
+        const SourceLocator(
+          sourceKey: sourceKey,
+          sourceUrl: 'https://github.com/BSData/wh40k-10e',
+        ),
+      );
+
+      await controller.checkForUpdates();
+
+      expect(
+        controller.updateCheckStatus,
+        equals(UpdateCheckStatus.updatesAvailable),
+      );
+      expect(controller.updateAvailable, isTrue);
+    });
+
+    test('check fails when fetchRepoTree returns null → failed', () async {
+      final mock = _MockGitHubResolverService()
+        ..setTreeError(const BsdResolverException(
+          code: BsdResolverErrorCode.networkError,
+          message: 'timeout',
+        ));
+      final syncService = _FakeGitHubSyncStateService(const GitHubSyncState());
+      final controller = ImportSessionController(
+        bsdResolver: mock,
+        gitHubSyncStateService: syncService,
+      );
+      controller.setSourceLocatorForTesting(
+        const SourceLocator(
+          sourceKey: 'bsdata_wh40k',
+          sourceUrl: 'https://github.com/BSData/wh40k-10e',
+        ),
+      );
+
+      await controller.checkForUpdates();
+
+      expect(
+        controller.updateCheckStatus,
+        equals(UpdateCheckStatus.failed),
+      );
+      expect(controller.updateAvailable, isFalse);
+    });
+
+    test('check fails when syncService throws → failed, not upToDate',
+        () async {
+      const sourceKey = 'bsdata_wh40k';
+      const path = 'game.gst';
+
+      final tree = RepoTreeResult(
+        entries: [
+          RepoTreeEntry(path: path, blobSha: 'abc', extension: '.gst'),
+        ],
+        fetchedAt: DateTime(2026, 2, 18),
+      );
+
+      final mock = _MockGitHubResolverService()..setTree(tree);
+      final syncService = _FakeGitHubSyncStateService(
+        const GitHubSyncState(),
+        throwOnLoad: true,
+      );
+      final controller = ImportSessionController(
+        bsdResolver: mock,
+        gitHubSyncStateService: syncService,
+      );
+      controller.setSourceLocatorForTesting(
+        const SourceLocator(
+          sourceKey: sourceKey,
+          sourceUrl: 'https://github.com/BSData/wh40k-10e',
+        ),
+      );
+
+      await controller.checkForUpdates();
+
+      expect(controller.updateCheckStatus, equals(UpdateCheckStatus.failed));
+      // Must never imply upToDate when check failed
+      expect(
+        controller.updateCheckStatus,
+        isNot(equals(UpdateCheckStatus.upToDate)),
+      );
+    });
+
+    test('check with no sourceLocator stays unknown', () async {
+      final controller = ImportSessionController();
+
+      await controller.checkForUpdates();
+
+      // _sourceLocator is null → check exits early → status stays unknown
+      expect(controller.updateCheckStatus, equals(UpdateCheckStatus.unknown));
+    });
+
+    test('failed check does not set upToDate', () async {
+      final mock = _MockGitHubResolverService()
+        ..setTreeError(const BsdResolverException(
+          code: BsdResolverErrorCode.networkError,
+          message: 'fail',
+        ));
+      final controller = ImportSessionController(
+        bsdResolver: mock,
+        gitHubSyncStateService: _FakeGitHubSyncStateService(
+          const GitHubSyncState(),
+        ),
+      );
+      controller.setSourceLocatorForTesting(
+        const SourceLocator(
+          sourceKey: 'bsdata_wh40k',
+          sourceUrl: 'https://github.com/BSData/wh40k-10e',
+        ),
+      );
+
+      await controller.checkForUpdates();
+
+      expect(
+        controller.updateCheckStatus,
+        isNot(equals(UpdateCheckStatus.upToDate)),
+      );
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// loadSlot missing-dependency tests
+// ---------------------------------------------------------------------------
+
+void _loadSlotMissingDepsTests() {
+  group('ImportSessionController: loadSlot missing dependencies', () {
+    test(
+        'AcquireFailure with missingTargetIds → slot error with sorted ids',
+        () async {
+      final mock = _MockGitHubResolverService();
+      mock.setFile('test.cat', Uint8List.fromList([1, 2, 3]));
+      mock.setFile('game.gst', Uint8List.fromList([4, 5, 6]));
+
+      final acquireFactory = (_) => _ThrowingAcquireService(
+            const AcquireFailure(
+              message: 'Missing deps',
+              missingTargetIds: ['z-id', 'a-id', 'm-id'],
+            ),
+          );
+
+      final controller = ImportSessionController(
+        bsdResolver: mock,
+        acquireServiceFactory: acquireFactory,
+      );
+
+      // Set game system
+      await controller.fetchAndSetGameSystem(_kTestLocator, 'game.gst');
+      expect(controller.gameSystemFile, isNotNull);
+
+      // Put slot 0 in ready state
+      await controller.assignCatalogToSlot(0, 'test.cat', _kTestLocator);
+      expect(controller.slotState(0).status, equals(SlotStatus.ready));
+
+      // Load — pipeline will throw AcquireFailure with unordered IDs
+      await controller.loadSlot(0);
+
+      // Slot ends in error with sorted missing IDs
+      final state = controller.slotState(0);
+      expect(state.status, equals(SlotStatus.error));
+      expect(state.hasMissingDeps, isTrue);
+      expect(state.missingTargetIds, equals(['a-id', 'm-id', 'z-id']));
+      expect(state.missingTargetIds, isA<List<String>>());
+    });
+
+    test('AcquireFailure without missingTargetIds → error with empty list',
+        () async {
+      final mock = _MockGitHubResolverService();
+      mock.setFile('test.cat', Uint8List.fromList([1, 2, 3]));
+      mock.setFile('game.gst', Uint8List.fromList([4, 5, 6]));
+
+      final acquireFactory = (_) => _ThrowingAcquireService(
+            const AcquireFailure(message: 'build failed'),
+          );
+
+      final controller = ImportSessionController(
+        bsdResolver: mock,
+        acquireServiceFactory: acquireFactory,
+      );
+
+      await controller.fetchAndSetGameSystem(_kTestLocator, 'game.gst');
+      await controller.assignCatalogToSlot(0, 'test.cat', _kTestLocator);
+      await controller.loadSlot(0);
+
+      final state = controller.slotState(0);
+      expect(state.status, equals(SlotStatus.error));
+      expect(state.hasMissingDeps, isFalse);
+      expect(state.missingTargetIds, isEmpty);
+      expect(state.errorMessage, equals('build failed'));
+    });
+
+    test('missing IDs are stable-sorted and immutable', () async {
+      final mock = _MockGitHubResolverService();
+      mock.setFile('test.cat', Uint8List.fromList([1]));
+      mock.setFile('game.gst', Uint8List.fromList([2]));
+
+      final acquireFactory = (_) => _ThrowingAcquireService(
+            const AcquireFailure(
+              message: 'deps',
+              missingTargetIds: ['cc', 'aa', 'bb'],
+            ),
+          );
+
+      final controller = ImportSessionController(
+        bsdResolver: mock,
+        acquireServiceFactory: acquireFactory,
+      );
+
+      await controller.fetchAndSetGameSystem(_kTestLocator, 'game.gst');
+      await controller.assignCatalogToSlot(0, 'test.cat', _kTestLocator);
+      await controller.loadSlot(0);
+
+      final ids = controller.slotState(0).missingTargetIds;
+      expect(ids, equals(['aa', 'bb', 'cc']));
+      // Must be unmodifiable
+      expect(() => ids.add('xx'), throwsUnsupportedError);
+    });
+
+    test('clearing slot after error removes missingTargetIds', () async {
+      final mock = _MockGitHubResolverService();
+      mock.setFile('test.cat', Uint8List.fromList([1]));
+      mock.setFile('game.gst', Uint8List.fromList([2]));
+
+      final acquireFactory = (_) => _ThrowingAcquireService(
+            const AcquireFailure(
+              message: 'deps',
+              missingTargetIds: ['a-id'],
+            ),
+          );
+
+      final controller = ImportSessionController(
+        bsdResolver: mock,
+        acquireServiceFactory: acquireFactory,
+      );
+
+      await controller.fetchAndSetGameSystem(_kTestLocator, 'game.gst');
+      await controller.assignCatalogToSlot(0, 'test.cat', _kTestLocator);
+      await controller.loadSlot(0);
+
+      expect(controller.slotState(0).hasMissingDeps, isTrue);
+
+      controller.clearSlot(0);
+
+      expect(controller.slotState(0).status, equals(SlotStatus.empty));
+      expect(controller.slotState(0).missingTargetIds, isEmpty);
     });
   });
 }
