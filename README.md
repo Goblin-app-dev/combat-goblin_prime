@@ -173,6 +173,9 @@ Design proposals and approved names for each phase are in `docs/phases/`:
 - Phase 6 (M8 Modifiers): `phase_6_m8_*`
 - M9 Index: `m9_index_core_names_proposal.md`
 - Orchestrator: `orchestrator_v1_names_proposal.md`
+- M10 Structured Search: `m10_structured_search_proposal.md`
+- Phase 11B (Multi-Catalog): `phase_11b_multi_catalog_names_proposal.md`
+- Phase 12 (Voice Integration): `phase_12_voice_integration_proposal.md`
 
 ### Reference
 - [BSD Parsing Reference](docs/bsd-parsing-reference.md)

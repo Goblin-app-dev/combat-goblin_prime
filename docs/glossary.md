@@ -364,3 +364,32 @@ Deterministic query builder for GitHub repository search. Freezes canonical payl
 
 ## GitHub Repository Search Service (PROPOSED — GitHub Repository Search)
 Feature service contract exposing `search({required RepoSearchQuery query, String? pageCursor})` for GitHub repository discovery.
+
+---
+
+## Voice Session State (PROPOSAL — Phase 12 Voice)
+Enum representing the voice system lifecycle. States: `idle`, `listening`, `wakeDetected`, `capturingCommand`, `transcribing`, `canonicalizing`, `executing`, `speaking`, `followUpWindow`. Deterministic transitions with cooldown rules. Only active when voice toggle enabled and app in foreground.
+
+## Wake Detection (PROPOSAL — Phase 12 Voice)
+Rolling STT phrase detection for exact phrase "hey goblin". Uses 2-3 second listen windows with exact match after normalization. Cooldown window after trigger prevents rapid re-fires. MVP uses platform STT; Phase 12F upgrades to sherpa_onnx KWS if needed.
+
+## STT Lane (PROPOSAL — Phase 12 Voice)
+One of two speech-to-text pathways in the dual-lane design. Online lane uses `speech_to_text` (platform native). Offline lane uses Whisper.cpp via `whisper_flutter_plus`. Lane selection is automatic: platform when online, Whisper when offline or platform fails. Both expose a unified interface: `listenWindow()`, `transcribeCommand()`, `cancel()`.
+
+## Domain Canonicalizer (PROPOSAL — Phase 12 Voice)
+Deterministic service that maps untrusted STT transcript to pack entities. Consumes raw transcript + active IndexBundle vocabulary. Uses M9 normalization, token-window fuzzy matching (1-5 tokens), and a stable tie-break chain (score > span > canonicalKey lex > docId lex). Outputs VoiceQueryResolution with canonicalDocId, confidence, originalTranscript, canonicalText. Guarantees alignment with M9 index and M10 search.
+
+## Voice Query Resolution (PROPOSAL — Phase 12 Voice)
+Output model from DomainCanonicalizer. Contains canonicalDocId (resolved target), confidence (match quality), originalTranscript (raw STT output), and canonicalText (corrected display form). Deterministic: same transcript + vocabulary yields identical resolution.
+
+## Pronunciation Preprocessor (PROPOSAL — Phase 12 Voice)
+Deterministic substitution map applied before TTS only. Maps domain terms to phonetic approximations (e.g., "Tzeentch" to "Zeench", "Aeldari" to "El-dar-ee"). Stored as a map with stable ordering. Does not change underlying queries or search inputs.
+
+## Voice Mode (PROPOSAL — Phase 12 Voice)
+User-selected voice interaction mode. Search mode: resolves query and navigates to result. Assistant mode: resolves query, speaks answer, stays on current screen. Toggled via UI control alongside wake word enable/disable.
+
+## Voice Intent (PROPOSAL — Phase 12 Voice)
+Bounded deterministic intent for assistant mode. V1 intents include: unit ability query, rule read, stat query, navigation (next/previous/repeat/stop). No LLM required. Intent router selects M10 structured search (search mode) or bounded retrieval (assistant mode).
+
+## Voice Session Memory (PROPOSAL — Phase 12 Voice)
+Bounded session context for follow-up queries. Tracks "current subject" docId and follow-up window timer (~5 seconds). Enables conversational flow ("repeat", "next") without full LLM conversation state.

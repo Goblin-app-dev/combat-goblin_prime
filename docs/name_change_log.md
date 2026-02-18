@@ -370,3 +370,45 @@ No silent renames are permitted.
 - New name: SourceLocator re-exported from import_session_controller.dart
 - Reason: UI consumers that construct SourceLocator should not need to reach into m1_acquire engine internals. Dependency direction preserved: UI → controller → m1_acquire.
 - Approval reference: Phase 11C review feedback (2026-02-18)
+
+## 2026-02-18 (Phase 12 — Voice Integration — PROPOSAL)
+- Old name: N/A
+- New name: VoiceSessionState (enum: idle, listening, wakeDetected, capturingCommand, transcribing, canonicalizing, executing, speaking, followUpWindow)
+- Reason: New voice state machine enum for hands-free voice lifecycle. Deterministic transitions with cooldown rules.
+- Approval reference: Phase 12 Voice Integration proposal (2026-02-18)
+
+## 2026-02-18 (Phase 12 — Voice Integration — PROPOSAL)
+- Old name: N/A
+- New name: DomainCanonicalizer
+- Reason: New service mapping untrusted STT transcript to pack entities via M9 normalization + deterministic fuzzy matching. Core differentiator for 40k vocabulary reliability.
+- Approval reference: Phase 12 Voice Integration proposal (2026-02-18)
+
+## 2026-02-18 (Phase 12 — Voice Integration — PROPOSAL)
+- Old name: N/A
+- New name: VoiceQueryResolution
+- Reason: New output model from DomainCanonicalizer containing canonicalDocId, confidence, originalTranscript, canonicalText.
+- Approval reference: Phase 12 Voice Integration proposal (2026-02-18)
+
+## 2026-02-18 (Phase 12 — Voice Integration — PROPOSAL)
+- Old name: N/A
+- New name: VoiceMode (enum: search, assistant)
+- Reason: New enum for user-selected voice interaction mode. Search navigates to result; assistant speaks answer.
+- Approval reference: Phase 12 Voice Integration proposal (2026-02-18)
+
+## 2026-02-18 (Phase 12 — Voice Integration — PROPOSAL)
+- Old name: N/A
+- New name: PronunciationPreprocessor
+- Reason: New deterministic substitution map applied before TTS for domain term pronunciation. Does not affect queries.
+- Approval reference: Phase 12 Voice Integration proposal (2026-02-18)
+
+## 2026-02-18 (Phase 12 — Voice Integration — PROPOSAL)
+- Old name: N/A
+- New name: VoiceIntent (assistant mode intents v1)
+- Reason: New bounded deterministic intent type for assistant mode. Includes unit ability query, rule read, stat query, navigation commands. No LLM required.
+- Approval reference: Phase 12 Voice Integration proposal (2026-02-18)
+
+## 2026-02-18 (Phase 12 — Voice Integration — PROPOSAL)
+- Old name: N/A
+- New name: STT lane names (PlatformSttAdapter, OfflineSttAdapter), TTS adapter name (TtsAdapter)
+- Reason: Proposed adapter names for dual-lane STT (platform online + Whisper offline) and system TTS. Unified interface contracts. Final names pending Step 0B approval.
+- Approval reference: Phase 12 Voice Integration proposal (2026-02-18)
