@@ -268,7 +268,8 @@ class ImportSessionController extends ChangeNotifier {
   /// Enforces [kMaxSelectedCatalogs]: throws [ArgumentError] if
   /// catPaths.length > kMaxSelectedCatalogs.
   ///
-  /// Processes catalogs in the order provided by [catPaths] (deterministic).
+  /// Catalogs are sorted lexicographically by path before processing,
+  /// ensuring deterministic order regardless of caller-provided ordering.
   Future<void> importFromGitHub({
     required SourceLocator sourceLocator,
     required String gstPath,
@@ -281,6 +282,9 @@ class ImportSessionController extends ChangeNotifier {
         'Got ${catPaths.length}.',
       );
     }
+
+    // Sort locally for deterministic processing regardless of input order.
+    final sortedCatPaths = List<String>.of(catPaths)..sort();
 
     _sourceLocator = sourceLocator;
     _status = ImportStatus.preparing;
@@ -304,10 +308,10 @@ class ImportSessionController extends ChangeNotifier {
 
     // Download each .cat (any failure = abort entire flow)
     final catFiles = <SelectedFile>[];
-    for (var i = 0; i < catPaths.length; i++) {
-      final path = catPaths[i];
+    for (var i = 0; i < sortedCatPaths.length; i++) {
+      final path = sortedCatPaths[i];
       _statusMessage =
-          'Downloading catalog ${i + 1}/${catPaths.length}...';
+          'Downloading catalog ${i + 1}/${sortedCatPaths.length}...';
       notifyListeners();
 
       final bytes =
@@ -356,7 +360,7 @@ class ImportSessionController extends ChangeNotifier {
       await _persistGitHubSyncState(
         sourceLocator: sourceLocator,
         gstPath: gstPath,
-        catPaths: catPaths,
+        catPaths: sortedCatPaths,
         repoTree: repoTree,
       );
     }

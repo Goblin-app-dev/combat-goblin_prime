@@ -890,7 +890,8 @@ void _importFromGitHubTests() {
       expect(controller.sourceLocator, equals(_kTestLocator));
     });
 
-    test('downloads .gst before .cat files, in catPaths order', () async {
+    test('downloads .gst first, then .cat files in lexicographic order',
+        () async {
       final mock = _MockGitHubResolverService();
       mock.setFile('game.gst', Uint8List.fromList([1]));
       // cats fail so pipeline doesn't run
@@ -900,18 +901,66 @@ void _importFromGitHubTests() {
       ));
       final controller = ImportSessionController(bsdResolver: mock);
 
+      // Pass in reverse order — should still download alphabetically.
       await controller.importFromGitHub(
         sourceLocator: _kTestLocator,
         gstPath: 'game.gst',
-        catPaths: ['a.cat', 'b.cat'],
+        catPaths: ['b.cat', 'a.cat'],
         repoTree: _emptyTree,
       );
 
-      // .gst downloaded first; cats in provided order
+      // .gst downloaded first; first .cat is 'a.cat' (sorted), not 'b.cat'.
       expect(mock.downloadedPaths.first, equals('game.gst'));
-      // Only one .cat attempted before failure
       expect(mock.downloadedPaths.length, greaterThanOrEqualTo(2));
       expect(mock.downloadedPaths[1], equals('a.cat'));
+    });
+
+    test('different catPaths orders produce identical download + catalog order',
+        () async {
+      // Run 1: reverse-alphabetical input order
+      final mock1 = _MockGitHubResolverService();
+      mock1.setFile('game.gst', Uint8List.fromList([1]));
+      mock1.setFile('c.cat', Uint8List.fromList([3]));
+      mock1.setFile('a.cat', Uint8List.fromList([1]));
+      mock1.setFile('b.cat', Uint8List.fromList([2]));
+      final ctrl1 = ImportSessionController(bsdResolver: mock1);
+
+      await ctrl1.importFromGitHub(
+        sourceLocator: _kTestLocator,
+        gstPath: 'game.gst',
+        catPaths: ['c.cat', 'a.cat', 'b.cat'],
+        repoTree: _emptyTree,
+      );
+
+      // Run 2: different input order
+      final mock2 = _MockGitHubResolverService();
+      mock2.setFile('game.gst', Uint8List.fromList([1]));
+      mock2.setFile('c.cat', Uint8List.fromList([3]));
+      mock2.setFile('a.cat', Uint8List.fromList([1]));
+      mock2.setFile('b.cat', Uint8List.fromList([2]));
+      final ctrl2 = ImportSessionController(bsdResolver: mock2);
+
+      await ctrl2.importFromGitHub(
+        sourceLocator: _kTestLocator,
+        gstPath: 'game.gst',
+        catPaths: ['b.cat', 'c.cat', 'a.cat'],
+        repoTree: _emptyTree,
+      );
+
+      // Download order must be identical regardless of input order.
+      expect(mock1.downloadedPaths, equals(mock2.downloadedPaths));
+      expect(
+        mock1.downloadedPaths,
+        equals(['game.gst', 'a.cat', 'b.cat', 'c.cat']),
+      );
+
+      // selectedCatalogs order (which feeds sync-state rootIds) must match.
+      final names1 =
+          ctrl1.selectedCatalogs.map((f) => f.fileName).toList();
+      final names2 =
+          ctrl2.selectedCatalogs.map((f) => f.fileName).toList();
+      expect(names1, equals(names2));
+      expect(names1, equals(['a.cat', 'b.cat', 'c.cat']));
     });
 
     test('enforces max kMaxSelectedCatalogs strictly', () async {
