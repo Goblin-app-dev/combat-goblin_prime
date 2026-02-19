@@ -1644,7 +1644,7 @@ void _availableFactionsTests() {
         _makeTree(['Chaos - Chaos Knights.cat', 'Warhammer 40,000.gst']),
       );
       expect(result, hasLength(1));
-      expect(result.first.displayName, 'Chaos Knights');
+      expect(result.first.displayName, 'Chaos - Chaos Knights');
       expect(result.first.libraryPaths, isEmpty);
     });
 
@@ -1657,7 +1657,7 @@ void _availableFactionsTests() {
         'Warhammer 40,000.gst',
       ]));
       expect(result, hasLength(1));
-      expect(result.first.displayName, 'Chaos Knights');
+      expect(result.first.displayName, 'Chaos - Chaos Knights');
       expect(result.first.primaryPath, 'Chaos - Chaos Knights.cat');
       expect(result.first.libraryPaths,
           equals(['Chaos - Chaos Knights - Library.cat']));
@@ -1671,7 +1671,7 @@ void _availableFactionsTests() {
         'Warhammer 40,000.gst',
       ]));
       expect(result, hasLength(1));
-      expect(result.first.displayName, 'Imperial Knights');
+      expect(result.first.displayName, 'Imperium - Imperial Knights');
       expect(result.first.primaryPath, 'Imperium - Imperial Knights.cat');
       expect(result.first.libraryPaths,
           equals(['Imperium - Imperial Knights - Library.cat']));
@@ -1685,7 +1685,7 @@ void _availableFactionsTests() {
         'Warhammer 40,000.gst',
       ]));
       expect(result, hasLength(1));
-      expect(result.first.displayName, 'Tyranids');
+      expect(result.first.displayName, 'Xenos - Tyranids');
       expect(result.first.primaryPath, 'Xenos - Tyranids.cat');
       expect(result.first.libraryPaths, equals(['Library - Tyranids.cat']));
     });
@@ -1709,7 +1709,7 @@ void _availableFactionsTests() {
         'Warhammer 40,000.gst',
       ]));
       expect(result, hasLength(1));
-      expect(result.first.displayName, 'Giants');
+      expect(result.first.displayName, 'Unaligned - Giants');
       expect(result.first.primaryPath, 'Unaligned - Giants.cat');
       expect(result.first.libraryPaths,
           equals(['Library - Unaligned - Giants.cat']));
@@ -1741,7 +1741,11 @@ void _availableFactionsTests() {
       ]));
       expect(result, hasLength(3));
       expect(result.map((f) => f.displayName).toList(),
-          equals(['Chaos Knights', 'Imperial Knights', 'Tyranids']));
+          equals([
+            'Chaos - Chaos Knights',
+            'Imperium - Imperial Knights',
+            'Xenos - Tyranids',
+          ]));
       for (final f in result) {
         expect(f.libraryPaths, hasLength(1),
             reason: '${f.displayName} should have exactly one library path');
@@ -1780,7 +1784,7 @@ void _availableFactionsTests() {
       expect(result, hasLength(1),
           reason:
               '"Chaos Daemons - Library" must not appear as a separate entry');
-      expect(result.first.displayName, 'Chaos Daemons');
+      expect(result.first.displayName, 'Chaos - Chaos Daemons');
       expect(result.first.primaryPath, 'Chaos - Chaos Daemons.cat');
       expect(result.first.libraryPaths,
           equals(['Chaos - Chaos Daemons - Library.cat']));
@@ -1800,10 +1804,27 @@ void _availableFactionsTests() {
       expect(result, hasLength(1),
           reason:
               '"Library - Unaligned - Giants.cat" must not appear as a separate entry');
-      expect(result.first.displayName, 'Giants');
+      expect(result.first.displayName, 'Unaligned - Giants');
       expect(result.first.primaryPath, 'Unaligned - Giants.cat');
       expect(result.first.libraryPaths,
           equals(['Library - Unaligned - Giants.cat']));
+    });
+
+    // ── Acceptance test 1: deterministic pairing ────────────────────────────
+    // "Library - Tyranids.cat" must pair with bare "Tyranids.cat",
+    // producing exactly one row with displayName "Tyranids" and 2 paths total.
+    test('acceptance: Tyranids.cat + Library - Tyranids.cat → one row, '
+        'displayName Tyranids, 2 paths', () {
+      final result = _ctrl().availableFactions(_makeTree([
+        'Tyranids.cat',
+        'Library - Tyranids.cat',
+      ]));
+      expect(result, hasLength(1),
+          reason: 'Must produce exactly one row, not two');
+      expect(result.first.displayName, 'Tyranids');
+      expect(result.first.primaryPath, 'Tyranids.cat');
+      expect(result.first.libraryPaths, equals(['Library - Tyranids.cat']),
+          reason: 'Library path must be associated, not shown as a separate row');
     });
 
     // Regression 4 (UI render): no faction displayName may contain "Library".
