@@ -1690,13 +1690,16 @@ void _availableFactionsTests() {
       expect(result.first.libraryPaths, equals(['Library - Tyranids.cat']));
     });
 
-    test('prefix-pattern library without category prefix (Titans) is skipped '
-        'when no primary exists', () {
+    test('orphan library (no paired primary) appears with cleaned display name',
+        () {
       final result = _ctrl().availableFactions(_makeTree([
         'Library - Titans.cat',
         'Warhammer 40,000.gst',
       ]));
-      expect(result, isEmpty);
+      expect(result, hasLength(1));
+      expect(result.first.displayName, 'Titans');
+      expect(result.first.primaryPath, 'Library - Titans.cat');
+      expect(result.first.libraryPaths, isEmpty);
     });
 
     // ── Prefix pattern with category prefix after "Library - " ───────────────
@@ -1739,17 +1742,23 @@ void _availableFactionsTests() {
         'Library - Titans.cat', // library-only: skipped
         'Warhammer 40,000.gst',
       ]));
-      expect(result, hasLength(3));
+      expect(result, hasLength(4));
       expect(result.map((f) => f.displayName).toList(),
           equals([
             'Chaos - Chaos Knights',
             'Imperium - Imperial Knights',
+            'Titans', // orphan library: displayName cleaned
             'Xenos - Tyranids',
           ]));
-      for (final f in result) {
+      // The 3 paired factions each have exactly one library path.
+      for (final f in result.where((f) => f.displayName != 'Titans')) {
         expect(f.libraryPaths, hasLength(1),
             reason: '${f.displayName} should have exactly one library path');
       }
+      // The orphan library has no library paths (it IS the file).
+      final titans = result.firstWhere((f) => f.displayName == 'Titans');
+      expect(titans.libraryPaths, isEmpty);
+      expect(titans.primaryPath, 'Library - Titans.cat');
     });
 
     // ── Regression tests (prevent every real-world library-leak pattern) ─────
@@ -1792,8 +1801,8 @@ void _availableFactionsTests() {
 
     // Regression 3: prefix-pattern library WITH category prefix after "Library - ".
     // "Library - Unaligned - Giants.cat" must merge with "Unaligned - Giants.cat".
-    // This is the exact pattern that kept slipping before _parseCatStem ran the
-    // same category-prefix strip on both sides.
+    // _pairKey strips "library" and one leading category segment from both stems,
+    // so both resolve to the same key ("giants").
     test(
         'regression: prefix-pattern library with category prefix merges '
         '(Library - Unaligned - Giants + Unaligned - Giants)', () {
@@ -1827,6 +1836,28 @@ void _availableFactionsTests() {
           reason: 'Library path must be associated, not shown as a separate row');
     });
 
+    // ── Acceptance test 2: orphan library (Astartes Heresy Legends) ────────
+    // "Library - Astartes Heresy Legends.cat" has no paired primary. It must
+    // appear in the picker as "Astartes Heresy Legends" — never "Library".
+    test('acceptance: orphan library "Library - Astartes Heresy Legends.cat" '
+        'shown as "Astartes Heresy Legends"', () {
+      final result = _ctrl().availableFactions(_makeTree([
+        'Library - Astartes Heresy Legends.cat',
+        'Chaos - Chaos Knights.cat',
+        'Warhammer 40,000.gst',
+      ]));
+      expect(result, hasLength(2));
+      final orphan = result.firstWhere(
+        (f) => f.primaryPath == 'Library - Astartes Heresy Legends.cat',
+      );
+      expect(orphan.displayName, 'Astartes Heresy Legends');
+      expect(orphan.libraryPaths, isEmpty);
+      // "Library" must not appear in any display name.
+      for (final f in result) {
+        expect(f.displayName, isNot(contains('Library')));
+      }
+    });
+
     // Regression 4 (UI render): no faction displayName may contain "Library".
     // Enforces the requirement that no library filename leaks into the picker UI.
     test('regression: no faction displayName contains "Library"', () {
@@ -1839,7 +1870,7 @@ void _availableFactionsTests() {
         'Library - Tyranids.cat',
         'Unaligned - Giants.cat',
         'Library - Unaligned - Giants.cat',
-        'Library - Titans.cat', // library-only: silently skipped
+        'Library - Titans.cat', // orphan library: shown as "Titans"
         'Chaos - Chaos Daemons.cat',
         'Chaos - Chaos Daemons - Library.cat',
         'Warhammer 40,000.gst',
