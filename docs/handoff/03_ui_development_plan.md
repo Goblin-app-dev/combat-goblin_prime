@@ -1,6 +1,6 @@
 # Session Handoff — UI Development Plan
 
-**Last Updated:** 2026-02-19
+**Last Updated:** 2026-02-19 (Phase 11E)
 **Branch:** `claude/github-catalog-picker-Py9xI`
 
 ---
@@ -36,22 +36,26 @@ main.dart
 
 ---
 
-## Downloads Screen Flow (IMPLEMENTED — Phase 11D)
+## Downloads Screen Flow (IMPLEMENTED — Phase 11D + 11E)
 
 ```
 App mount → DownloadsScreen.initState
-         → auto-fetch https://github.com/BSData/wh40k-10e
-         → If 1 .gst found: auto-download game system
+         → auto-fetch repo tree (https://github.com/BSData/wh40k-10e)
+         ↓
+User taps "Load Game System Data"
+         → If 1 .gst: download immediately
+         → If multiple .gst: AlertDialog picker first
+         → SHA stored in _gstLoadedBlobSha
+         → Button shows green check "Warhammer 40000 10th Edition"
          ↓
 User taps Slot 1 or Slot 2 → FactionPickerScreen opens
-         → Filter field + faction list
+         → Filter field + faction list (one row per faction, library collapsed)
          → Currently loaded faction highlighted with check
          ↓
 User taps a faction → loadFactionIntoSlot(slot, faction, locator)
          → Downloads primary .cat bytes
-         → Pre-flight scan → fetch catalogueLink deps
-         → Slot transitions: fetching → ready
-         → Immediately calls loadSlot() → building → loaded
+         → Pre-flight scan → fetch catalogueLink deps (library .cat included)
+         → Slot transitions: fetching → [ready] → building → loaded
          → FactionPickerScreen pops
          ↓
 HomeScreen slot chips show "Tyranids", "Necrons", etc.
@@ -66,8 +70,17 @@ empty → fetching (primary + deps) → [ready] → building → loaded
                                                 error      error
 ```
 
-`[ready]` is transient when game system is available (immediately continues to building).
-Stays at `ready` only if game system is not yet set — then manual "Load" button appears.
+`[ready]` is transient when game system is available (auto-continues to building).
+Stays at `ready` only if game system is not yet loaded. No manual "Load" button exists — user must press "Load Game System Data" first.
+
+### Faction Grouping Algorithm (availableFactions)
+
+For each `.cat` in the repo tree:
+1. Strip one category prefix ("Chaos - ", "Xenos - ", "Imperium - ", etc.)
+2. If remainder starts with "Library - ": strip it, mark as library
+3. Remaining stem = group key
+
+Group by key → primary = lex-smallest non-library path → libraryPaths = all library paths. Library-only groups skipped. Result sorted by displayName.
 
 ---
 
@@ -150,11 +163,12 @@ test/
 
 | Item | Priority | Notes |
 |------|----------|-------|
-| Transitive dependencies (deps-of-deps) | Medium | Pre-fetch only reads primary catalog's `catalogueLinks`; deps' own deps not scanned |
+| Transitive dependencies (deps-of-deps) | Medium | Pre-fetch reads primary catalog's `catalogueLinks`; deps' own deps not scanned |
 | Dependency path tracking in session persistence | Low | `_saveSession()` passes empty `dependencyPaths: {}` |
-| Tests for `loadFactionIntoSlot` | Medium | New behaviour has no unit test coverage yet |
+| Tests for `loadFactionIntoSlot` / `availableFactions` | Medium | No unit test coverage yet |
 | Mojibake in data/text assets | Low | Documented in `CODEX_TASKS.md`, post-M10 |
-| Repo URL not persisted across sessions | Low | User must re-fetch on next cold start (default URL auto-fetches) |
+| Repo URL not persisted across sessions | Low | User must re-fetch on cold start (default URL auto-fetches the tree) |
+| Game system SHA not persisted across sessions | Low | `_gstLoadedBlobSha` is view-local; update check resets on app restart |
 
 ---
 
