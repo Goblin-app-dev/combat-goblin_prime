@@ -592,22 +592,26 @@ class ImportSessionController extends ChangeNotifier {
   /// Builds a sorted list of [FactionOption]s from [tree].
   ///
   /// **Group-by algorithm** — ensures every faction appears exactly once,
-  /// regardless of whether it has an associated library catalog:
+  /// regardless of whether it has an associated library catalog.
   ///
-  /// 1. For each `.cat` file, compute a **group key**:
-  ///    - Strip one known category prefix ("Chaos - ", "Xenos - ", etc.).
-  ///    - If the result starts with "Library - ", strip that too and mark
-  ///      the file as a library entry.
-  ///    - The remaining stem is the group key (= display name).
-  /// 2. Accumulate each path into its group's primary or library list.
-  /// 3. Emit one [FactionOption] per group that has at least one primary
-  ///    (library-only groups are silently skipped).
-  ///    - [FactionOption.primaryPath] = lexicographically smallest non-library
-  ///      path in the group (deterministic tie-break).
-  ///    - [FactionOption.libraryPaths] = all library paths in the group,
-  ///      sorted lexicographically.
-  /// 4. Sort options ascending by [FactionOption.displayName].
+  /// The BSData wh40k-10e repo uses **two** library naming conventions:
+  /// - Prefix: `"Library - Tyranids.cat"` (no category prefix)
+  /// - Suffix: `"Imperium - Imperial Knights - Library.cat"` (category prefix
+  ///   retained; "- Library" appended to the faction stem)
+  ///
+  /// Algorithm per `.cat` file:
+  /// 1. Strip one known category prefix ("Chaos - ", "Xenos - ", etc.).
+  /// 2. Detect library — suffix pattern first (`" - Library"` at end),
+  ///    then prefix pattern (`"Library - "` at start). Mark as library and
+  ///    derive the group key by stripping the matched pattern.
+  /// 3. Group paths by group key.
+  /// 4. Emit one [FactionOption] per group that has ≥1 primary:
+  ///    - [FactionOption.primaryPath] = lex-smallest non-library path.
+  ///    - [FactionOption.libraryPaths] = all library paths, sorted.
+  ///    Library-only groups are silently skipped.
+  /// 5. Sort ascending by [FactionOption.displayName].
   List<FactionOption> availableFactions(RepoTreeResult tree) {
+    const libSuffix = ' - Library';
     const libPrefix = 'Library - ';
 
     // Group key → (primary paths, library paths)
@@ -618,7 +622,7 @@ class ImportSessionController extends ChangeNotifier {
       var stem =
           base.endsWith('.cat') ? base.substring(0, base.length - 4) : base;
 
-      // Strip one known category prefix (e.g. "Chaos - ").
+      // Step 1: strip one known category prefix (e.g. "Chaos - ").
       for (final prefix in _knownFactionPrefixes) {
         if (stem.startsWith(prefix)) {
           stem = stem.substring(prefix.length);
@@ -626,10 +630,21 @@ class ImportSessionController extends ChangeNotifier {
         }
       }
 
-      // Detect library and derive the group key.
-      final isLibrary = stem.startsWith(libPrefix);
-      final groupKey =
-          isLibrary ? stem.substring(libPrefix.length) : stem;
+      // Step 2: detect library — suffix wins over prefix.
+      final bool isLibrary;
+      final String groupKey;
+      if (stem.endsWith(libSuffix)) {
+        // e.g. "Imperial Knights - Library"
+        isLibrary = true;
+        groupKey = stem.substring(0, stem.length - libSuffix.length);
+      } else if (stem.startsWith(libPrefix)) {
+        // e.g. "Library - Tyranids"
+        isLibrary = true;
+        groupKey = stem.substring(libPrefix.length);
+      } else {
+        isLibrary = false;
+        groupKey = stem;
+      }
 
       final group = groups.putIfAbsent(
         groupKey,
