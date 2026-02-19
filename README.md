@@ -85,6 +85,16 @@ cd combat-goblin_prime
 flutter pub get
 ```
 
+## Claude Code on the Web
+
+A `SessionStart` hook is configured in `.claude/hooks/session-start.sh`. When running in a remote Claude Code session it:
+
+1. Installs the Flutter SDK from the stable channel (skips if already present)
+2. Persists `PATH` so `flutter` and `dart` are available for the whole session
+3. Runs `flutter pub get` to restore dependencies
+
+No manual setup is needed — the hook runs automatically on session start.
+
 ## Running Tests
 
 ```bash
