@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
 
+import 'package:combat_goblin_prime/ui/downloads/faction_picker_screen.dart';
 import 'package:combat_goblin_prime/ui/import/import_session_controller.dart';
 import 'package:combat_goblin_prime/ui/import/import_session_provider.dart';
+
+/// Default repository URL pre-loaded on first launch.
+const _kDefaultRepoUrl = 'https://github.com/BSData/wh40k-10e';
 
 /// Downloads screen for managing catalog slots.
 ///
 /// Layout:
-/// - GitHub repo URL input + Fetch button
-/// - Game system selector (from fetched tree)
-/// - Slot panels (one per [kMaxSelectedCatalogs])
-/// - Load All button
+/// - Repo URL (read-only display + "Change" button). Auto-fetches tree on mount.
+/// - Game system selector (shown after tree fetch, hidden once loaded).
+/// - Slot panels (tappable → [FactionPickerScreen]).
+/// - Load All button (shown when any slot is in [SlotStatus.ready]).
 class DownloadsScreen extends StatefulWidget {
   const DownloadsScreen({super.key});
 
@@ -18,7 +22,7 @@ class DownloadsScreen extends StatefulWidget {
 }
 
 class _DownloadsScreenState extends State<DownloadsScreen> {
-  final _urlController = TextEditingController();
+  final _urlController = TextEditingController(text: _kDefaultRepoUrl);
 
   // View-local state for tree browsing
   RepoTreeResult? _repoTree;
@@ -26,6 +30,18 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   String? _treeFetchError;
   String? _selectedGstPath;
   bool _fetchingGst = false;
+
+  /// When true, the URL field is editable; when false, it shows read-only.
+  bool _editingUrl = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-fetch the default repo on first load.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _fetchTree();
+    });
+  }
 
   @override
   void dispose() {
@@ -57,6 +73,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
       _treeFetchError = null;
       _repoTree = null;
       _selectedGstPath = null;
+      _editingUrl = false; // collapse URL editor after fetch
     });
 
     final controller = ImportSessionProvider.of(context);
@@ -71,6 +88,11 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
             controller.resolverError?.userMessage ?? 'Failed to fetch repository.';
       }
     });
+
+    // Auto-select game system if exactly one .gst exists.
+    if (tree != null && tree.gameSystemFiles.length == 1) {
+      await _selectGameSystem(tree.gameSystemFiles.first.path);
+    }
   }
 
   Future<void> _selectGameSystem(String path) async {
@@ -89,11 +111,28 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     setState(() => _fetchingGst = false);
   }
 
-  Future<void> _assignToSlot(int slot, String catPath) async {
+  /// Navigates to [FactionPickerScreen] for the given slot.
+  Future<void> _openFactionPicker(int slot) async {
     final locator = _buildLocator();
     if (locator == null) return;
+    final tree = _repoTree;
+    if (tree == null) return;
+
     final controller = ImportSessionProvider.of(context);
-    await controller.assignCatalogToSlot(slot, catPath, locator);
+    final factions = controller.availableFactions(tree);
+    final currentPath = controller.slotState(slot).catalogPath;
+
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => FactionPickerScreen(
+          slotIndex: slot,
+          factions: factions,
+          locator: locator,
+          currentFactionPath: currentPath,
+        ),
+      ),
+    );
   }
 
   @override
@@ -105,23 +144,42 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // --- Repo URL Input ---
+            // --- Repo URL ---
             _RepoUrlSection(
               urlController: _urlController,
               fetching: _fetchingTree,
               error: _treeFetchError,
+              editing: _editingUrl,
+              onChangeRequested: () => setState(() => _editingUrl = true),
               onFetch: _fetchTree,
             ),
             const SizedBox(height: 16),
 
             // --- Game System Selector ---
-            if (_repoTree != null) ...[
+            if (_repoTree != null && controller.gameSystemFile == null) ...[
               _GameSystemSection(
                 tree: _repoTree!,
                 selectedPath: _selectedGstPath,
                 fetching: _fetchingGst,
-                gameSystemFile: controller.gameSystemFile,
                 onSelect: _selectGameSystem,
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            // --- Game system loaded confirmation ---
+            if (controller.gameSystemFile != null) ...[
+              ListTile(
+                leading: const Icon(Icons.check_circle, color: Colors.green),
+                title: Text(
+                  controller.gameSystemDisplayName ??
+                      controller.gameSystemFile!.fileName,
+                ),
+                subtitle: const Text('Game system loaded'),
+                dense: true,
+                tileColor: Colors.green.withValues(alpha: 0.05),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
               const SizedBox(height: 16),
             ],
@@ -160,9 +218,11 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
               _SlotPanel(
                 index: i,
                 slotState: controller.slotState(i),
-                catalogEntries: _repoTree?.catalogFiles ?? [],
                 hasGameSystem: controller.gameSystemFile != null,
-                onAssign: (path) => _assignToSlot(i, path),
+                hasTree: _repoTree != null,
+                onTap: (_repoTree != null && controller.gameSystemFile != null)
+                    ? () => _openFactionPicker(i)
+                    : null,
                 onLoad: () => controller.loadSlot(i),
                 onClear: () => controller.clearSlot(i),
               ),
@@ -170,8 +230,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
             ],
 
             // --- Load All Button ---
-            if (controller.slots
-                .any((s) => s.status == SlotStatus.ready)) ...[
+            if (controller.slots.any((s) => s.status == SlotStatus.ready)) ...[
               const SizedBox(height: 8),
               FilledButton.icon(
                 onPressed: controller.gameSystemFile != null
@@ -194,12 +253,16 @@ class _RepoUrlSection extends StatelessWidget {
   final TextEditingController urlController;
   final bool fetching;
   final String? error;
+  final bool editing;
+  final VoidCallback onChangeRequested;
   final VoidCallback onFetch;
 
   const _RepoUrlSection({
     required this.urlController,
     required this.fetching,
     this.error,
+    required this.editing,
+    required this.onChangeRequested,
     required this.onFetch,
   });
 
@@ -210,32 +273,75 @@ class _RepoUrlSection extends StatelessWidget {
       children: [
         Text('GitHub Repository', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: urlController,
-                decoration: const InputDecoration(
-                  hintText: 'https://github.com/BSData/wh40k-10e',
-                  border: OutlineInputBorder(),
-                  isDense: true,
+        if (editing)
+          // Editable mode
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: urlController,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    hintText: 'https://github.com/BSData/wh40k-10e',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onSubmitted: (_) => onFetch(),
                 ),
-                onSubmitted: (_) => onFetch(),
               ),
-            ),
-            const SizedBox(width: 8),
-            FilledButton(
-              onPressed: fetching ? null : onFetch,
-              child: fetching
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Fetch'),
-            ),
-          ],
-        ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: fetching ? null : onFetch,
+                child: fetching
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Fetch'),
+              ),
+            ],
+          )
+        else
+          // Read-only mode
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Theme.of(context).dividerColor),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: fetching
+                      ? const Row(
+                          children: [
+                            SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              'Fetching...',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ],
+                        )
+                      : Text(
+                          urlController.text,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton(
+                onPressed: fetching ? null : onChangeRequested,
+                child: const Text('Change'),
+              ),
+            ],
+          ),
         if (error != null) ...[
           const SizedBox(height: 4),
           Text(error!, style: TextStyle(color: Colors.red.shade700, fontSize: 12)),
@@ -249,14 +355,12 @@ class _GameSystemSection extends StatelessWidget {
   final RepoTreeResult tree;
   final String? selectedPath;
   final bool fetching;
-  final SelectedFile? gameSystemFile;
   final ValueChanged<String> onSelect;
 
   const _GameSystemSection({
     required this.tree,
     this.selectedPath,
     required this.fetching,
-    this.gameSystemFile,
     required this.onSelect,
   });
 
@@ -272,28 +376,18 @@ class _GameSystemSection extends StatelessWidget {
       children: [
         Text('Game System', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
-        if (gameSystemFile != null)
-          ListTile(
-            leading: const Icon(Icons.check_circle, color: Colors.green),
-            title: Text(gameSystemFile!.fileName),
-            subtitle: const Text('Loaded'),
-            dense: true,
-            tileColor: Colors.green.withValues(alpha: 0.05),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          )
-        else
-          ...gstFiles.map((entry) => ListTile(
-                leading: fetching && selectedPath == entry.path
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.description_outlined),
-                title: Text(entry.path.split('/').last),
-                dense: true,
-                onTap: fetching ? null : () => onSelect(entry.path),
-              )),
+        ...gstFiles.map((entry) => ListTile(
+              leading: fetching && selectedPath == entry.path
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.description_outlined),
+              title: Text(entry.path.split('/').last),
+              dense: true,
+              onTap: fetching ? null : () => onSelect(entry.path),
+            )),
       ],
     );
   }
@@ -302,169 +396,216 @@ class _GameSystemSection extends StatelessWidget {
 class _SlotPanel extends StatelessWidget {
   final int index;
   final SlotState slotState;
-  final List<RepoTreeEntry> catalogEntries;
   final bool hasGameSystem;
-  final ValueChanged<String> onAssign;
+  final bool hasTree;
+
+  /// Opens the faction picker. Null when picker is not available yet.
+  final VoidCallback? onTap;
   final VoidCallback onLoad;
   final VoidCallback onClear;
 
   const _SlotPanel({
     required this.index,
     required this.slotState,
-    required this.catalogEntries,
     required this.hasGameSystem,
-    required this.onAssign,
+    required this.hasTree,
+    this.onTap,
     required this.onLoad,
     required this.onClear,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Row(
-              children: [
-                Text(
-                  'Slot ${index + 1}',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                const SizedBox(width: 8),
-                _StatusChip(status: slotState.status),
-                const Spacer(),
-                if (slotState.status != SlotStatus.empty &&
-                    slotState.status != SlotStatus.fetching &&
-                    slotState.status != SlotStatus.building)
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 18),
-                    onPressed: onClear,
-                    tooltip: 'Clear slot',
-                    visualDensity: VisualDensity.compact,
-                  ),
-              ],
-            ),
+    final canTap = onTap != null &&
+        slotState.status != SlotStatus.fetching &&
+        slotState.status != SlotStatus.building;
 
-            // Body: depends on status
-            if (slotState.status == SlotStatus.empty) ...[
-              if (catalogEntries.isEmpty)
+    return Card(
+      child: InkWell(
+        onTap: canTap ? onTap : null,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Row(
+                children: [
+                  Text(
+                    'Slot ${index + 1}',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(width: 8),
+                  _StatusChip(status: slotState.status),
+                  const Spacer(),
+                  if (slotState.status != SlotStatus.empty &&
+                      slotState.status != SlotStatus.fetching &&
+                      slotState.status != SlotStatus.building)
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 18),
+                      onPressed: onClear,
+                      tooltip: 'Clear slot',
+                      visualDensity: VisualDensity.compact,
+                    ),
+                ],
+              ),
+
+              // Body: depends on status
+              if (slotState.status == SlotStatus.empty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: _buildEmptyBody(context),
+                ),
+              if (slotState.status == SlotStatus.fetching)
                 const Padding(
                   padding: EdgeInsets.only(top: 8),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      SizedBox(width: 8),
+                      Text('Downloading…'),
+                    ],
+                  ),
+                ),
+              if (slotState.status == SlotStatus.ready)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          slotState.catalogName ?? 'Ready',
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                      if (!hasGameSystem)
+                        const Text(
+                          'Set game system to load.',
+                          style: TextStyle(color: Colors.orange, fontSize: 12),
+                        )
+                      else
+                        FilledButton(
+                          onPressed: onLoad,
+                          child: const Text('Load'),
+                        ),
+                    ],
+                  ),
+                ),
+              if (slotState.status == SlotStatus.building)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      SizedBox(width: 8),
+                      Text('Building index…'),
+                    ],
+                  ),
+                ),
+              if (slotState.status == SlotStatus.loaded)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle,
+                          color: Colors.green, size: 16),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          slotState.catalogName ?? 'Loaded',
+                          style: const TextStyle(color: Colors.green),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (canTap)
+                        const Text(
+                          'Tap to change',
+                          style: TextStyle(fontSize: 11, color: Colors.grey),
+                        ),
+                    ],
+                  ),
+                ),
+              if (slotState.status == SlotStatus.error) ...[
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
                   child: Text(
-                    'Fetch a repository to see available catalogs.',
-                    style: TextStyle(color: Colors.grey),
+                    slotState.errorMessage ?? 'An error occurred.',
+                    style: TextStyle(color: Colors.red.shade700, fontSize: 12),
                   ),
-                )
-              else
-                _CatalogPicker(
-                  entries: catalogEntries,
-                  enabled: hasGameSystem,
-                  onSelect: onAssign,
                 ),
-            ],
-            if (slotState.status == SlotStatus.fetching)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                if (slotState.hasMissingDeps) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Missing dependencies (${slotState.missingTargetIds.length}):',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.red.shade800,
                     ),
-                    SizedBox(width: 8),
-                    Text('Downloading...'),
-                  ],
-                ),
-              ),
-            if (slotState.status == SlotStatus.ready) ...[
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Row(
-                  children: [
-                    Expanded(
+                  ),
+                  const SizedBox(height: 2),
+                  ...slotState.missingTargetIds.map(
+                    (id) => Padding(
+                      padding: const EdgeInsets.only(left: 12),
                       child: Text(
-                        slotState.catalogName ?? 'Ready',
-                        style: const TextStyle(fontWeight: FontWeight.w500),
+                        id,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontFamily: 'monospace',
+                          color: Colors.red.shade600,
+                        ),
                       ),
                     ),
-                    FilledButton(
-                      onPressed: hasGameSystem ? onLoad : null,
-                      child: const Text('Load'),
-                    ),
-                  ],
-                ),
-              ),
-              if (!hasGameSystem)
-                const Text(
-                  'Select a game system first.',
-                  style: TextStyle(color: Colors.orange, fontSize: 12),
-                ),
-            ],
-            if (slotState.status == SlotStatus.building)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                    SizedBox(width: 8),
-                    Text('Building index...'),
-                  ],
-                ),
-              ),
-            if (slotState.status == SlotStatus.loaded)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  '${slotState.catalogName} - ready for search',
-                  style: const TextStyle(color: Colors.green),
-                ),
-              ),
-            if (slotState.status == SlotStatus.error) ...[
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  slotState.errorMessage ?? 'An error occurred.',
-                  style: TextStyle(color: Colors.red.shade700, fontSize: 12),
-                ),
-              ),
-              // Show sorted missing dependency list when present
-              if (slotState.hasMissingDeps) ...[
-                const SizedBox(height: 4),
-                Text(
-                  'Missing dependencies (${slotState.missingTargetIds.length}):',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.red.shade800,
                   ),
-                ),
-                const SizedBox(height: 2),
-                ...slotState.missingTargetIds.map(
-                  (id) => Padding(
-                    padding: const EdgeInsets.only(left: 12),
+                ],
+                if (canTap)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
                     child: Text(
-                      id,
+                      'Tap to try a different faction.',
                       style: TextStyle(
-                        fontSize: 11,
-                        fontFamily: 'monospace',
-                        color: Colors.red.shade600,
-                      ),
+                          fontSize: 12, color: Colors.grey.shade600),
                     ),
                   ),
-                ),
               ],
             ],
-          ],
+          ),
         ),
       ),
+    );
+  }
+
+  Widget _buildEmptyBody(BuildContext context) {
+    if (!hasTree) {
+      return const Text(
+        'Fetch a repository first.',
+        style: TextStyle(color: Colors.grey),
+      );
+    }
+    if (!hasGameSystem) {
+      return const Text(
+        'Select a game system first.',
+        style: TextStyle(color: Colors.orange, fontSize: 12),
+      );
+    }
+    return Row(
+      children: [
+        const Icon(Icons.touch_app, size: 16, color: Colors.grey),
+        const SizedBox(width: 6),
+        Text(
+          'Tap to select a faction',
+          style: TextStyle(color: Colors.grey.shade600),
+        ),
+      ],
     );
   }
 }
@@ -494,48 +635,6 @@ class _StatusChip extends StatelessWidget {
       child: Text(
         label,
         style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600),
-      ),
-    );
-  }
-}
-
-class _CatalogPicker extends StatelessWidget {
-  final List<RepoTreeEntry> entries;
-  final bool enabled;
-  final ValueChanged<String> onSelect;
-
-  const _CatalogPicker({
-    required this.entries,
-    required this.enabled,
-    required this.onSelect,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (!enabled) {
-      return const Padding(
-        padding: EdgeInsets.only(top: 8),
-        child: Text(
-          'Select a game system first.',
-          style: TextStyle(color: Colors.orange, fontSize: 12),
-        ),
-      );
-    }
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxHeight: 200),
-      child: ListView.builder(
-        shrinkWrap: true,
-        itemCount: entries.length,
-        itemBuilder: (context, index) {
-          final entry = entries[index];
-          final name = entry.path.split('/').last;
-          return ListTile(
-            leading: const Icon(Icons.description_outlined, size: 20),
-            title: Text(name, style: const TextStyle(fontSize: 13)),
-            dense: true,
-            onTap: () => onSelect(entry.path),
-          );
-        },
       ),
     );
   }

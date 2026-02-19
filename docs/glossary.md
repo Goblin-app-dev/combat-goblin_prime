@@ -342,6 +342,26 @@ Public method on BsdResolverService. Returns raw Uint8List bytes for a repositor
 
 ---
 
+## Faction Option (Phase 11D — Faction Picker)
+Value type `FactionOption` representing a selectable faction in the picker. Fields: `displayName` (e.g. "Tyranids"), `primaryPath` (repo .cat path), `libraryPaths` (list of associated library .cat paths matched by filename). Derived by `ImportSessionController.availableFactions()` from `RepoTreeResult`. Library catalogs are excluded from the picker list; their paths appear only inside a faction's `libraryPaths` for informational display. Additional deps are resolved via catalogueLinks pre-flight scan.
+
+## Faction Picker Screen (Phase 11D — Faction Picker)
+Screen `FactionPickerScreen` for picking a faction for a specific catalog slot. Shows a searchable/filterable list of `FactionOption`s. Currently loaded faction highlighted with a check mark (highlight-and-replace model). Tapping a faction immediately calls `loadFactionIntoSlot()` — no second confirmation. "Clear" action available in AppBar actions.
+
+## Available Factions (Phase 11D — Faction Picker)
+Controller method `availableFactions(RepoTreeResult tree)` that derives a deterministic sorted `List<FactionOption>` from a repo tree. Excludes library catalogs. Strips known category prefixes ("Xenos - ", "Imperium - ", "Chaos - ", etc.) for display. Matches library paths to factions by basename substring. Stable sort: ascending by displayName.
+
+## Load Faction Into Slot (Phase 11D — Faction Picker)
+Controller method `loadFactionIntoSlot(int slot, FactionOption faction, SourceLocator locator)`. One-tap import flow: fetches primary .cat → pre-flight scan for catalogueLinks → fetches missing deps via BsdResolverService → marks slot ready → immediately calls `loadSlot()` if game system is available. Uses `faction.displayName` as the slot's `catalogName` (so UI shows "Tyranids" not "Tyranids.cat").
+
+## Game System Display Name (Phase 11D — Faction Picker)
+Controller getter `gameSystemDisplayName`. Short name derived from `gameSystemFile.fileName` by stripping the `.gst` extension. Returns null if no game system is loaded. Used in HomeScreen stats view and DownloadsScreen header.
+
+## Cached Repo Tree (Phase 11D — Faction Picker)
+Controller field `_cachedRepoTree` (getter: `cachedRepoTree`). Stores the most recent `RepoTreeResult` returned by `loadRepoCatalogTree()`. Used by `FactionPickerScreen` and `DownloadsScreen` to derive faction lists and slot assignments without re-fetching.
+
+---
+
 Any concept used in code must appear here first.
 
 ## Repo Search Query (PROPOSED — GitHub Repository Search)
