@@ -589,68 +589,89 @@ class ImportSessionController extends ChangeNotifier {
     'Agents of the Imperium - ',
   ];
 
+  /// Parses a `.cat` file-stem (filename without the `.cat` extension) into
+  /// its canonical group key and library status.
+  ///
+  /// **Identical pipeline for both primary and library catalogs** — this is
+  /// the single source of truth so that grouping never diverges between the
+  /// two catalog kinds:
+  ///
+  /// 1. Strip one known category prefix (`"Chaos - "`, `"Xenos - "`, …).
+  /// 2. Detect the library marker — suffix `" - Library"` wins over prefix:
+  ///    - **Suffix** (`"Imperial Knights - Library"`) → strip it; the
+  ///      remainder is the group key.
+  ///    - **Prefix** (`"Library - Tyranids"` or `"Library - Unaligned - Giants"`)
+  ///      → strip `"Library - "`, then run step 1 again on the remainder so
+  ///      that `"Library - Unaligned - Giants"` resolves to the same group key
+  ///      (`"Giants"`) as its primary `"Unaligned - Giants"`.
+  /// 3. Return `(groupKey, isLibrary)`.
+  ({String groupKey, bool isLibrary}) _parseCatStem(String stem) {
+    const libSuffix = ' - Library';
+    const libPrefix = 'Library - ';
+
+    // Step 1: strip one known category prefix.
+    for (final prefix in _knownFactionPrefixes) {
+      if (stem.startsWith(prefix)) {
+        stem = stem.substring(prefix.length);
+        break;
+      }
+    }
+
+    // Step 2: detect library — suffix wins over prefix.
+    if (stem.endsWith(libSuffix)) {
+      // e.g. "Imperial Knights - Library" (after prefix strip)
+      return (
+        groupKey: stem.substring(0, stem.length - libSuffix.length),
+        isLibrary: true,
+      );
+    }
+    if (stem.startsWith(libPrefix)) {
+      // e.g. "Library - Tyranids" or "Library - Unaligned - Giants"
+      // Run the same category-prefix strip on the remainder so the group key
+      // is identical to what the primary produces in step 1.
+      var key = stem.substring(libPrefix.length);
+      for (final prefix in _knownFactionPrefixes) {
+        if (key.startsWith(prefix)) {
+          key = key.substring(prefix.length);
+          break;
+        }
+      }
+      return (groupKey: key, isLibrary: true);
+    }
+
+    return (groupKey: stem, isLibrary: false);
+  }
+
   /// Builds a sorted list of [FactionOption]s from [tree].
   ///
   /// **Group-by algorithm** — ensures every faction appears exactly once,
   /// regardless of whether it has an associated library catalog.
   ///
-  /// The BSData wh40k-10e repo uses **two** library naming conventions:
-  /// - Prefix: `"Library - Tyranids.cat"` (no category prefix)
-  /// - Suffix: `"Imperium - Imperial Knights - Library.cat"` (category prefix
-  ///   retained; "- Library" appended to the faction stem)
+  /// Delegates all stem parsing to [_parseCatStem] so that primaries and
+  /// libraries always go through an identical pipeline and can never diverge.
   ///
-  /// Algorithm per `.cat` file:
-  /// 1. Strip one known category prefix ("Chaos - ", "Xenos - ", etc.).
-  /// 2. Detect library — suffix pattern first (`" - Library"` at end),
-  ///    then prefix pattern (`"Library - "` at start). Mark as library and
-  ///    derive the group key by stripping the matched pattern.
-  /// 3. Group paths by group key.
-  /// 4. Emit one [FactionOption] per group that has ≥1 primary:
+  /// 1. Parse each `.cat` stem via [_parseCatStem].
+  /// 2. Group paths by group key.
+  /// 3. Emit one [FactionOption] per group that has ≥1 primary:
   ///    - [FactionOption.primaryPath] = lex-smallest non-library path.
   ///    - [FactionOption.libraryPaths] = all library paths, sorted.
   ///    Library-only groups are silently skipped.
-  /// 5. Sort ascending by [FactionOption.displayName].
+  /// 4. Sort ascending by [FactionOption.displayName].
   List<FactionOption> availableFactions(RepoTreeResult tree) {
-    const libSuffix = ' - Library';
-    const libPrefix = 'Library - ';
-
     // Group key → (primary paths, library paths)
     final groups = <String, ({List<String> primary, List<String> library})>{};
 
     for (final entry in tree.catalogFiles) {
       final base = entry.path.split('/').last;
-      var stem =
+      final stem =
           base.endsWith('.cat') ? base.substring(0, base.length - 4) : base;
-
-      // Step 1: strip one known category prefix (e.g. "Chaos - ").
-      for (final prefix in _knownFactionPrefixes) {
-        if (stem.startsWith(prefix)) {
-          stem = stem.substring(prefix.length);
-          break;
-        }
-      }
-
-      // Step 2: detect library — suffix wins over prefix.
-      final bool isLibrary;
-      final String groupKey;
-      if (stem.endsWith(libSuffix)) {
-        // e.g. "Imperial Knights - Library"
-        isLibrary = true;
-        groupKey = stem.substring(0, stem.length - libSuffix.length);
-      } else if (stem.startsWith(libPrefix)) {
-        // e.g. "Library - Tyranids"
-        isLibrary = true;
-        groupKey = stem.substring(libPrefix.length);
-      } else {
-        isLibrary = false;
-        groupKey = stem;
-      }
+      final parsed = _parseCatStem(stem);
 
       final group = groups.putIfAbsent(
-        groupKey,
+        parsed.groupKey,
         () => (primary: <String>[], library: <String>[]),
       );
-      if (isLibrary) {
+      if (parsed.isLibrary) {
         group.library.add(entry.path);
       } else {
         group.primary.add(entry.path);
