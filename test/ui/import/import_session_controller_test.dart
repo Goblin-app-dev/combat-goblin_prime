@@ -610,6 +610,7 @@ void registerMultiCatalogTests() {
 
   _loadRepoCatalogTreeTests();
   _importFromGitHubTests();
+  _availableFactionsTests();
 }
 
 // --- Enhanced mock for GitHub import tests ---
@@ -1622,6 +1623,113 @@ void _loadSlotMissingDepsTests() {
 
       expect(controller.slotState(0).status, equals(SlotStatus.empty));
       expect(controller.slotState(0).missingTargetIds, isEmpty);
+    });
+  });
+}
+
+// --- availableFactions tests ---
+
+void _availableFactionsTests() {
+  ImportSessionController _ctrl() =>
+      ImportSessionController(bsdResolver: _MockGitHubResolverService());
+
+  group('ImportSessionController: availableFactions', () {
+    test('returns empty list for empty tree', () {
+      final result = _ctrl().availableFactions(_emptyTree);
+      expect(result, isEmpty);
+    });
+
+    test('single primary .cat → one entry, no library', () {
+      final result = _ctrl().availableFactions(
+        _makeTree(['Chaos - Chaos Knights.cat', 'Warhammer 40,000.gst']),
+      );
+      expect(result, hasLength(1));
+      expect(result.first.displayName, 'Chaos Knights');
+      expect(result.first.libraryPaths, isEmpty);
+    });
+
+    // ── Suffix pattern: "Category - FactionName - Library.cat" ─────────────
+    test('suffix-pattern library is grouped with its primary (Chaos Knights)',
+        () {
+      final result = _ctrl().availableFactions(_makeTree([
+        'Chaos - Chaos Knights.cat',
+        'Chaos - Chaos Knights - Library.cat',
+        'Warhammer 40,000.gst',
+      ]));
+      expect(result, hasLength(1));
+      expect(result.first.displayName, 'Chaos Knights');
+      expect(result.first.primaryPath, 'Chaos - Chaos Knights.cat');
+      expect(result.first.libraryPaths,
+          equals(['Chaos - Chaos Knights - Library.cat']));
+    });
+
+    test('suffix-pattern library is grouped with its primary (Imperial Knights)',
+        () {
+      final result = _ctrl().availableFactions(_makeTree([
+        'Imperium - Imperial Knights.cat',
+        'Imperium - Imperial Knights - Library.cat',
+        'Warhammer 40,000.gst',
+      ]));
+      expect(result, hasLength(1));
+      expect(result.first.displayName, 'Imperial Knights');
+      expect(result.first.primaryPath, 'Imperium - Imperial Knights.cat');
+      expect(result.first.libraryPaths,
+          equals(['Imperium - Imperial Knights - Library.cat']));
+    });
+
+    // ── Prefix pattern: "Library - FactionName.cat" ─────────────────────────
+    test('prefix-pattern library is grouped with its primary (Tyranids)', () {
+      final result = _ctrl().availableFactions(_makeTree([
+        'Xenos - Tyranids.cat',
+        'Library - Tyranids.cat',
+        'Warhammer 40,000.gst',
+      ]));
+      expect(result, hasLength(1));
+      expect(result.first.displayName, 'Tyranids');
+      expect(result.first.primaryPath, 'Xenos - Tyranids.cat');
+      expect(result.first.libraryPaths, equals(['Library - Tyranids.cat']));
+    });
+
+    test('prefix-pattern library without category prefix (Titans) is skipped '
+        'when no primary exists', () {
+      final result = _ctrl().availableFactions(_makeTree([
+        'Library - Titans.cat',
+        'Warhammer 40,000.gst',
+      ]));
+      expect(result, isEmpty);
+    });
+
+    // ── No category prefix, suffix pattern ──────────────────────────────────
+    test('suffix-pattern library without category prefix is grouped', () {
+      final result = _ctrl().availableFactions(_makeTree([
+        'Orks.cat',
+        'Orks - Library.cat',
+      ]));
+      expect(result, hasLength(1));
+      expect(result.first.displayName, 'Orks');
+      expect(result.first.libraryPaths, equals(['Orks - Library.cat']));
+    });
+
+    // ── Mixed factions ───────────────────────────────────────────────────────
+    test('multiple factions produce one entry each, sorted by display name',
+        () {
+      final result = _ctrl().availableFactions(_makeTree([
+        'Chaos - Chaos Knights.cat',
+        'Chaos - Chaos Knights - Library.cat',
+        'Imperium - Imperial Knights.cat',
+        'Imperium - Imperial Knights - Library.cat',
+        'Xenos - Tyranids.cat',
+        'Library - Tyranids.cat',
+        'Library - Titans.cat', // library-only: skipped
+        'Warhammer 40,000.gst',
+      ]));
+      expect(result, hasLength(3));
+      expect(result.map((f) => f.displayName).toList(),
+          equals(['Chaos Knights', 'Imperial Knights', 'Tyranids']));
+      for (final f in result) {
+        expect(f.libraryPaths, hasLength(1),
+            reason: '${f.displayName} should have exactly one library path');
+      }
     });
   });
 }

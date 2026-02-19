@@ -129,15 +129,9 @@ class _FactionPickerScreenState extends State<FactionPickerScreen> {
                             : const Icon(Icons.circle_outlined),
                         title: Text(faction.displayName),
                         subtitle: faction.libraryPaths.isNotEmpty
-                            ? Text(
-                                'Includes: ${faction.libraryPaths.map((p) {
-                                  final base = p.split('/').last;
-                                  return base.endsWith('.cat')
-                                      ? base.substring(0, base.length - 4)
-                                      : base;
-                                }).join(', ')}',
-                                style: const TextStyle(fontSize: 11),
-                                overflow: TextOverflow.ellipsis,
+                            ? const Text(
+                                '+ library data',
+                                style: TextStyle(fontSize: 11),
                               )
                             : null,
                         selected: isCurrent,
