@@ -595,7 +595,9 @@ class ImportSessionController extends ChangeNotifier {
   /// regardless of whether it has an associated library catalog.
   ///
   /// The BSData wh40k-10e repo uses **two** library naming conventions:
-  /// - Prefix: `"Library - Tyranids.cat"` (no category prefix)
+  /// - Prefix: `"Library - Tyranids.cat"` (no category prefix after "Library - ")
+  /// - Prefix: `"Library - Unaligned - Giants.cat"` (category prefix follows
+  ///   "Library - "; stripped from the group key so it aligns with its primary)
   /// - Suffix: `"Imperium - Imperial Knights - Library.cat"` (category prefix
   ///   retained; "- Library" appended to the faction stem)
   ///
@@ -638,9 +640,18 @@ class ImportSessionController extends ChangeNotifier {
         isLibrary = true;
         groupKey = stem.substring(0, stem.length - libSuffix.length);
       } else if (stem.startsWith(libPrefix)) {
-        // e.g. "Library - Tyranids"
+        // e.g. "Library - Tyranids" or "Library - Unaligned - Giants"
         isLibrary = true;
-        groupKey = stem.substring(libPrefix.length);
+        var key = stem.substring(libPrefix.length);
+        // Strip any category prefix that follows "Library - " so the group key
+        // aligns with its primary (e.g. "Unaligned - Giants" → "Giants").
+        for (final prefix in _knownFactionPrefixes) {
+          if (key.startsWith(prefix)) {
+            key = key.substring(prefix.length);
+            break;
+          }
+        }
+        groupKey = key;
       } else {
         isLibrary = false;
         groupKey = stem;

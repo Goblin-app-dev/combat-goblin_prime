@@ -1699,6 +1699,22 @@ void _availableFactionsTests() {
       expect(result, isEmpty);
     });
 
+    // ── Prefix pattern with category prefix after "Library - " ───────────────
+    test(
+        'prefix-pattern library with category prefix is grouped with its primary',
+        () {
+      final result = _ctrl().availableFactions(_makeTree([
+        'Unaligned - Giants.cat',
+        'Library - Unaligned - Giants.cat',
+        'Warhammer 40,000.gst',
+      ]));
+      expect(result, hasLength(1));
+      expect(result.first.displayName, 'Giants');
+      expect(result.first.primaryPath, 'Unaligned - Giants.cat');
+      expect(result.first.libraryPaths,
+          equals(['Library - Unaligned - Giants.cat']));
+    });
+
     // ── No category prefix, suffix pattern ──────────────────────────────────
     test('suffix-pattern library without category prefix is grouped', () {
       final result = _ctrl().availableFactions(_makeTree([
