@@ -615,6 +615,20 @@ class ImportSessionController extends ChangeNotifier {
     return key;
   }
 
+  /// Removes the word "Library" from [stem], preserving original casing of
+  /// the remainder and cleaning up leftover punctuation/spaces.
+  ///
+  /// Used to build a human-readable display name for orphan library files
+  /// (library `.cat` files that have no paired primary).
+  ///
+  /// Example: `"Library - Astartes Heresy Legends"` → `"Astartes Heresy Legends"`
+  static String _stripLibraryLabel(String stem) {
+    var result = stem.replaceAll(RegExp(r'library', caseSensitive: false), '');
+    result = result.replaceAll(RegExp(r' {2,}'), ' ').trim();
+    result = result.replaceAll(RegExp(r'^[\s\-]+|[\s\-]+$'), '').trim();
+    return result;
+  }
+
   /// Builds a sorted list of [FactionOption]s from [tree].
   ///
   /// **Group-by algorithm** — deterministic, filename-pair based:
@@ -626,8 +640,10 @@ class ImportSessionController extends ChangeNotifier {
   ///    - [FactionOption.primaryPath] = path of that stem.
   ///    - [FactionOption.libraryPaths] = paths of all library stems whose
   ///      `_pairKey` matches, sorted.
-  ///    Library-only groups (no primary) are silently skipped.
-  /// 4. Sort ascending by display name (case-insensitive).
+  /// 4. Orphan libraries (no paired primary): emit one [FactionOption] per
+  ///    unpaired library key, with display name = stem stripped of "Library".
+  /// 5. Sort ascending by display name (case-insensitive), stable tie-break
+  ///    by path.
   List<FactionOption> availableFactions(RepoTreeResult tree) {
     final stemToPath = <String, String>{};
     final primaryStems = <String>[];
@@ -658,6 +674,8 @@ class ImportSessionController extends ChangeNotifier {
     }
 
     final options = <FactionOption>[];
+
+    // Step 3: one row per primary group.
     for (final kv in primaryByKey.entries) {
       final primaries = kv.value..sort();
       final canonical = primaries.first; // lex-smallest for determinism
@@ -669,10 +687,23 @@ class ImportSessionController extends ChangeNotifier {
       ));
     }
 
-    options.sort(
-      (a, b) =>
-          a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
-    );
+    // Step 4: orphan libraries — library stems whose pairKey has no primary.
+    final pairedKeys = primaryByKey.keys.toSet();
+    for (final kv in libsByKey.entries) {
+      if (pairedKeys.contains(kv.key)) continue; // already paired
+      final libs = kv.value..sort();
+      final canonical = libs.first;
+      options.add(FactionOption(
+        displayName: _stripLibraryLabel(canonical),
+        primaryPath: stemToPath[canonical]!,
+      ));
+    }
+
+    options.sort((a, b) {
+      final cmp =
+          a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
+      return cmp != 0 ? cmp : a.primaryPath.compareTo(b.primaryPath);
+    });
     return options;
   }
 
