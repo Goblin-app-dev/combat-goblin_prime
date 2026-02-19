@@ -87,6 +87,15 @@ class _HomeScreenState extends State<HomeScreen> {
     _search(suggestion);
   }
 
+  /// Returns display names of all loaded catalog slots (for stats view).
+  List<String> _loadedFactionNames(ImportSessionController controller) {
+    return [
+      for (var i = 0; i < kMaxSelectedCatalogs; i++)
+        if (controller.slotState(i).status == SlotStatus.loaded)
+          controller.slotState(i).catalogName ?? 'Slot ${i + 1}',
+    ];
+  }
+
   void _showHitDetail(BuildContext context, MultiPackSearchHit hit) {
     showModalBottomSheet(
       context: context,
@@ -226,19 +235,42 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       final packCount = bundles.length;
       final packLabel = packCount == 1 ? 'Pack' : 'Packs';
+      final gameSystemName = controller.gameSystemDisplayName;
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey),
             const SizedBox(height: 16),
+            if (gameSystemName != null) ...[
+              Text(
+                gameSystemName,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.grey.shade600,
+                    ),
+              ),
+              const SizedBox(height: 4),
+            ],
             Text(
               '$packCount $packLabel Loaded',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
+            // Show loaded faction names per slot
+            ..._loadedFactionNames(controller).map(
+              (name) => Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Text(
+                  name,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
+                      ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
             Text(
-              '$totalUnits units, $totalWeapons weapons, $totalRules rules',
+              '$totalUnits units · $totalWeapons weapons · $totalRules rules',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 24),

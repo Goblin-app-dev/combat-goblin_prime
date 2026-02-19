@@ -412,3 +412,51 @@ No silent renames are permitted.
 - New name: STT lane names (PlatformSttAdapter, OfflineSttAdapter), TTS adapter name (TtsAdapter)
 - Reason: Proposed adapter names for dual-lane STT (platform online + Whisper offline) and system TTS. Unified interface contracts. Final names pending Step 0B approval.
 - Approval reference: Phase 12 Voice Integration proposal (2026-02-18)
+
+## 2026-02-19 (Phase 11D — Faction Picker — APPROVED)
+- Old name: N/A
+- New name: FactionOption
+- Reason: New value type representing a selectable faction in the faction picker. Fields: displayName, primaryPath, libraryPaths. Excludes library catalog rows from the picker list.
+- Approval reference: Phase 11 UI Behavior Tweak Proposal (2026-02-19)
+
+## 2026-02-19 (Phase 11D — Faction Picker — APPROVED)
+- Old name: N/A
+- New name: FactionPickerScreen
+- Reason: New dedicated screen for picking a faction for a slot. Highlight-and-replace model (no second confirmation). Shows searchable faction list; "Clear" action in AppBar.
+- Approval reference: Phase 11 UI Behavior Tweak Proposal (2026-02-19)
+
+## 2026-02-19 (Phase 11D — Faction Picker — APPROVED)
+- Old name: N/A
+- New name: availableFactions()
+- Reason: New ImportSessionController method. Derives sorted List<FactionOption> from RepoTreeResult. Excludes library catalogs. Strips known prefix segments for displayName. Stable sort: ascending by displayName.
+- Approval reference: Phase 11 UI Behavior Tweak Proposal (2026-02-19)
+
+## 2026-02-19 (Phase 11D — Faction Picker — APPROVED)
+- Old name: N/A
+- New name: loadFactionIntoSlot()
+- Reason: New ImportSessionController method. One-tap import flow: fetch primary → pre-flight scan → fetch deps → mark ready → call loadSlot() immediately. Uses faction.displayName as the slot catalogName.
+- Approval reference: Phase 11 UI Behavior Tweak Proposal (2026-02-19)
+
+## 2026-02-19 (Phase 11D — Faction Picker — APPROVED)
+- Old name: N/A
+- New name: gameSystemDisplayName
+- Reason: New ImportSessionController getter. Short name for loaded game system, derived from gameSystemFile.fileName by stripping .gst extension.
+- Approval reference: Phase 11 UI Behavior Tweak Proposal (2026-02-19)
+
+## 2026-02-19 (Phase 11D — Faction Picker — APPROVED)
+- Old name: N/A
+- New name: cachedRepoTree
+- Reason: New ImportSessionController getter exposing _cachedRepoTree (most recent loadRepoCatalogTree() result). Allows FactionPickerScreen and DownloadsScreen to derive faction lists without re-fetching.
+- Approval reference: Phase 11 UI Behavior Tweak Proposal (2026-02-19)
+
+## 2026-02-19 (Phase 11D — Faction Picker — APPROVED)
+- Old name: DownloadsScreen — editable URL field always shown
+- New name: DownloadsScreen — read-only URL display with "Change" button; default URL preloaded (BSData/wh40k-10e); auto-fetch on mount; slot panel tap → FactionPickerScreen
+- Reason: Reduce friction and user error. Repo URL is secondary; slot tap drives faction selection. Default repo eliminates manual URL entry for the primary use case.
+- Approval reference: Phase 11 UI Behavior Tweak Proposal (2026-02-19)
+
+## 2026-02-19 (Phase 11D — Faction Picker — APPROVED)
+- Old name: _CatalogPicker (inline file list inside slot panel)
+- New name: (removed) — slot panel tap opens FactionPickerScreen instead
+- Reason: Faction picker screen provides scroll room, search, and highlight-and-replace without cluttering the slot panel.
+- Approval reference: Phase 11 UI Behavior Tweak Proposal (2026-02-19)

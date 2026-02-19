@@ -20,6 +20,8 @@ export 'package:combat_goblin_prime/services/bsd_resolver_service.dart'
 export 'package:combat_goblin_prime/services/session_persistence_service.dart'
     show PersistedSession, SessionPersistenceService;
 
+// FactionOption is defined in this file and available to all importers.
+
 /// Build status for import workflow.
 enum ImportStatus {
   /// Initial state, waiting for file selection.
@@ -73,6 +75,32 @@ class SelectedFile {
       rootId: rootId ?? this.rootId,
     );
   }
+}
+
+/// A selectable faction in the faction picker.
+///
+/// Derived from [RepoTreeResult] via [ImportSessionController.availableFactions].
+/// Represents one primary `.cat` file and its associated library catalogs.
+/// Library catalogs (e.g. "Library - Tyranids.cat") are excluded from the
+/// picker list and appear only in [libraryPaths] for informational display.
+class FactionOption {
+  /// User-facing display name (e.g. "Tyranids", "Space Marines").
+  final String displayName;
+
+  /// Repository path of the primary faction catalog (e.g. "Tyranids.cat").
+  final String primaryPath;
+
+  /// Repository paths of library catalogs associated with this faction.
+  /// Populated by filename matching at tree-build time. Additional deps
+  /// declared via `catalogueLinks` are also resolved during
+  /// [ImportSessionController.loadFactionIntoSlot].
+  final List<String> libraryPaths;
+
+  const FactionOption({
+    required this.displayName,
+    required this.primaryPath,
+    this.libraryPaths = const [],
+  });
 }
 
 /// Status of an individual catalog slot.
@@ -232,6 +260,15 @@ class ImportSessionController extends ChangeNotifier {
   SelectedFile? _gameSystemFile;
   SelectedFile? get gameSystemFile => _gameSystemFile;
 
+  /// Short display name for the loaded game system (strips `.gst` extension).
+  ///
+  /// Returns null if no game system file has been loaded yet.
+  String? get gameSystemDisplayName {
+    final name = _gameSystemFile?.fileName;
+    if (name == null) return null;
+    return name.endsWith('.gst') ? name.substring(0, name.length - 4) : name;
+  }
+
   /// Selected primary catalogs (max [kMaxSelectedCatalogs]).
   List<SelectedFile> _selectedCatalogs = const [];
   List<SelectedFile> get selectedCatalogs => List.unmodifiable(_selectedCatalogs);
@@ -303,6 +340,15 @@ class ImportSessionController extends ChangeNotifier {
 
   SourceLocator? _sourceLocator;
   SourceLocator? get sourceLocator => _sourceLocator;
+
+  // --- Cached Repo Tree ---
+
+  /// Most recent result from [loadRepoCatalogTree].
+  ///
+  /// Used by [FactionPickerScreen] and [DownloadsScreen] to derive faction
+  /// lists without re-fetching. Null until first successful tree fetch.
+  RepoTreeResult? _cachedRepoTree;
+  RepoTreeResult? get cachedRepoTree => _cachedRepoTree;
 
   /// Sets [_sourceLocator] directly, for use in tests only.
   ///
@@ -517,10 +563,159 @@ class ImportSessionController extends ChangeNotifier {
     // Return entries sorted lexicographically by path (determinism requirement).
     final sortedEntries = result.entries.toList()
       ..sort((a, b) => a.path.compareTo(b.path));
-    return RepoTreeResult(
+    final sorted = RepoTreeResult(
       entries: sortedEntries,
       fetchedAt: result.fetchedAt,
     );
+    // Cache tree and locator for update checks and faction picker.
+    _cachedRepoTree = sorted;
+    _sourceLocator = sourceLocator;
+    notifyListeners();
+    return sorted;
+  }
+
+  // --- Faction Picker Helpers ---
+
+  /// Known category prefix segments stripped from catalog file names.
+  static const List<String> _knownFactionPrefixes = [
+    'Xenos - ',
+    'Imperium - ',
+    'Chaos - ',
+    'League of Votann - ',
+    'Unaligned - ',
+    'Compendium - ',
+    'Matched Play - ',
+    'Forces of the - ',
+    'Agents of the Imperium - ',
+  ];
+
+  /// Returns true if [path] is a library catalog (basename starts with "Library").
+  static bool _isLibraryPath(String path) {
+    return path.split('/').last.startsWith('Library');
+  }
+
+  /// Derives a faction display name from a catalog file path.
+  ///
+  /// Strips the path prefix, the file extension, and any known category
+  /// prefix (e.g. "Xenos - ") to produce a short human-readable name.
+  static String _catalogDisplayName(String path) {
+    var name = path.split('/').last;
+    if (name.endsWith('.cat')) name = name.substring(0, name.length - 4);
+    if (name.endsWith('.gst')) name = name.substring(0, name.length - 4);
+    for (final prefix in _knownFactionPrefixes) {
+      if (name.startsWith(prefix)) {
+        name = name.substring(prefix.length);
+        break;
+      }
+    }
+    return name;
+  }
+
+  /// Builds a sorted list of [FactionOption]s from [tree].
+  ///
+  /// Excludes library catalog entries (basename starting with "Library").
+  /// Matches library paths to their faction by displayName substring.
+  /// Result is sorted ascending by [FactionOption.displayName].
+  List<FactionOption> availableFactions(RepoTreeResult tree) {
+    final catEntries = tree.catalogFiles;
+    final libraryPaths = catEntries
+        .where((e) => _isLibraryPath(e.path))
+        .map((e) => e.path)
+        .toList();
+    final factionEntries =
+        catEntries.where((e) => !_isLibraryPath(e.path)).toList();
+
+    final options = factionEntries.map((entry) {
+      final displayName = _catalogDisplayName(entry.path);
+      final libs = libraryPaths
+          .where((lib) => lib.split('/').last.contains(displayName))
+          .toList();
+      return FactionOption(
+        displayName: displayName,
+        primaryPath: entry.path,
+        libraryPaths: libs,
+      );
+    }).toList()
+      ..sort((a, b) => a.displayName.compareTo(b.displayName));
+
+    return options;
+  }
+
+  /// Downloads a faction's primary catalog and dependencies, then runs the
+  /// pipeline immediately (one-tap import).
+  ///
+  /// Flow:
+  /// 1. Marks slot [SlotStatus.fetching] with [faction.displayName] as the name.
+  /// 2. Downloads primary `.cat` bytes.
+  /// 3. Pre-flight scans for `catalogueLinks` and fetches missing dep bytes.
+  /// 4. Marks slot [SlotStatus.ready].
+  /// 5. Immediately calls [loadSlot] (if [gameSystemFile] is set).
+  ///
+  /// If [gameSystemFile] is not yet set, the slot stays at [SlotStatus.ready]
+  /// so the user can set it and then tap "Load".
+  Future<void> loadFactionIntoSlot(
+    int slot,
+    FactionOption faction,
+    SourceLocator locator,
+  ) async {
+    assert(slot >= 0 && slot < kMaxSelectedCatalogs, 'Invalid slot index');
+
+    _setSlot(
+      slot,
+      SlotState(
+        status: SlotStatus.fetching,
+        catalogPath: faction.primaryPath,
+        catalogName: faction.displayName,
+        sourceLocator: locator,
+      ),
+    );
+
+    final bytes = await _bsdResolver.fetchFileByPath(locator, faction.primaryPath);
+    if (bytes == null) {
+      _setSlot(
+        slot,
+        _slots[slot].copyWith(
+          status: SlotStatus.error,
+          errorMessage: _bsdResolver.lastError?.userMessage ?? 'Download failed',
+        ),
+      );
+      return;
+    }
+
+    // Pre-flight scan for catalogueLink deps (targetId-based).
+    try {
+      final preflight = await PreflightScanService().scanBytes(
+        bytes: bytes,
+        fileType: SourceFileType.cat,
+      );
+      final missingIds = preflight.importDependencies
+          .map((d) => d.targetId)
+          .where((id) => !_resolvedDependencies.containsKey(id))
+          .toList();
+      for (final targetId in missingIds) {
+        final depBytes = await _bsdResolver.fetchCatalogBytes(
+          sourceLocator: locator,
+          targetId: targetId,
+        );
+        if (depBytes != null) {
+          _resolvedDependencies[targetId] = depBytes;
+        }
+      }
+    } catch (_) {
+      // Non-fatal; _autoResolveSlotDeps handles stragglers.
+    }
+
+    _setSlot(
+      slot,
+      _slots[slot].copyWith(
+        status: SlotStatus.ready,
+        fetchedBytes: bytes,
+      ),
+    );
+
+    if (_gameSystemFile != null) {
+      await loadSlot(slot);
+    }
   }
 
   /// Fetches a .gst file from GitHub and sets it as the game system.
