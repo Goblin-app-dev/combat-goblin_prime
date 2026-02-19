@@ -1747,5 +1747,89 @@ void _availableFactionsTests() {
             reason: '${f.displayName} should have exactly one library path');
       }
     });
+
+    // ── Regression tests (prevent every real-world library-leak pattern) ─────
+
+    // Regression 1: prefix library + primary with NO faction category prefix.
+    // "Library - Tyranids.cat" must merge with bare "Tyranids.cat".
+    test(
+        'regression: prefix-pattern library merges with bare primary '
+        '(no category prefix on primary)', () {
+      final result = _ctrl().availableFactions(_makeTree([
+        'Tyranids.cat',
+        'Library - Tyranids.cat',
+      ]));
+      expect(result, hasLength(1),
+          reason:
+              '"Library - Tyranids.cat" must not appear as a separate entry');
+      expect(result.first.displayName, 'Tyranids');
+      expect(result.first.primaryPath, 'Tyranids.cat');
+      expect(result.first.libraryPaths, equals(['Library - Tyranids.cat']));
+    });
+
+    // Regression 2: suffix-pattern library + prefixed primary.
+    // Already covered by the Imperial Knights test above; repeated here as an
+    // explicit named regression to lock the behavior.
+    test(
+        'regression: suffix-pattern library merges with prefixed primary '
+        '(Chaos Daemons variant)', () {
+      final result = _ctrl().availableFactions(_makeTree([
+        'Chaos - Chaos Daemons.cat',
+        'Chaos - Chaos Daemons - Library.cat',
+      ]));
+      expect(result, hasLength(1),
+          reason:
+              '"Chaos Daemons - Library" must not appear as a separate entry');
+      expect(result.first.displayName, 'Chaos Daemons');
+      expect(result.first.primaryPath, 'Chaos - Chaos Daemons.cat');
+      expect(result.first.libraryPaths,
+          equals(['Chaos - Chaos Daemons - Library.cat']));
+    });
+
+    // Regression 3: prefix-pattern library WITH category prefix after "Library - ".
+    // "Library - Unaligned - Giants.cat" must merge with "Unaligned - Giants.cat".
+    // This is the exact pattern that kept slipping before _parseCatStem ran the
+    // same category-prefix strip on both sides.
+    test(
+        'regression: prefix-pattern library with category prefix merges '
+        '(Library - Unaligned - Giants + Unaligned - Giants)', () {
+      final result = _ctrl().availableFactions(_makeTree([
+        'Unaligned - Giants.cat',
+        'Library - Unaligned - Giants.cat',
+      ]));
+      expect(result, hasLength(1),
+          reason:
+              '"Library - Unaligned - Giants.cat" must not appear as a separate entry');
+      expect(result.first.displayName, 'Giants');
+      expect(result.first.primaryPath, 'Unaligned - Giants.cat');
+      expect(result.first.libraryPaths,
+          equals(['Library - Unaligned - Giants.cat']));
+    });
+
+    // Regression 4 (UI render): no faction displayName may contain "Library".
+    // Enforces the requirement that no library filename leaks into the picker UI.
+    test('regression: no faction displayName contains "Library"', () {
+      final result = _ctrl().availableFactions(_makeTree([
+        'Chaos - Chaos Knights.cat',
+        'Chaos - Chaos Knights - Library.cat',
+        'Imperium - Imperial Knights.cat',
+        'Imperium - Imperial Knights - Library.cat',
+        'Xenos - Tyranids.cat',
+        'Library - Tyranids.cat',
+        'Unaligned - Giants.cat',
+        'Library - Unaligned - Giants.cat',
+        'Library - Titans.cat', // library-only: silently skipped
+        'Chaos - Chaos Daemons.cat',
+        'Chaos - Chaos Daemons - Library.cat',
+        'Warhammer 40,000.gst',
+      ]));
+      for (final f in result) {
+        expect(
+          f.displayName,
+          isNot(contains('Library')),
+          reason: '"${f.displayName}" must not contain "Library"',
+        );
+      }
+    });
   });
 }
