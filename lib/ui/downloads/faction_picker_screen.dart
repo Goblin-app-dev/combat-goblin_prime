@@ -130,7 +130,7 @@ class _FactionPickerScreenState extends State<FactionPickerScreen> {
                         title: Text(faction.displayName),
                         subtitle: faction.libraryPaths.isNotEmpty
                             ? const Text(
-                                '+ library data',
+                                '+ shared data',
                                 style: TextStyle(fontSize: 11),
                               )
                             : null,
