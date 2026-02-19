@@ -31,6 +31,31 @@ Fix: `assignCatalogToSlot` now runs `PreflightScanService.scanBytes` on the down
 
 ---
 
+## Session 5 — 2026-02-19
+
+**Branch:** `claude/github-catalog-picker-Py9xI`
+**Commit:** `3dac937`
+
+### What Happened
+
+#### Phase 11E — Faction Grouping Fix + Load Game System Button + Remove Manual Load
+
+**A) `availableFactions()` — group-by algorithm (controller)**
+
+Replaced substring-match with a deterministic group-by that correctly collapses ALL factions into one picker row each. Chaos Knights, Imperial Knights, Daemons etc. now show as single entries. Steps: strip category prefix → strip "Library - " → group key → primary is lex-smallest non-library path; library-only groups skipped.
+
+**B) Remove legacy Load buttons (DownloadsScreen)**
+
+`_SlotPanel.onLoad` removed; "Load" button in ready-state removed; "Load All Ready Slots" removed. Slots auto-load exclusively via `loadFactionIntoSlot()`.
+
+**C) "Load Game System Data" button (DownloadsScreen)**
+
+New `_LoadGameSystemButton` widget placed below repo URL. User-triggered. SHA-aware: tracks `_gstLoadedBlobSha` vs `RepoTreeResult.pathToBlobSha`. States: disabled / primary / spinner / green check / orange "Update Available". `AlertDialog` picker for repos with multiple `.gst` files. Auto-select removed from `_fetchTree()`.
+
+**Test result:** 80/80 tests pass.
+
+---
+
 ## Session 4 — 2026-02-19
 
 **Branch:** `claude/github-catalog-picker-Py9xI`
