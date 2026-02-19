@@ -576,122 +576,103 @@ class ImportSessionController extends ChangeNotifier {
 
   // --- Faction Picker Helpers ---
 
-  /// Known category prefix segments stripped from catalog file names.
-  static const List<String> _knownFactionPrefixes = [
-    'Xenos - ',
-    'Imperium - ',
-    'Chaos - ',
-    'League of Votann - ',
-    'Unaligned - ',
-    'Compendium - ',
-    'Matched Play - ',
-    'Forces of the - ',
-    'Agents of the Imperium - ',
-  ];
+  /// Returns true when a catalog stem (filename without `.cat`) is a library
+  /// file.  The only criterion is whether the word "library" appears anywhere
+  /// in the stem (case-insensitive).  No hardcoded prefix list is needed.
+  static bool _isLibraryFile(String stem) =>
+      stem.toLowerCase().contains('library');
 
-  /// Parses a `.cat` file-stem (filename without the `.cat` extension) into
-  /// its canonical group key and library status.
+  /// Normalised key used to pair a library catalog with its primary.
   ///
-  /// **Identical pipeline for both primary and library catalogs** — this is
-  /// the single source of truth so that grouping never diverges between the
-  /// two catalog kinds:
+  /// Algorithm (deterministic, no hardcoded prefix list):
+  /// 1. Lowercase the stem.
+  /// 2. Remove every occurrence of the word "library".
+  /// 3. Collapse runs of spaces to a single space.
+  /// 4. Trim leading/trailing whitespace and hyphen/space fragments.
+  /// 5. Strip one leading category segment (e.g. `"xenos - "`) if present —
+  ///    this pairs `"Xenos - Tyranids"` with the key produced by
+  ///    `"Library - Tyranids"` (which becomes `"tyranids"` after step 4).
   ///
-  /// 1. Strip one known category prefix (`"Chaos - "`, `"Xenos - "`, …).
-  /// 2. Detect the library marker — suffix `" - Library"` wins over prefix:
-  ///    - **Suffix** (`"Imperial Knights - Library"`) → strip it; the
-  ///      remainder is the group key.
-  ///    - **Prefix** (`"Library - Tyranids"` or `"Library - Unaligned - Giants"`)
-  ///      → strip `"Library - "`, then run step 1 again on the remainder so
-  ///      that `"Library - Unaligned - Giants"` resolves to the same group key
-  ///      (`"Giants"`) as its primary `"Unaligned - Giants"`.
-  /// 3. Return `(groupKey, isLibrary)`.
-  ({String groupKey, bool isLibrary}) _parseCatStem(String stem) {
-    const libSuffix = ' - Library';
-    const libPrefix = 'Library - ';
-
-    // Step 1: strip one known category prefix.
-    for (final prefix in _knownFactionPrefixes) {
-      if (stem.startsWith(prefix)) {
-        stem = stem.substring(prefix.length);
-        break;
-      }
+  /// Examples:
+  /// - `"Tyranids"`                        → `"tyranids"`
+  /// - `"Library - Tyranids"`              → `"tyranids"`
+  /// - `"Xenos - Tyranids"`               → `"tyranids"`
+  /// - `"Chaos - Chaos Knights"`          → `"chaos knights"`
+  /// - `"Chaos - Chaos Knights - Library"` → `"chaos knights"`
+  /// - `"Library - Unaligned - Giants"`   → `"giants"`
+  /// - `"Unaligned - Giants"`             → `"giants"`
+  static String _pairKey(String stem) {
+    var key = stem.toLowerCase().replaceAll('library', '');
+    key = key.replaceAll(RegExp(r' {2,}'), ' ').trim();
+    key = key.replaceAll(RegExp(r'^[\s\-]+|[\s\-]+$'), '').trim();
+    // Strip one leading category-style segment (everything before the first
+    // " - ") so that "Xenos - Tyranids" and "Tyranids" (post-library-removal
+    // of "Library - Tyranids") produce the same key.
+    final sep = key.indexOf(' - ');
+    if (sep != -1) {
+      key = key.substring(sep + 3).trim();
     }
-
-    // Step 2: detect library — suffix wins over prefix.
-    if (stem.endsWith(libSuffix)) {
-      // e.g. "Imperial Knights - Library" (after prefix strip)
-      return (
-        groupKey: stem.substring(0, stem.length - libSuffix.length),
-        isLibrary: true,
-      );
-    }
-    if (stem.startsWith(libPrefix)) {
-      // e.g. "Library - Tyranids" or "Library - Unaligned - Giants"
-      // Run the same category-prefix strip on the remainder so the group key
-      // is identical to what the primary produces in step 1.
-      var key = stem.substring(libPrefix.length);
-      for (final prefix in _knownFactionPrefixes) {
-        if (key.startsWith(prefix)) {
-          key = key.substring(prefix.length);
-          break;
-        }
-      }
-      return (groupKey: key, isLibrary: true);
-    }
-
-    return (groupKey: stem, isLibrary: false);
+    return key;
   }
 
   /// Builds a sorted list of [FactionOption]s from [tree].
   ///
-  /// **Group-by algorithm** — ensures every faction appears exactly once,
-  /// regardless of whether it has an associated library catalog.
-  ///
-  /// Delegates all stem parsing to [_parseCatStem] so that primaries and
-  /// libraries always go through an identical pipeline and can never diverge.
-  ///
-  /// 1. Parse each `.cat` stem via [_parseCatStem].
-  /// 2. Group paths by group key.
-  /// 3. Emit one [FactionOption] per group that has ≥1 primary:
-  ///    - [FactionOption.primaryPath] = lex-smallest non-library path.
-  ///    - [FactionOption.libraryPaths] = all library paths, sorted.
-  ///    Library-only groups are silently skipped.
-  /// 4. Sort ascending by [FactionOption.displayName].
+  /// **Group-by algorithm** — deterministic, filename-pair based:
+  /// 1. Classify each `.cat` stem as library (`_isLibraryFile`) or primary.
+  /// 2. Index library stems by `_pairKey`.
+  /// 3. Emit one [FactionOption] per primary key:
+  ///    - [FactionOption.displayName] = lex-smallest primary stem (exact, no
+  ///      prefix stripping — filenames are never shown in the UI).
+  ///    - [FactionOption.primaryPath] = path of that stem.
+  ///    - [FactionOption.libraryPaths] = paths of all library stems whose
+  ///      `_pairKey` matches, sorted.
+  ///    Library-only groups (no primary) are silently skipped.
+  /// 4. Sort ascending by display name (case-insensitive).
   List<FactionOption> availableFactions(RepoTreeResult tree) {
-    // Group key → (primary paths, library paths)
-    final groups = <String, ({List<String> primary, List<String> library})>{};
+    final stemToPath = <String, String>{};
+    final primaryStems = <String>[];
+    final libraryStems = <String>[];
 
     for (final entry in tree.catalogFiles) {
       final base = entry.path.split('/').last;
       final stem =
           base.endsWith('.cat') ? base.substring(0, base.length - 4) : base;
-      final parsed = _parseCatStem(stem);
-
-      final group = groups.putIfAbsent(
-        parsed.groupKey,
-        () => (primary: <String>[], library: <String>[]),
-      );
-      if (parsed.isLibrary) {
-        group.library.add(entry.path);
+      stemToPath[stem] = entry.path;
+      if (_isLibraryFile(stem)) {
+        libraryStems.add(stem);
       } else {
-        group.primary.add(entry.path);
+        primaryStems.add(stem);
       }
     }
 
-    // Build one FactionOption per group that has a primary catalog.
+    // Index library stems by pair key.
+    final libsByKey = <String, List<String>>{};
+    for (final lib in libraryStems) {
+      libsByKey.putIfAbsent(_pairKey(lib), () => []).add(lib);
+    }
+
+    // Group primaries by pair key; collapse to one entry (lex-smallest stem).
+    final primaryByKey = <String, List<String>>{};
+    for (final p in primaryStems) {
+      primaryByKey.putIfAbsent(_pairKey(p), () => []).add(p);
+    }
+
     final options = <FactionOption>[];
-    for (final kv in groups.entries) {
-      final primaryPaths = kv.value.primary..sort();
-      final libraryPaths = kv.value.library..sort();
-      if (primaryPaths.isEmpty) continue; // library-only group: skip
+    for (final kv in primaryByKey.entries) {
+      final primaries = kv.value..sort();
+      final canonical = primaries.first; // lex-smallest for determinism
+      final libs = (libsByKey[kv.key] ?? [])..sort();
       options.add(FactionOption(
-        displayName: kv.key,
-        primaryPath: primaryPaths.first, // lex-smallest for determinism
-        libraryPaths: libraryPaths,
+        displayName: canonical,
+        primaryPath: stemToPath[canonical]!,
+        libraryPaths: libs.map((s) => stemToPath[s]!).toList(),
       ));
     }
 
-    options.sort((a, b) => a.displayName.compareTo(b.displayName));
+    options.sort(
+      (a, b) =>
+          a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
+    );
     return options;
   }
 
