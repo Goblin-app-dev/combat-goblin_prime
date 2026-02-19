@@ -31,6 +31,52 @@ Fix: `assignCatalogToSlot` now runs `PreflightScanService.scanBytes` on the down
 
 ---
 
+## Session 4 — 2026-02-19
+
+**Branch:** `claude/github-catalog-picker-Py9xI`
+**Commit:** `36ae8bf`
+
+### What Happened
+
+#### Phase 11D — Faction Picker + Auto-Load + Repo URL Default
+
+Implemented the full Phase 11D UI behaviour overhaul described in the user's proposal. All code changes followed skills 01-03, 13 order (docs updated first, then code).
+
+**New type — `FactionOption`**
+Value class with `displayName`, `primaryPath`, `libraryPaths`. Represents one selectable faction derived from the repo tree. Library catalogs are excluded from the picker list.
+
+**New controller methods / getters**
+- `gameSystemDisplayName` — strips `.gst` extension for display in UI
+- `cachedRepoTree` — exposes the most recent `loadRepoCatalogTree()` result
+- `loadRepoCatalogTree()` now caches result + sets `_sourceLocator`, notifies listeners
+- `availableFactions(RepoTreeResult)` — deterministic `List<FactionOption>`, sorted ascending by `displayName`; strips known prefix segments; matches library paths by substring
+- `loadFactionIntoSlot(slot, faction, locator)` — one-tap import flow: fetch primary → pre-flight scan → fetch deps → `SlotStatus.ready` → immediately calls `loadSlot()`; sets `catalogName = faction.displayName` (so UI shows "Tyranids" not "Tyranids.cat")
+
+**New screen — `FactionPickerScreen`**
+Path: `lib/ui/downloads/faction_picker_screen.dart`
+- Filter field at top
+- Faction list: currently loaded faction highlighted with check mark
+- Tap → `loadFactionIntoSlot()` → pop (highlight-and-replace, no second confirmation)
+- "Clear Slot" action in AppBar
+
+**`DownloadsScreen` changes**
+- Default URL `https://github.com/BSData/wh40k-10e` pre-loaded
+- Auto-fetch tree on mount (`addPostFrameCallback`)
+- Repo URL is now read-only + "Change" button (collapses back to read-only after fetch)
+- Auto-selects `.gst` if repo has exactly one
+- Slot panel cards are tappable (InkWell) → opens `FactionPickerScreen`
+- Removed inline `_CatalogPicker` list; slot empty state shows "Tap to select a faction"
+- Loaded slot shows "Tap to change" hint
+
+**`HomeScreen` changes**
+- Stats view shows `gameSystemDisplayName` above pack count
+- Stats view lists loaded faction names (one per slot) below pack count
+- Slot chips already used `catalogName` → now shows "Tyranids" etc (no extra change needed)
+
+**Test result:** All 80 existing tests pass. No new tests (new UI-only behaviour; covered by acceptance criteria, not unit testable without significant mock infrastructure).
+
+---
+
 ## What Happened in This Session (Session 2 — 2026-02-17)
 
 ### 1. Context Recovery
