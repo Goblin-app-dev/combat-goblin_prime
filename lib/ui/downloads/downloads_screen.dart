@@ -9,11 +9,11 @@ const _kDefaultRepoUrl = 'https://github.com/BSData/wh40k-10e';
 
 /// Downloads screen for managing catalog slots.
 ///
-/// Layout:
-/// - Repo URL (read-only display + "Change" button). Auto-fetches tree on mount.
-/// - Game system selector (shown after tree fetch, hidden once loaded).
-/// - Slot panels (tappable → [FactionPickerScreen]).
-/// - Load All button (shown when any slot is in [SlotStatus.ready]).
+/// Layout (top → bottom):
+/// 1. Repo URL — read-only display + "Change" button. Auto-fetches tree on mount.
+/// 2. "Load Game System Data" button — user-triggered; SHA-aware.
+/// 3. Demo limitation banner.
+/// 4. Slot panels — tappable → [FactionPickerScreen]; auto-load on faction pick.
 class DownloadsScreen extends StatefulWidget {
   const DownloadsScreen({super.key});
 
@@ -24,20 +24,23 @@ class DownloadsScreen extends StatefulWidget {
 class _DownloadsScreenState extends State<DownloadsScreen> {
   final _urlController = TextEditingController(text: _kDefaultRepoUrl);
 
-  // View-local state for tree browsing
+  // Tree browsing state
   RepoTreeResult? _repoTree;
   bool _fetchingTree = false;
   String? _treeFetchError;
-  String? _selectedGstPath;
-  bool _fetchingGst = false;
 
-  /// When true, the URL field is editable; when false, it shows read-only.
+  // URL edit mode
   bool _editingUrl = false;
+
+  // Game system load state
+  bool _fetchingGst = false;
+  String? _gstPath; // which .gst path was loaded
+  String? _gstLoadedBlobSha; // blob SHA at the time of last successful load
 
   @override
   void initState() {
     super.initState();
-    // Auto-fetch the default repo on first load.
+    // Auto-fetch the default repo tree on first mount.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _fetchTree();
     });
@@ -72,8 +75,8 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
       _fetchingTree = true;
       _treeFetchError = null;
       _repoTree = null;
-      _selectedGstPath = null;
-      _editingUrl = false; // collapse URL editor after fetch
+      _gstPath = null;
+      _editingUrl = false;
     });
 
     final controller = ImportSessionProvider.of(context);
@@ -88,27 +91,78 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
             controller.resolverError?.userMessage ?? 'Failed to fetch repository.';
       }
     });
-
-    // Auto-select game system if exactly one .gst exists.
-    if (tree != null && tree.gameSystemFiles.length == 1) {
-      await _selectGameSystem(tree.gameSystemFiles.first.path);
-    }
   }
 
-  Future<void> _selectGameSystem(String path) async {
+  /// Downloads the game system file (user-triggered).
+  ///
+  /// If the repo has exactly one `.gst`, uses it directly.
+  /// If multiple `.gst` files exist, shows a picker dialog first.
+  /// SHA-aware: stores [_gstLoadedBlobSha] for update detection.
+  Future<void> _loadGameSystem() async {
     final locator = _buildLocator();
-    if (locator == null) return;
+    final tree = _repoTree;
+    if (locator == null || tree == null) return;
+
+    final gstFiles = tree.gameSystemFiles;
+    if (gstFiles.isEmpty) return;
+
+    // Resolve which .gst to download.
+    String? selectedPath;
+    if (gstFiles.length == 1) {
+      selectedPath = gstFiles.first.path;
+    } else {
+      selectedPath = await _showGstPickerDialog(gstFiles);
+    }
+    if (selectedPath == null || !mounted) return;
+
+    final expectedSha = tree.pathToBlobSha[selectedPath];
 
     setState(() {
-      _selectedGstPath = path;
+      _gstPath = selectedPath;
       _fetchingGst = true;
     });
 
     final controller = ImportSessionProvider.of(context);
-    await controller.fetchAndSetGameSystem(locator, path);
+    final success = await controller.fetchAndSetGameSystem(locator, selectedPath);
 
     if (!mounted) return;
-    setState(() => _fetchingGst = false);
+    setState(() {
+      _fetchingGst = false;
+      if (success) _gstLoadedBlobSha = expectedSha;
+    });
+  }
+
+  /// Shows a dialog for choosing among multiple `.gst` files.
+  /// Returns the selected path, or null if dismissed.
+  Future<String?> _showGstPickerDialog(List<RepoTreeEntry> gstFiles) async {
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Select Game System'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: gstFiles.length,
+            itemBuilder: (_, i) {
+              final entry = gstFiles[i];
+              final name = entry.path.split('/').last;
+              return ListTile(
+                leading: const Icon(Icons.description_outlined),
+                title: Text(name),
+                onTap: () => Navigator.of(ctx).pop(entry.path),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Navigates to [FactionPickerScreen] for the given slot.
@@ -141,10 +195,19 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     return AnimatedBuilder(
       animation: controller,
       builder: (context, _) {
+        // Determine game-system SHA state for button display.
+        final currentSha = _gstPath != null
+            ? _repoTree?.pathToBlobSha[_gstPath!]
+            : null;
+        final gstUpdateAvailable = controller.gameSystemFile != null &&
+            _gstLoadedBlobSha != null &&
+            currentSha != null &&
+            _gstLoadedBlobSha != currentSha;
+
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // --- Repo URL ---
+            // 1. Repo URL
             _RepoUrlSection(
               urlController: _urlController,
               fetching: _fetchingTree,
@@ -153,38 +216,20 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
               onChangeRequested: () => setState(() => _editingUrl = true),
               onFetch: _fetchTree,
             ),
+            const SizedBox(height: 12),
+
+            // 2. Load Game System Data button
+            _LoadGameSystemButton(
+              treeAvailable: _repoTree != null,
+              gameSystemLoaded: controller.gameSystemFile != null,
+              gameSystemName: controller.gameSystemDisplayName,
+              fetching: _fetchingGst,
+              updateAvailable: gstUpdateAvailable,
+              onLoad: _loadGameSystem,
+            ),
             const SizedBox(height: 16),
 
-            // --- Game System Selector ---
-            if (_repoTree != null && controller.gameSystemFile == null) ...[
-              _GameSystemSection(
-                tree: _repoTree!,
-                selectedPath: _selectedGstPath,
-                fetching: _fetchingGst,
-                onSelect: _selectGameSystem,
-              ),
-              const SizedBox(height: 16),
-            ],
-
-            // --- Game system loaded confirmation ---
-            if (controller.gameSystemFile != null) ...[
-              ListTile(
-                leading: const Icon(Icons.check_circle, color: Colors.green),
-                title: Text(
-                  controller.gameSystemDisplayName ??
-                      controller.gameSystemFile!.fileName,
-                ),
-                subtitle: const Text('Game system loaded'),
-                dense: true,
-                tileColor: Colors.green.withValues(alpha: 0.05),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-
-            // --- Demo limitation banner ---
+            // 3. Demo limitation banner
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
@@ -213,7 +258,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
             ),
             const SizedBox(height: 12),
 
-            // --- Slot Panels ---
+            // 4. Slot panels
             for (var i = 0; i < kMaxSelectedCatalogs; i++) ...[
               _SlotPanel(
                 index: i,
@@ -223,22 +268,9 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                 onTap: (_repoTree != null && controller.gameSystemFile != null)
                     ? () => _openFactionPicker(i)
                     : null,
-                onLoad: () => controller.loadSlot(i),
                 onClear: () => controller.clearSlot(i),
               ),
               const SizedBox(height: 12),
-            ],
-
-            // --- Load All Button ---
-            if (controller.slots.any((s) => s.status == SlotStatus.ready)) ...[
-              const SizedBox(height: 8),
-              FilledButton.icon(
-                onPressed: controller.gameSystemFile != null
-                    ? () => controller.loadAllReadySlots()
-                    : null,
-                icon: const Icon(Icons.play_arrow),
-                label: const Text('Load All Ready Slots'),
-              ),
             ],
           ],
         );
@@ -247,7 +279,9 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   }
 }
 
-// --- Sub-widgets ---
+// ---------------------------------------------------------------------------
+// Sub-widgets
+// ---------------------------------------------------------------------------
 
 class _RepoUrlSection extends StatelessWidget {
   final TextEditingController urlController;
@@ -274,7 +308,6 @@ class _RepoUrlSection extends StatelessWidget {
         Text('GitHub Repository', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
         if (editing)
-          // Editable mode
           Row(
             children: [
               Expanded(
@@ -303,12 +336,12 @@ class _RepoUrlSection extends StatelessWidget {
             ],
           )
         else
-          // Read-only mode
           Row(
             children: [
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   decoration: BoxDecoration(
                     border: Border.all(color: Theme.of(context).dividerColor),
                     borderRadius: BorderRadius.circular(4),
@@ -323,7 +356,7 @@ class _RepoUrlSection extends StatelessWidget {
                             ),
                             SizedBox(width: 8),
                             Text(
-                              'Fetching...',
+                              'Fetching…',
                               style: TextStyle(color: Colors.grey),
                             ),
                           ],
@@ -344,51 +377,90 @@ class _RepoUrlSection extends StatelessWidget {
           ),
         if (error != null) ...[
           const SizedBox(height: 4),
-          Text(error!, style: TextStyle(color: Colors.red.shade700, fontSize: 12)),
+          Text(
+            error!,
+            style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+          ),
         ],
       ],
     );
   }
 }
 
-class _GameSystemSection extends StatelessWidget {
-  final RepoTreeResult tree;
-  final String? selectedPath;
+/// User-triggered "Load Game System Data" button.
+///
+/// States:
+/// - No tree: disabled.
+/// - Tree available, not loaded: primary filled button.
+/// - Fetching: spinner.
+/// - Loaded, up to date: outlined green chip (non-interactive).
+/// - Loaded, update available: orange filled button.
+class _LoadGameSystemButton extends StatelessWidget {
+  final bool treeAvailable;
+  final bool gameSystemLoaded;
+  final String? gameSystemName;
   final bool fetching;
-  final ValueChanged<String> onSelect;
+  final bool updateAvailable;
+  final VoidCallback onLoad;
 
-  const _GameSystemSection({
-    required this.tree,
-    this.selectedPath,
+  const _LoadGameSystemButton({
+    required this.treeAvailable,
+    required this.gameSystemLoaded,
+    this.gameSystemName,
     required this.fetching,
-    required this.onSelect,
+    required this.updateAvailable,
+    required this.onLoad,
   });
 
   @override
   Widget build(BuildContext context) {
-    final gstFiles = tree.gameSystemFiles;
-    if (gstFiles.isEmpty) {
-      return const Text('No game system (.gst) files found in this repository.');
+    if (fetching) {
+      return const Row(
+        children: [
+          SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          SizedBox(width: 10),
+          Text('Loading game system…'),
+        ],
+      );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Game System', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
-        ...gstFiles.map((entry) => ListTile(
-              leading: fetching && selectedPath == entry.path
-                  ? const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.description_outlined),
-              title: Text(entry.path.split('/').last),
-              dense: true,
-              onTap: fetching ? null : () => onSelect(entry.path),
-            )),
-      ],
+    if (gameSystemLoaded && !updateAvailable) {
+      // Loaded and up to date — show confirmation, non-interactive.
+      return Row(
+        children: [
+          const Icon(Icons.check_circle, color: Colors.green, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              gameSystemName ?? 'Game System Loaded',
+              style: const TextStyle(color: Colors.green),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (gameSystemLoaded && updateAvailable) {
+      return FilledButton.icon(
+        style: FilledButton.styleFrom(
+          backgroundColor: Colors.orange,
+        ),
+        onPressed: onLoad,
+        icon: const Icon(Icons.system_update),
+        label: const Text('Update Available — Reload'),
+      );
+    }
+
+    // Not loaded yet.
+    return FilledButton.icon(
+      onPressed: treeAvailable ? onLoad : null,
+      icon: const Icon(Icons.download),
+      label: const Text('Load Game System Data'),
     );
   }
 }
@@ -399,9 +471,8 @@ class _SlotPanel extends StatelessWidget {
   final bool hasGameSystem;
   final bool hasTree;
 
-  /// Opens the faction picker. Null when picker is not available yet.
+  /// Opens the faction picker. Null when not yet available.
   final VoidCallback? onTap;
-  final VoidCallback onLoad;
   final VoidCallback onClear;
 
   const _SlotPanel({
@@ -410,7 +481,6 @@ class _SlotPanel extends StatelessWidget {
     required this.hasGameSystem,
     required this.hasTree,
     this.onTap,
-    required this.onLoad,
     required this.onClear,
   });
 
@@ -429,7 +499,7 @@ class _SlotPanel extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
+              // Header row
               Row(
                 children: [
                   Text(
@@ -451,12 +521,13 @@ class _SlotPanel extends StatelessWidget {
                 ],
               ),
 
-              // Body: depends on status
+              // Body — status-dependent
               if (slotState.status == SlotStatus.empty)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: _buildEmptyBody(context),
                 ),
+
               if (slotState.status == SlotStatus.fetching)
                 const Padding(
                   padding: EdgeInsets.only(top: 8),
@@ -472,30 +543,26 @@ class _SlotPanel extends StatelessWidget {
                     ],
                   ),
                 ),
+
               if (slotState.status == SlotStatus.ready)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Text(
-                          slotState.catalogName ?? 'Ready',
-                          style: const TextStyle(fontWeight: FontWeight.w500),
-                        ),
+                      Text(
+                        slotState.catalogName ?? 'Ready',
+                        style: const TextStyle(fontWeight: FontWeight.w500),
                       ),
                       if (!hasGameSystem)
                         const Text(
-                          'Set game system to load.',
+                          'Load Game System Data first.',
                           style: TextStyle(color: Colors.orange, fontSize: 12),
-                        )
-                      else
-                        FilledButton(
-                          onPressed: onLoad,
-                          child: const Text('Load'),
                         ),
                     ],
                   ),
                 ),
+
               if (slotState.status == SlotStatus.building)
                 const Padding(
                   padding: EdgeInsets.only(top: 8),
@@ -511,6 +578,7 @@ class _SlotPanel extends StatelessWidget {
                     ],
                   ),
                 ),
+
               if (slotState.status == SlotStatus.loaded)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
@@ -534,18 +602,21 @@ class _SlotPanel extends StatelessWidget {
                     ],
                   ),
                 ),
+
               if (slotState.status == SlotStatus.error) ...[
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
                     slotState.errorMessage ?? 'An error occurred.',
-                    style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+                    style:
+                        TextStyle(color: Colors.red.shade700, fontSize: 12),
                   ),
                 ),
                 if (slotState.hasMissingDeps) ...[
                   const SizedBox(height: 4),
                   Text(
-                    'Missing dependencies (${slotState.missingTargetIds.length}):',
+                    'Missing dependencies '
+                    '(${slotState.missingTargetIds.length}):',
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
@@ -593,7 +664,7 @@ class _SlotPanel extends StatelessWidget {
     }
     if (!hasGameSystem) {
       return const Text(
-        'Select a game system first.',
+        'Load Game System Data first.',
         style: TextStyle(color: Colors.orange, fontSize: 12),
       );
     }
@@ -634,7 +705,8 @@ class _StatusChip extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600),
+        style: TextStyle(
+            fontSize: 11, color: color, fontWeight: FontWeight.w600),
       ),
     );
   }

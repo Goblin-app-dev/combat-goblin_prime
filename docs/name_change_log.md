@@ -460,3 +460,33 @@ No silent renames are permitted.
 - New name: (removed) — slot panel tap opens FactionPickerScreen instead
 - Reason: Faction picker screen provides scroll room, search, and highlight-and-replace without cluttering the slot panel.
 - Approval reference: Phase 11 UI Behavior Tweak Proposal (2026-02-19)
+
+## 2026-02-19 (Phase 11E — Faction Picker Fix + Downloads UX — APPROVED)
+- Old name: availableFactions() — substring-match algorithm (library matched to primary by displayName.contains)
+- New name: availableFactions() — group-by algorithm (strip category prefix + "Library - " → group key → primary = lex-smallest non-library, libraryPaths = all library files in group)
+- Reason: Substring matching failed to consolidate all factions (e.g. Chaos Knights, Imperial Knights, Daemons showed as two rows). Group-by is deterministic and handles all patterns uniformly.
+- Approval reference: Phase 11 UI Tweaks Additions and Corrections (2026-02-19)
+
+## 2026-02-19 (Phase 11E — Downloads UX — APPROVED)
+- Old name: N/A
+- New name: _loadGameSystem() (view-local method in DownloadsScreen)
+- Reason: New handler for "Load Game System Data" button. Replaces the auto-select .gst flow. User-triggered download; SHA-aware; shows picker if multiple .gst files.
+- Approval reference: Phase 11 UI Tweaks Additions and Corrections (2026-02-19)
+
+## 2026-02-19 (Phase 11E — Downloads UX — APPROVED)
+- Old name: N/A
+- New name: _gstLoadedBlobSha (view-local state in DownloadsScreen)
+- Reason: Tracks the blob SHA of the game system at load time for SHA-based update detection in the "Load Game System Data" button.
+- Approval reference: Phase 11 UI Tweaks Additions and Corrections (2026-02-19)
+
+## 2026-02-19 (Phase 11E — Downloads UX — APPROVED)
+- Old name: _SlotPanel.onLoad + "Load" button + "Load All Ready Slots" button
+- New name: (removed)
+- Reason: Slots are now auto-loaded by loadFactionIntoSlot(). Users never manually trigger pipeline. Load/Load All buttons removed from Downloads screen.
+- Approval reference: Phase 11 UI Tweaks Additions and Corrections (2026-02-19)
+
+## 2026-02-19 (Phase 11E — Downloads UX — APPROVED)
+- Old name: _GameSystemSection (auto-list of .gst files for selection)
+- New name: _LoadGameSystemButton (single user-triggered button; SHA-aware; shows picker dialog for multi-.gst repos)
+- Reason: Replace list-style selector with a single-tap button that handles all states (not loaded / loaded+up-to-date / loaded+update-available). Matches "one button" spec requirement.
+- Approval reference: Phase 11 UI Tweaks Additions and Corrections (2026-02-19)

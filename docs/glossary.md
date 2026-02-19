@@ -362,6 +362,14 @@ Controller field `_cachedRepoTree` (getter: `cachedRepoTree`). Stores the most r
 
 ---
 
+## Faction Grouping (Phase 11E — Faction Picker Fix)
+Deterministic algorithm inside `availableFactions()` that merges primary and library `.cat` files into a single `FactionOption`. Steps: (1) for each `.cat`, strip one known category prefix ("Chaos - ", "Xenos - ", etc.) then strip "Library - " prefix if present, yielding a group key; (2) collect primary (non-library) and library paths per group key; (3) emit one `FactionOption` per group that has at least one primary — `primaryPath` is the lexicographically smallest non-library path, `libraryPaths` are all library paths in the group, sorted. Groups with only library files (no primary) are silently skipped.
+
+## Game System Loader (Phase 11E — Downloads UX)
+UI concept for the "Load Game System Data" button on the Downloads screen. User-triggered (not automatic). Behavior: (1) if tree has exactly one `.gst`, download it immediately; (2) if multiple `.gst` files exist, show a picker dialog first. After download: updates UI to "Game System Loaded" state. If game system is already loaded and the repo tree shows the same blob SHA, the button reflects "Up to date". If the blob SHA differs, the button shows "Update available" and re-downloads on press. SHA comparison uses view-local `_gstLoadedBlobSha` vs `RepoTreeResult.pathToBlobSha[gstPath]`.
+
+---
+
 Any concept used in code must appear here first.
 
 ## Repo Search Query (PROPOSED — GitHub Repository Search)

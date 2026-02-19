@@ -589,55 +589,73 @@ class ImportSessionController extends ChangeNotifier {
     'Agents of the Imperium - ',
   ];
 
-  /// Returns true if [path] is a library catalog (basename starts with "Library").
-  static bool _isLibraryPath(String path) {
-    return path.split('/').last.startsWith('Library');
-  }
-
-  /// Derives a faction display name from a catalog file path.
-  ///
-  /// Strips the path prefix, the file extension, and any known category
-  /// prefix (e.g. "Xenos - ") to produce a short human-readable name.
-  static String _catalogDisplayName(String path) {
-    var name = path.split('/').last;
-    if (name.endsWith('.cat')) name = name.substring(0, name.length - 4);
-    if (name.endsWith('.gst')) name = name.substring(0, name.length - 4);
-    for (final prefix in _knownFactionPrefixes) {
-      if (name.startsWith(prefix)) {
-        name = name.substring(prefix.length);
-        break;
-      }
-    }
-    return name;
-  }
-
   /// Builds a sorted list of [FactionOption]s from [tree].
   ///
-  /// Excludes library catalog entries (basename starting with "Library").
-  /// Matches library paths to their faction by displayName substring.
-  /// Result is sorted ascending by [FactionOption.displayName].
+  /// **Group-by algorithm** — ensures every faction appears exactly once,
+  /// regardless of whether it has an associated library catalog:
+  ///
+  /// 1. For each `.cat` file, compute a **group key**:
+  ///    - Strip one known category prefix ("Chaos - ", "Xenos - ", etc.).
+  ///    - If the result starts with "Library - ", strip that too and mark
+  ///      the file as a library entry.
+  ///    - The remaining stem is the group key (= display name).
+  /// 2. Accumulate each path into its group's primary or library list.
+  /// 3. Emit one [FactionOption] per group that has at least one primary
+  ///    (library-only groups are silently skipped).
+  ///    - [FactionOption.primaryPath] = lexicographically smallest non-library
+  ///      path in the group (deterministic tie-break).
+  ///    - [FactionOption.libraryPaths] = all library paths in the group,
+  ///      sorted lexicographically.
+  /// 4. Sort options ascending by [FactionOption.displayName].
   List<FactionOption> availableFactions(RepoTreeResult tree) {
-    final catEntries = tree.catalogFiles;
-    final libraryPaths = catEntries
-        .where((e) => _isLibraryPath(e.path))
-        .map((e) => e.path)
-        .toList();
-    final factionEntries =
-        catEntries.where((e) => !_isLibraryPath(e.path)).toList();
+    const libPrefix = 'Library - ';
 
-    final options = factionEntries.map((entry) {
-      final displayName = _catalogDisplayName(entry.path);
-      final libs = libraryPaths
-          .where((lib) => lib.split('/').last.contains(displayName))
-          .toList();
-      return FactionOption(
-        displayName: displayName,
-        primaryPath: entry.path,
-        libraryPaths: libs,
+    // Group key → (primary paths, library paths)
+    final groups = <String, ({List<String> primary, List<String> library})>{};
+
+    for (final entry in tree.catalogFiles) {
+      final base = entry.path.split('/').last;
+      var stem =
+          base.endsWith('.cat') ? base.substring(0, base.length - 4) : base;
+
+      // Strip one known category prefix (e.g. "Chaos - ").
+      for (final prefix in _knownFactionPrefixes) {
+        if (stem.startsWith(prefix)) {
+          stem = stem.substring(prefix.length);
+          break;
+        }
+      }
+
+      // Detect library and derive the group key.
+      final isLibrary = stem.startsWith(libPrefix);
+      final groupKey =
+          isLibrary ? stem.substring(libPrefix.length) : stem;
+
+      final group = groups.putIfAbsent(
+        groupKey,
+        () => (primary: <String>[], library: <String>[]),
       );
-    }).toList()
-      ..sort((a, b) => a.displayName.compareTo(b.displayName));
+      if (isLibrary) {
+        group.library.add(entry.path);
+      } else {
+        group.primary.add(entry.path);
+      }
+    }
 
+    // Build one FactionOption per group that has a primary catalog.
+    final options = <FactionOption>[];
+    for (final kv in groups.entries) {
+      final primaryPaths = kv.value.primary..sort();
+      final libraryPaths = kv.value.library..sort();
+      if (primaryPaths.isEmpty) continue; // library-only group: skip
+      options.add(FactionOption(
+        displayName: kv.key,
+        primaryPath: primaryPaths.first, // lex-smallest for determinism
+        libraryPaths: libraryPaths,
+      ));
+    }
+
+    options.sort((a, b) => a.displayName.compareTo(b.displayName));
     return options;
   }
 
