@@ -226,7 +226,7 @@ class SessionPersistenceService {
   Future<void> saveSession(PersistedSession session) async {
     final file = File(_snapshotFilePath);
     await file.parent.create(recursive: true);
-    final tempFile = File('${_snapshotFilePath}.tmp');
+    final tempFile = File('$_snapshotFilePath.tmp');
     await tempFile.writeAsString(
       const JsonEncoder.withIndent('  ').convert(session.toJson()),
       flush: true,
