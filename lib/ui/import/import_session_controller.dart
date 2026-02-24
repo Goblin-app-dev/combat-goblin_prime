@@ -387,6 +387,10 @@ class ImportSessionController extends ChangeNotifier {
 
   List<SlotState> _slots = const [SlotState(), SlotState()];
 
+  /// Last RawPackBundle per slot, retained for _saveSession() to read M1 paths.
+  /// Keyed by slot index. Cleared when slot is cleared.
+  final Map<int, RawPackBundle> _slotBundles = {};
+
   /// Returns the state of the slot at [index].
   SlotState slotState(int index) => _slots[index];
 
@@ -437,6 +441,14 @@ class ImportSessionController extends ChangeNotifier {
         _gitHubSyncStateService = gitHubSyncStateService,
         _acquireServiceFactory = acquireServiceFactory;
 
+  /// Sets the [GitHubSyncStateService] for SHA-based update detection.
+  ///
+  /// Called from bootstrap before [initPersistenceAndRestore] so that the
+  /// subsequent [checkForUpdatesAsync] has a service to query.
+  void setGitHubSyncStateService(GitHubSyncStateService service) {
+    _gitHubSyncStateService = service;
+  }
+
   /// Sets the persistence service and checks for existing session.
   Future<void> initPersistence(SessionPersistenceService service) async {
     _persistenceService = service;
@@ -445,21 +457,153 @@ class ImportSessionController extends ChangeNotifier {
 
   /// Sets the persistence service and auto-restores the last session on boot.
   ///
-  /// Unlike [initPersistence], this immediately reloads the persisted session
-  /// if one exists, without requiring a separate [reloadLastSession] call.
+  /// Phase 11E two-phase restore:
+  /// 1. **Instant labels** — synchronously populates slot display names and
+  ///    game system label from persisted metadata (no file I/O).
+  /// 2. **Background rebuild** — reads file bytes from M1 paths and runs the
+  ///    pipeline. On success, slots transition to [SlotStatus.loaded].
+  ///    On failure, slots fall back to [SlotStatus.error] but labels remain
+  ///    visible so the user sees what was loaded last time.
+  ///
   /// Fails silently if restoration fails.
   Future<void> initPersistenceAndRestore(
     SessionPersistenceService service,
   ) async {
     _persistenceService = service;
     await _checkForPersistedSession();
-    if (_hasPersistedSession) {
-      try {
-        await reloadLastSession();
-      } catch (_) {
-        // Fail silently on auto-restore
+    if (!_hasPersistedSession || _persistedSession == null) return;
+
+    final session = _persistedSession!;
+
+    // Phase 1: Instant labels — populate display state from metadata only.
+    _restoreLabelsFromSnapshot(session);
+
+    // Phase 2: Background rebuild — read files + run pipeline.
+    try {
+      await _rebuildFromSnapshot(session);
+    } catch (_) {
+      // Fail silently on auto-restore; labels remain visible.
+    }
+  }
+
+  /// Restores display labels from a persisted session without any file I/O.
+  ///
+  /// Sets [gameSystemDisplayName] via a lightweight [SelectedFile] (empty
+  /// bytes), and populates slot names from [PersistedCatalog.factionDisplayName].
+  /// Slots are set to [SlotStatus.fetching] to indicate "restoring…" state.
+  void _restoreLabelsFromSnapshot(PersistedSession session) {
+    // Set game system display name from persisted label.
+    if (session.gameSystemDisplayName != null) {
+      _gameSystemFile = SelectedFile(
+        fileName: '${session.gameSystemDisplayName}.gst',
+        bytes: Uint8List(0), // placeholder — replaced in Phase 2
+      );
+    }
+
+    // Reconstruct source locator from persisted sourceKey + repoUrl.
+    if (session.sourceKey != null &&
+        session.repoUrl != null &&
+        session.repoUrl!.isNotEmpty) {
+      _sourceLocator = SourceLocator(
+        sourceKey: session.sourceKey!,
+        sourceUrl: session.repoUrl!,
+        branch: session.branch,
+      );
+    }
+
+    // Populate slot labels.
+    final updated = List<SlotState>.of(_slots);
+    for (var i = 0; i < session.selectedCatalogs.length && i < kMaxSelectedCatalogs; i++) {
+      final pc = session.selectedCatalogs[i];
+      updated[i] = SlotState(
+        status: SlotStatus.fetching, // "restoring…" indicator
+        catalogPath: pc.primaryCatRepoPath ?? pc.path,
+        catalogName: pc.factionDisplayName,
+      );
+    }
+    _slots = List.unmodifiable(updated);
+
+    _hasPersistedSession = false;
+    notifyListeners();
+  }
+
+  /// Reads M1 files and rebuilds indices from a persisted session.
+  ///
+  /// Called as Phase 2 of [initPersistenceAndRestore]. On success each slot
+  /// transitions to [SlotStatus.loaded]. On failure the slot transitions to
+  /// [SlotStatus.error] but the display label from Phase 1 remains visible.
+  Future<void> _rebuildFromSnapshot(PersistedSession session) async {
+    // Read game system bytes.
+    final gsFile = File(session.gameSystemPath);
+    if (!await gsFile.exists()) {
+      _setAllSlotsError('Game system file missing from storage');
+      return;
+    }
+    final gsBytes = await gsFile.readAsBytes();
+    _gameSystemFile = SelectedFile(
+      fileName: gsFile.uri.pathSegments.last,
+      bytes: gsBytes,
+      filePath: session.gameSystemPath,
+    );
+
+    // Pre-load dependency bytes from persisted paths.
+    for (final entry in session.dependencyPaths.entries) {
+      final depFile = File(entry.value);
+      if (await depFile.exists()) {
+        _resolvedDependencies[entry.key] = await depFile.readAsBytes();
       }
     }
+    // Also load per-catalog dependency paths.
+    for (final pc in session.selectedCatalogs) {
+      if (pc.dependencyStoredPaths != null) {
+        for (final entry in pc.dependencyStoredPaths!.entries) {
+          if (_resolvedDependencies.containsKey(entry.key)) continue;
+          final depFile = File(entry.value);
+          if (await depFile.exists()) {
+            _resolvedDependencies[entry.key] = await depFile.readAsBytes();
+          }
+        }
+      }
+    }
+
+    // Rebuild each slot.
+    for (var i = 0; i < session.selectedCatalogs.length && i < kMaxSelectedCatalogs; i++) {
+      final pc = session.selectedCatalogs[i];
+      try {
+        final catFile = File(pc.path);
+        if (!await catFile.exists()) {
+          _setSlot(i, _slots[i].copyWith(
+            status: SlotStatus.error,
+            errorMessage: 'Catalog file missing from storage',
+          ));
+          continue;
+        }
+        final catBytes = await catFile.readAsBytes();
+
+        // Set slot to ready with bytes, then load.
+        _setSlot(i, _slots[i].copyWith(
+          status: SlotStatus.ready,
+          fetchedBytes: catBytes,
+          sourceLocator: _sourceLocator,
+        ));
+        await loadSlot(i);
+      } catch (e) {
+        _setSlot(i, _slots[i].copyWith(
+          status: SlotStatus.error,
+          errorMessage: 'Restore failed: $e',
+        ));
+      }
+    }
+  }
+
+  /// Sets all non-empty slots to error state.
+  void _setAllSlotsError(String message) {
+    final updated = _slots.map((s) {
+      if (s.status == SlotStatus.empty) return s;
+      return s.copyWith(status: SlotStatus.error, errorMessage: message);
+    }).toList();
+    _slots = List.unmodifiable(updated);
+    notifyListeners();
   }
 
   /// Runs the update check and returns when complete.
@@ -1164,6 +1308,9 @@ class ImportSessionController extends ChangeNotifier {
         source: s.sourceLocator ?? _defaultSourceLocator(),
       );
 
+      // Stash bundle so _saveSession() can read M1 storage paths.
+      _slotBundles[slot] = rawBundle;
+
       final indexBundle = await _runPipelineForBundle(rawBundle);
       _indexBundles['slot_$slot'] = indexBundle;
 
@@ -1280,6 +1427,7 @@ class ImportSessionController extends ChangeNotifier {
   void clearSlot(int slot) {
     assert(slot >= 0 && slot < kMaxSelectedCatalogs, 'Invalid slot index');
     _indexBundles.remove('slot_$slot');
+    _slotBundles.remove(slot);
     _setSlot(slot, const SlotState());
   }
 
@@ -1648,18 +1796,25 @@ class ImportSessionController extends ChangeNotifier {
       );
       _selectedCatalogs = List.unmodifiable(loadedCatalogs);
 
-      // Set source locator if available
+      // Set source locator if available. Prefer persisted sourceKey (Phase
+      // 11E) over URL-derived key (legacy).
       if (_persistedSession!.repoUrl != null &&
           _persistedSession!.repoUrl!.isNotEmpty) {
-        final uri = Uri.tryParse(_persistedSession!.repoUrl!);
-        if (uri != null && uri.pathSegments.length >= 2) {
-          final sourceKey = '${uri.pathSegments[0]}_${uri.pathSegments[1]}';
-          _sourceLocator = SourceLocator(
-            sourceKey: sourceKey,
-            sourceUrl: _persistedSession!.repoUrl!,
-            branch: _persistedSession!.branch,
-          );
+        final persistedKey = _persistedSession!.sourceKey;
+        final String sourceKey;
+        if (persistedKey != null && persistedKey.isNotEmpty) {
+          sourceKey = persistedKey;
+        } else {
+          final uri = Uri.tryParse(_persistedSession!.repoUrl!);
+          sourceKey = (uri != null && uri.pathSegments.length >= 2)
+              ? '${uri.pathSegments[0]}_${uri.pathSegments[1]}'
+              : 'unknown';
         }
+        _sourceLocator = SourceLocator(
+          sourceKey: sourceKey,
+          sourceUrl: _persistedSession!.repoUrl!,
+          branch: _persistedSession!.branch,
+        );
       }
 
       // Pre-load dependency bytes from persisted paths
@@ -1686,30 +1841,79 @@ class ImportSessionController extends ChangeNotifier {
 
   /// Saves the current session for later reload.
   ///
-  /// Called automatically on successful build if file paths are available.
+  /// Called automatically on successful build. Uses M1 storage paths from
+  /// stashed [RawPackBundle]s (per-slot flow) or [SelectedFile.filePath]
+  /// (legacy flow) for file location. Phase 11E fields enable instant label
+  /// restore on cold boot without loading file bytes.
   Future<void> _saveSession() async {
     if (_persistenceService == null) return;
-    if (_gameSystemFile?.filePath == null) return;
 
-    // Build list of persisted catalogs (only those with file paths)
+    // Determine game system M1 path: prefer stashed bundle, fall back to
+    // SelectedFile.filePath (legacy/reload path).
+    String? gsPath = _gameSystemFile?.filePath;
+    if (_slotBundles.isNotEmpty) {
+      gsPath ??= _slotBundles.values.first.gameSystemMetadata.storedPath;
+    }
+    if (gsPath == null) return;
+
+    // Build list of persisted catalogs from per-slot bundles.
     final persistedCatalogs = <PersistedCatalog>[];
-    for (final catalog in _selectedCatalogs) {
-      if (catalog.filePath != null) {
+    final allDepPaths = <String, String>{};
+
+    for (var i = 0; i < _slots.length; i++) {
+      final slot = _slots[i];
+      if (slot.status != SlotStatus.loaded) continue;
+
+      final bundle = _slotBundles[i];
+      if (bundle != null) {
+        // Per-slot flow: M1 paths from RawPackBundle metadata.
+        final depPaths = <String, String>{};
+        for (var j = 0; j < bundle.dependencyCatalogMetadatas.length; j++) {
+          final depMeta = bundle.dependencyCatalogMetadatas[j];
+          final depPreflight = bundle.dependencyCatalogPreflights[j];
+          depPaths[depPreflight.rootId] = depMeta.storedPath;
+        }
+        allDepPaths.addAll(depPaths);
+
         persistedCatalogs.add(PersistedCatalog(
-          path: catalog.filePath!,
-          rootId: catalog.rootId,
+          path: bundle.primaryCatalogMetadata.storedPath,
+          rootId: bundle.primaryCatalogPreflight.rootId,
+          factionDisplayName: slot.catalogName,
+          primaryCatRepoPath: slot.catalogPath,
+          dependencyStoredPaths: depPaths.isNotEmpty ? depPaths : null,
         ));
+      } else if (slot.catalogPath != null) {
+        // Reload flow: use whatever path we already have.
+        persistedCatalogs.add(PersistedCatalog(
+          path: slot.catalogPath!,
+          factionDisplayName: slot.catalogName,
+          primaryCatRepoPath: slot.catalogPath,
+        ));
+      }
+    }
+
+    // Fall back to legacy _selectedCatalogs if no per-slot data.
+    if (persistedCatalogs.isEmpty) {
+      for (final catalog in _selectedCatalogs) {
+        if (catalog.filePath != null) {
+          persistedCatalogs.add(PersistedCatalog(
+            path: catalog.filePath!,
+            rootId: catalog.rootId,
+          ));
+        }
       }
     }
 
     if (persistedCatalogs.isEmpty) return;
 
     final session = PersistedSession(
-      gameSystemPath: _gameSystemFile!.filePath!,
+      gameSystemPath: gsPath,
+      gameSystemDisplayName: gameSystemDisplayName,
       selectedCatalogs: persistedCatalogs,
       repoUrl: _sourceLocator?.sourceUrl,
       branch: _sourceLocator?.branch,
-      dependencyPaths: {}, // TODO: Track dependency paths if needed
+      sourceKey: _sourceLocator?.sourceKey,
+      dependencyPaths: allDepPaths,
       savedAt: DateTime.now(),
     );
 

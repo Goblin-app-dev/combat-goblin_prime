@@ -370,6 +370,29 @@ UI concept for the "Load Game System Data" button on the Downloads screen. User-
 
 ---
 
+## App Snapshot (Phase 11E — Persistence + Fast Boot)
+Persisted session state format (v2) stored in `app_snapshot.json`. Contains session metadata, game system identity, and per-slot faction data. Enables instant label restore on cold boot without loading file bytes. Evolved from `PersistedSession` v1 (`last_session.json`). Schema version field enables future format migration. No index cache in 11E (background rebuild on boot); index cache deferred to Phase 11F.
+
+## Schema Version (Phase 11E — Persistence)
+Integer field `schemaVersion` on `PersistedSession`. Value 2 for 11E snapshots. Legacy sessions without this field are treated as version 1. Enables forward-compatible format migration.
+
+## Game System Display Name (Phase 11E — Persistence)
+Field `gameSystemDisplayName` on `PersistedSession`. Stores the human-readable game system label (e.g. "Warhammer 40,000") for instant boot display without loading file bytes. Derived from the `.gst` filename with extension stripped.
+
+## Source Key (Phase 11E — Persistence)
+Field `sourceKey` on `PersistedSession`. Stores the stable `SourceLocator.sourceKey` identifier (e.g. "BSData_wh40k-10e") needed to reconstruct a `SourceLocator` on boot and to look up blob SHAs in `GitHubSyncStateService`.
+
+## Faction Display Name (Phase 11E — Persistence)
+Field `factionDisplayName` on `PersistedCatalog`. Stores the human-readable faction label (e.g. "Tyranids") for instant boot display. Set when a faction is loaded via `loadFactionIntoSlot()`.
+
+## Primary Cat Repo Path (Phase 11E — Persistence)
+Field `primaryCatRepoPath` on `PersistedCatalog`. Stores the repo-relative path of the primary `.cat` file (e.g. "Tyranids.cat") for re-download fallback when M1 local files are missing.
+
+## Dependency Stored Paths (Phase 11E — Persistence)
+Field `dependencyStoredPaths` on `PersistedCatalog`. Maps targetId → M1 local storage path for dependency catalog files. Enables offline session reload by reading dependency bytes from disk rather than re-fetching from GitHub.
+
+---
+
 Any concept used in code must appear here first.
 
 ## Repo Search Query (PROPOSED — GitHub Repository Search)

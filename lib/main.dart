@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import 'services/github_sync_state.dart';
 import 'ui/app_shell.dart';
 import 'ui/import/import_session_controller.dart';
 import 'ui/import/import_session_provider.dart';
@@ -40,6 +41,10 @@ class _CombatGoblinAppState extends State<CombatGoblinApp> {
         Directory(p.join(widget.appDataRoot.path, 'session'));
     final persistService =
         SessionPersistenceService(storageRoot: persistDir.path);
+    // Wire GitHubSyncStateService for SHA-based update detection.
+    final syncService =
+        GitHubSyncStateService(storageRoot: widget.appDataRoot.path);
+    _importController.setGitHubSyncStateService(syncService);
     // Auto-restore last session on boot (fails silently)
     await _importController.initPersistenceAndRestore(persistService);
     // Non-blocking update check (fails silently)
