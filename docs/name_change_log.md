@@ -490,3 +490,45 @@ No silent renames are permitted.
 - New name: _LoadGameSystemButton (single user-triggered button; SHA-aware; shows picker dialog for multi-.gst repos)
 - Reason: Replace list-style selector with a single-tap button that handles all states (not loaded / loaded+up-to-date / loaded+update-available). Matches "one button" spec requirement.
 - Approval reference: Phase 11 UI Tweaks Additions and Corrections (2026-02-19)
+
+## 2026-02-20 (Phase 11E — Persistence + Fast Boot — APPROVED)
+- Old name: N/A
+- New name: PersistedSession.schemaVersion
+- Reason: New int field for format version migration. Value 2 for 11E snapshots; legacy sessions without field treated as version 1.
+- Approval reference: Phase 11E Persistence + Fast Boot name proposal (2026-02-20)
+
+## 2026-02-20 (Phase 11E — Persistence + Fast Boot — APPROVED)
+- Old name: N/A
+- New name: PersistedSession.gameSystemDisplayName
+- Reason: New String? field storing human-readable game system label for instant boot display without loading file bytes.
+- Approval reference: Phase 11E Persistence + Fast Boot name proposal (2026-02-20)
+
+## 2026-02-20 (Phase 11E — Persistence + Fast Boot — APPROVED)
+- Old name: N/A
+- New name: PersistedSession.sourceKey
+- Reason: New String? field storing SourceLocator.sourceKey for boot-time SourceLocator reconstruction and GitHubSyncStateService lookup.
+- Approval reference: Phase 11E Persistence + Fast Boot name proposal (2026-02-20)
+
+## 2026-02-20 (Phase 11E — Persistence + Fast Boot — APPROVED)
+- Old name: N/A
+- New name: PersistedCatalog.factionDisplayName
+- Reason: New String? field storing faction label (e.g. "Tyranids") for instant boot display.
+- Approval reference: Phase 11E Persistence + Fast Boot name proposal (2026-02-20)
+
+## 2026-02-20 (Phase 11E — Persistence + Fast Boot — APPROVED)
+- Old name: N/A
+- New name: PersistedCatalog.primaryCatRepoPath
+- Reason: New String? field storing repo-relative .cat path for re-download fallback.
+- Approval reference: Phase 11E Persistence + Fast Boot name proposal (2026-02-20)
+
+## 2026-02-20 (Phase 11E — Persistence + Fast Boot — APPROVED)
+- Old name: N/A
+- New name: PersistedCatalog.dependencyStoredPaths
+- Reason: New Map<String, String>? field mapping targetId → M1 local path for offline dependency reload.
+- Approval reference: Phase 11E Persistence + Fast Boot name proposal (2026-02-20)
+
+## 2026-02-20 (Phase 11E — Persistence + Fast Boot — APPROVED)
+- Old name: SessionPersistenceService._sessionFileName = 'last_session.json'
+- New name: SessionPersistenceService._snapshotFileName = 'app_snapshot.json'
+- Reason: Storage file renamed to reflect evolved snapshot format. Migration fallback reads last_session.json if app_snapshot.json absent.
+- Approval reference: Phase 11E Persistence + Fast Boot name proposal (2026-02-20)
