@@ -148,6 +148,12 @@ class SlotState {
   /// Built index, available after [SlotStatus.loaded].
   final IndexBundle? indexBundle;
 
+  /// True only when [status] == [SlotStatus.fetching] during the Phase-1
+  /// boot restore (label population from snapshot). Distinguishes the fast
+  /// in-memory restore pass from a live network download so the UI can show
+  /// "Restoring…" instead of "Downloading…".
+  final bool isBootRestoring;
+
   const SlotState({
     this.status = SlotStatus.empty,
     this.catalogPath,
@@ -157,6 +163,7 @@ class SlotState {
     this.errorMessage,
     this.missingTargetIds = const [],
     this.indexBundle,
+    this.isBootRestoring = false,
   });
 
   SlotState copyWith({
@@ -168,6 +175,7 @@ class SlotState {
     String? errorMessage,
     List<String>? missingTargetIds,
     IndexBundle? indexBundle,
+    bool? isBootRestoring,
   }) {
     return SlotState(
       status: status ?? this.status,
@@ -178,6 +186,7 @@ class SlotState {
       errorMessage: errorMessage ?? this.errorMessage,
       missingTargetIds: missingTargetIds ?? this.missingTargetIds,
       indexBundle: indexBundle ?? this.indexBundle,
+      isBootRestoring: isBootRestoring ?? this.isBootRestoring,
     );
   }
 
@@ -423,6 +432,29 @@ class ImportSessionController extends ChangeNotifier {
   bool get updateAvailable =>
       _updateCheckStatus == UpdateCheckStatus.updatesAvailable;
 
+  /// Timestamp of the most recent completed update check (transient, not
+  /// persisted). Null until the first check completes (success or failure).
+  DateTime? _lastUpdateCheckAt;
+  DateTime? get lastUpdateCheckAt => _lastUpdateCheckAt;
+
+  /// Timestamp of the most recent successful repo tree fetch (transient).
+  /// Sourced from [RepoTreeResult.fetchedAt] after [loadRepoCatalogTree].
+  DateTime? _lastSyncAt;
+  DateTime? get lastSyncAt => _lastSyncAt;
+
+  // --- Boot Perf State ---
+
+  /// Wall-clock origin for boot timing: set at [initPersistenceAndRestore]
+  /// entry. Null on fresh installs where no session is restored.
+  DateTime? _t0;
+
+  /// Time at which slot labels became visible (Phase 1 complete).
+  DateTime? _tLabelsVisible;
+
+  /// Time at which the first slot reached [SlotStatus.loaded] (Phase 2
+  /// partial-complete). Set once; subsequent loads do not overwrite.
+  DateTime? _tSlot0Loaded;
+
   /// Optional factory for creating [AcquireService] instances.
   ///
   /// Defaults to the production implementation. Inject a custom factory in
@@ -469,6 +501,7 @@ class ImportSessionController extends ChangeNotifier {
   Future<void> initPersistenceAndRestore(
     SessionPersistenceService service,
   ) async {
+    _t0 = DateTime.now();
     _persistenceService = service;
     await _checkForPersistedSession();
     if (!_hasPersistedSession || _persistedSession == null) return;
@@ -516,14 +549,16 @@ class ImportSessionController extends ChangeNotifier {
     for (var i = 0; i < session.selectedCatalogs.length && i < kMaxSelectedCatalogs; i++) {
       final pc = session.selectedCatalogs[i];
       updated[i] = SlotState(
-        status: SlotStatus.fetching, // "restoring…" indicator
+        status: SlotStatus.fetching,
         catalogPath: pc.primaryCatRepoPath ?? pc.path,
         catalogName: pc.factionDisplayName,
+        isBootRestoring: true, // disambiguates from live network download
       );
     }
     _slots = List.unmodifiable(updated);
 
     _hasPersistedSession = false;
+    _tLabelsVisible = DateTime.now();
     notifyListeners();
   }
 
@@ -580,11 +615,12 @@ class ImportSessionController extends ChangeNotifier {
         }
         final catBytes = await catFile.readAsBytes();
 
-        // Set slot to ready with bytes, then load.
+        // Set slot to ready with bytes (clear boot flag), then load.
         _setSlot(i, _slots[i].copyWith(
           status: SlotStatus.ready,
           fetchedBytes: catBytes,
           sourceLocator: _sourceLocator,
+          isBootRestoring: false,
         ));
         await loadSlot(i);
       } catch (e) {
@@ -600,7 +636,11 @@ class ImportSessionController extends ChangeNotifier {
   void _setAllSlotsError(String message) {
     final updated = _slots.map((s) {
       if (s.status == SlotStatus.empty) return s;
-      return s.copyWith(status: SlotStatus.error, errorMessage: message);
+      return s.copyWith(
+        status: SlotStatus.error,
+        errorMessage: message,
+        isBootRestoring: false,
+      );
     }).toList();
     _slots = List.unmodifiable(updated);
     notifyListeners();
@@ -629,12 +669,14 @@ class ImportSessionController extends ChangeNotifier {
       final tree = await _bsdResolver.fetchRepoTree(_sourceLocator!);
       if (tree == null) {
         _updateCheckStatus = UpdateCheckStatus.failed;
+        _lastUpdateCheckAt = DateTime.now();
         notifyListeners();
         return;
       }
       final service = _gitHubSyncStateService;
       if (service == null) {
         _updateCheckStatus = UpdateCheckStatus.failed;
+        _lastUpdateCheckAt = DateTime.now();
         notifyListeners();
         return;
       }
@@ -642,6 +684,7 @@ class ImportSessionController extends ChangeNotifier {
       final repoState = syncState.repos[_sourceLocator!.sourceKey];
       if (repoState == null) {
         _updateCheckStatus = UpdateCheckStatus.failed;
+        _lastUpdateCheckAt = DateTime.now();
         notifyListeners();
         return;
       }
@@ -650,14 +693,17 @@ class ImportSessionController extends ChangeNotifier {
         final tracked = repoState.trackedFiles[entry.path];
         if (tracked != null && tracked.blobSha != entry.blobSha) {
           _updateCheckStatus = UpdateCheckStatus.updatesAvailable;
+          _lastUpdateCheckAt = DateTime.now();
           notifyListeners();
           return;
         }
       }
       _updateCheckStatus = UpdateCheckStatus.upToDate;
+      _lastUpdateCheckAt = DateTime.now();
       notifyListeners();
     } catch (_) {
       _updateCheckStatus = UpdateCheckStatus.failed;
+      _lastUpdateCheckAt = DateTime.now();
       notifyListeners();
     }
   }
@@ -711,9 +757,10 @@ class ImportSessionController extends ChangeNotifier {
       entries: sortedEntries,
       fetchedAt: result.fetchedAt,
     );
-    // Cache tree and locator for update checks and faction picker.
+    // Cache tree, locator, and last-sync timestamp.
     _cachedRepoTree = sorted;
     _sourceLocator = sourceLocator;
+    _lastSyncAt = sorted.fetchedAt;
     notifyListeners();
     return sorted;
   }
@@ -1423,6 +1470,26 @@ class ImportSessionController extends ChangeNotifier {
     }
   }
 
+  /// Retries loading a slot that failed with bytes still available.
+  ///
+  /// If the slot is in [SlotStatus.error] and has [SlotState.fetchedBytes],
+  /// transitions it back to [SlotStatus.ready] and re-runs [loadSlot].
+  /// Does nothing if the slot has no bytes or is not in the error state.
+  Future<void> retrySlot(int slot) async {
+    assert(slot >= 0 && slot < kMaxSelectedCatalogs, 'Invalid slot index');
+    final s = _slots[slot];
+    if (s.status != SlotStatus.error || s.fetchedBytes == null) return;
+    _setSlot(
+      slot,
+      s.copyWith(
+        status: SlotStatus.ready,
+        errorMessage: null,
+        missingTargetIds: const [],
+      ),
+    );
+    await loadSlot(slot);
+  }
+
   /// Clears a slot back to [SlotStatus.empty].
   void clearSlot(int slot) {
     assert(slot >= 0 && slot < kMaxSelectedCatalogs, 'Invalid slot index');
@@ -1435,7 +1502,37 @@ class ImportSessionController extends ChangeNotifier {
     final updated = List<SlotState>.of(_slots);
     updated[slot] = state;
     _slots = List.unmodifiable(updated);
+
+    // Boot perf: capture first-slot-loaded timestamp and emit timing log.
+    if (state.status == SlotStatus.loaded &&
+        _tSlot0Loaded == null &&
+        _t0 != null) {
+      _tSlot0Loaded = DateTime.now();
+      _emitBootPerfLog();
+    }
+
     notifyListeners();
+  }
+
+  /// Emits a single [debugPrint] line with cumulative boot timing.
+  ///
+  /// Only called once per boot, immediately after the first slot loads.
+  /// Timing covers: controller init → labels visible → first slot loaded.
+  void _emitBootPerfLog() {
+    final t0 = _t0;
+    final tLv = _tLabelsVisible;
+    final tS0 = _tSlot0Loaded;
+    if (t0 == null || tS0 == null) return;
+
+    final totalMs = tS0.difference(t0).inMilliseconds;
+    final labelsMs = tLv != null ? tLv.difference(t0).inMilliseconds : -1;
+    final buildMs = tLv != null ? tS0.difference(tLv).inMilliseconds : -1;
+
+    debugPrint(
+      '[BOOT PERF] t0→labels: ${labelsMs}ms | '
+      'labels→first-loaded: ${buildMs}ms | '
+      'total: ${totalMs}ms',
+    );
   }
 
   /// Demotes slot build state when the game system changes.

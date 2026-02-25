@@ -12,6 +12,8 @@ import 'package:combat_goblin_prime/services/github_sync_state.dart'
         GitHubSyncStateService,
         RepoSyncState,
         TrackedFile;
+import 'package:combat_goblin_prime/services/session_persistence_service.dart'
+    show PersistedCatalog;
 import 'package:combat_goblin_prime/ui/import/import_session_controller.dart';
 
 /// Mock BsdResolverService for testing.
@@ -611,6 +613,10 @@ void registerMultiCatalogTests() {
   _loadRepoCatalogTreeTests();
   _importFromGitHubTests();
   _availableFactionsTests();
+  _bootRestoringTests();
+  _retrySlotTests();
+  _updateCheckTimestampTests();
+  _lastSyncAtTests();
 }
 
 // --- Enhanced mock for GitHub import tests ---
@@ -1882,6 +1888,414 @@ void _availableFactionsTests() {
           reason: '"${f.displayName}" must not contain "Library"',
         );
       }
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Fake SessionPersistenceService
+// ---------------------------------------------------------------------------
+
+/// Returns a fixed [PersistedSession] without touching the file system.
+class _FakePersistenceService extends SessionPersistenceService {
+  final PersistedSession? _session;
+
+  _FakePersistenceService(this._session) : super(storageRoot: '/dev/null');
+
+  @override
+  Future<PersistedSession?> loadValidSession() async => _session;
+
+  @override
+  Future<void> saveSession(PersistedSession session) async {}
+
+  @override
+  Future<void> clearSession() async {}
+}
+
+// ---------------------------------------------------------------------------
+// isBootRestoring flag tests
+// ---------------------------------------------------------------------------
+
+void _bootRestoringTests() {
+  group('SlotState: isBootRestoring', () {
+    test('defaults to false', () {
+      const s = SlotState();
+      expect(s.isBootRestoring, isFalse);
+    });
+
+    test('copyWith(isBootRestoring: true) sets flag', () {
+      const s = SlotState();
+      final s2 = s.copyWith(isBootRestoring: true);
+      expect(s2.isBootRestoring, isTrue);
+    });
+
+    test('copyWith(isBootRestoring: false) clears flag', () {
+      const s = SlotState(isBootRestoring: true);
+      final s2 = s.copyWith(isBootRestoring: false);
+      expect(s2.isBootRestoring, isFalse);
+    });
+
+    test('copyWith() without argument preserves existing flag', () {
+      const s = SlotState(isBootRestoring: true);
+      final s2 = s.copyWith(status: SlotStatus.building);
+      expect(s2.isBootRestoring, isTrue);
+    });
+
+    test(
+        'initPersistenceAndRestore sets isBootRestoring=true during Phase 1',
+        () async {
+      // Build a fake session with one catalog label.
+      final fakeSession = PersistedSession(
+        gameSystemPath: '/nonexistent/game.gst',
+        gameSystemDisplayName: 'Warhammer 40,000',
+        selectedCatalogs: [
+          const PersistedCatalog(
+            path: '/nonexistent/tyranids.cat',
+            factionDisplayName: 'Tyranids',
+            primaryCatRepoPath: 'Tyranids.cat',
+          ),
+        ],
+        savedAt: DateTime(2026, 2, 1),
+      );
+
+      final controller = ImportSessionController(
+        bsdResolver: _MockGitHubResolverService(),
+      );
+
+      // Capture slot states after Phase 1 (before Phase 2 can read files)
+      var capturedBootRestoring = false;
+      controller.addListener(() {
+        if (controller.slotState(0).isBootRestoring) {
+          capturedBootRestoring = true;
+        }
+      });
+
+      // initPersistenceAndRestore will run Phase 1 then fail Phase 2 because
+      // the game system file doesn't exist on disk — that's fine for this test.
+      await controller.initPersistenceAndRestore(
+        _FakePersistenceService(fakeSession),
+      );
+
+      // At minimum Phase 1 must have fired, setting isBootRestoring=true.
+      expect(capturedBootRestoring, isTrue,
+          reason:
+              'isBootRestoring must be true during Phase-1 label restore');
+    });
+
+    test('slot label visible after Phase 1 even if Phase 2 files missing',
+        () async {
+      final fakeSession = PersistedSession(
+        gameSystemPath: '/nonexistent/game.gst',
+        gameSystemDisplayName: 'Warhammer 40,000',
+        selectedCatalogs: [
+          const PersistedCatalog(
+            path: '/nonexistent/tyranids.cat',
+            factionDisplayName: 'Tyranids',
+            primaryCatRepoPath: 'Tyranids.cat',
+          ),
+        ],
+        savedAt: DateTime(2026, 2, 1),
+      );
+
+      final controller = ImportSessionController(
+        bsdResolver: _MockGitHubResolverService(),
+      );
+
+      await controller.initPersistenceAndRestore(
+        _FakePersistenceService(fakeSession),
+      );
+
+      // Slot 0 must have the faction display name regardless of Phase 2 outcome
+      expect(
+        controller.slotState(0).catalogName,
+        equals('Tyranids'),
+        reason: 'Phase-1 label must survive Phase-2 failure',
+      );
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// retrySlot tests
+// ---------------------------------------------------------------------------
+
+void _retrySlotTests() {
+  group('ImportSessionController: retrySlot', () {
+    test('does nothing when slot is empty', () async {
+      final controller = ImportSessionController();
+
+      await controller.retrySlot(0);
+
+      expect(controller.slotState(0).status, equals(SlotStatus.empty));
+    });
+
+    test('does nothing when slot is ready (not error)', () async {
+      final mock = _MockGitHubResolverService();
+      mock.setFile('test.cat', Uint8List.fromList([1, 2, 3]));
+      final controller = ImportSessionController(bsdResolver: mock);
+
+      await controller.assignCatalogToSlot(0, 'test.cat', _kTestLocator);
+      expect(controller.slotState(0).status, equals(SlotStatus.ready));
+
+      await controller.retrySlot(0);
+
+      // Should still be ready (retrySlot only acts on error)
+      expect(controller.slotState(0).status, equals(SlotStatus.ready));
+    });
+
+    test('does nothing when slot is error but has no bytes', () async {
+      // Put slot in error state without bytes (e.g. via download failure)
+      final mock = _MockGitHubResolverService();
+      mock.setFileError(const BsdResolverException(
+        code: BsdResolverErrorCode.networkError,
+        message: 'fail',
+      ));
+      final controller = ImportSessionController(bsdResolver: mock);
+
+      await controller.assignCatalogToSlot(0, 'test.cat', _kTestLocator);
+      expect(controller.slotState(0).status, equals(SlotStatus.error));
+      expect(controller.slotState(0).fetchedBytes, isNull);
+
+      await controller.retrySlot(0);
+
+      // Still in error — no bytes to retry with
+      expect(controller.slotState(0).status, equals(SlotStatus.error));
+    });
+
+    test('transitions error+bytes slot through building then to error again '
+        'when game system missing', () async {
+      final mock = _MockGitHubResolverService();
+      mock.setFile('test.cat', Uint8List.fromList([1, 2, 3]));
+      mock.setFile('game.gst', Uint8List.fromList([4, 5, 6]));
+
+      // Use a throwing AcquireService so we can observe the transition
+      // to building without needing real file pipeline to succeed.
+      final acquireFactory = (_) => _ThrowingAcquireService(
+            const AcquireFailure(message: 'expected test failure'),
+          );
+
+      final controller = ImportSessionController(
+        bsdResolver: mock,
+        acquireServiceFactory: acquireFactory,
+      );
+
+      await controller.fetchAndSetGameSystem(_kTestLocator, 'game.gst');
+      await controller.assignCatalogToSlot(0, 'test.cat', _kTestLocator);
+
+      // Manually move to error with bytes to simulate a failed previous build
+      // (The pipeline failed but bytes are retained for retry.)
+      // loadSlot will fail via the throwing factory → slot goes to error.
+      await controller.loadSlot(0);
+      expect(controller.slotState(0).status, equals(SlotStatus.error));
+      expect(controller.slotState(0).fetchedBytes, isNotNull);
+
+      final statuses = <SlotStatus>[];
+      controller.addListener(() {
+        statuses.add(controller.slotState(0).status);
+      });
+
+      await controller.retrySlot(0);
+
+      // Must have passed through building
+      expect(statuses.contains(SlotStatus.building), isTrue);
+      // Ends in error again (factory always throws)
+      expect(controller.slotState(0).status, equals(SlotStatus.error));
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// lastUpdateCheckAt timestamp tests
+// ---------------------------------------------------------------------------
+
+void _updateCheckTimestampTests() {
+  group('ImportSessionController: lastUpdateCheckAt', () {
+    test('is null before any check', () {
+      final controller = ImportSessionController();
+
+      expect(controller.lastUpdateCheckAt, isNull);
+    });
+
+    test('is set after a successful check (upToDate)', () async {
+      const sourceKey = 'bsdata_wh40k';
+      const path = 'game.gst';
+      const sha = 'abc123';
+
+      final tree = RepoTreeResult(
+        entries: [
+          RepoTreeEntry(path: path, blobSha: sha, extension: '.gst'),
+        ],
+        fetchedAt: DateTime(2026, 2, 18),
+      );
+
+      final syncState = GitHubSyncState(
+        repos: {
+          sourceKey: RepoSyncState(
+            repoUrl: 'https://github.com/BSData/wh40k-10e',
+            branch: 'main',
+            trackedFiles: {
+              path: TrackedFile(
+                repoPath: path,
+                fileType: 'gst',
+                blobSha: sha,
+                lastCheckedAt: DateTime(2026, 2, 17),
+              ),
+            },
+          ),
+        },
+      );
+
+      final mock = _MockGitHubResolverService()..setTree(tree);
+      final controller = ImportSessionController(
+        bsdResolver: mock,
+        gitHubSyncStateService: _FakeGitHubSyncStateService(syncState),
+      );
+      controller.setSourceLocatorForTesting(
+        const SourceLocator(
+          sourceKey: sourceKey,
+          sourceUrl: 'https://github.com/BSData/wh40k-10e',
+        ),
+      );
+
+      final before = DateTime.now();
+      await controller.checkForUpdates();
+      final after = DateTime.now();
+
+      expect(controller.lastUpdateCheckAt, isNotNull);
+      expect(
+        controller.lastUpdateCheckAt!.isAfter(before) ||
+            controller.lastUpdateCheckAt!.isAtSameMomentAs(before),
+        isTrue,
+      );
+      expect(
+        controller.lastUpdateCheckAt!.isBefore(after) ||
+            controller.lastUpdateCheckAt!.isAtSameMomentAs(after),
+        isTrue,
+      );
+    });
+
+    test('is set after a failed check (network error)', () async {
+      final mock = _MockGitHubResolverService()
+        ..setTreeError(const BsdResolverException(
+          code: BsdResolverErrorCode.networkError,
+          message: 'fail',
+        ));
+      final controller = ImportSessionController(
+        bsdResolver: mock,
+        gitHubSyncStateService: _FakeGitHubSyncStateService(
+          const GitHubSyncState(),
+        ),
+      );
+      controller.setSourceLocatorForTesting(
+        const SourceLocator(
+          sourceKey: 'bsdata_wh40k',
+          sourceUrl: 'https://github.com/BSData/wh40k-10e',
+        ),
+      );
+
+      await controller.checkForUpdates();
+
+      expect(controller.lastUpdateCheckAt, isNotNull);
+    });
+
+    test('is updated on repeat calls', () async {
+      final mock = _MockGitHubResolverService()
+        ..setTreeError(const BsdResolverException(
+          code: BsdResolverErrorCode.networkError,
+          message: 'fail',
+        ));
+      final controller = ImportSessionController(
+        bsdResolver: mock,
+        gitHubSyncStateService: _FakeGitHubSyncStateService(
+          const GitHubSyncState(),
+        ),
+      );
+      controller.setSourceLocatorForTesting(
+        const SourceLocator(
+          sourceKey: 'bsdata_wh40k',
+          sourceUrl: 'https://github.com/BSData/wh40k-10e',
+        ),
+      );
+
+      await controller.checkForUpdates();
+      final first = controller.lastUpdateCheckAt;
+
+      // Brief delay to ensure timestamps differ
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+
+      await controller.checkForUpdates();
+      final second = controller.lastUpdateCheckAt;
+
+      expect(second, isNotNull);
+      expect(second!.isAfter(first!), isTrue);
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// lastSyncAt timestamp tests
+// ---------------------------------------------------------------------------
+
+void _lastSyncAtTests() {
+  group('ImportSessionController: lastSyncAt', () {
+    test('is null before loadRepoCatalogTree is called', () {
+      final controller = ImportSessionController();
+
+      expect(controller.lastSyncAt, isNull);
+    });
+
+    test('is set to tree fetchedAt after successful loadRepoCatalogTree',
+        () async {
+      final fetchedAt = DateTime(2026, 2, 20, 12, 0, 0);
+      final tree = RepoTreeResult(
+        entries: [
+          RepoTreeEntry(path: 'game.gst', blobSha: 'abc', extension: '.gst'),
+        ],
+        fetchedAt: fetchedAt,
+      );
+
+      final mock = _MockGitHubResolverService()..setTree(tree);
+      final controller = ImportSessionController(bsdResolver: mock);
+
+      await controller.loadRepoCatalogTree(_kTestLocator);
+
+      expect(controller.lastSyncAt, equals(fetchedAt));
+    });
+
+    test('is not set when loadRepoCatalogTree returns null (tree error)',
+        () async {
+      final mock = _MockGitHubResolverService()
+        ..setTreeError(const BsdResolverException(
+          code: BsdResolverErrorCode.networkError,
+          message: 'fail',
+        ));
+      final controller = ImportSessionController(bsdResolver: mock);
+
+      await controller.loadRepoCatalogTree(_kTestLocator);
+
+      expect(controller.lastSyncAt, isNull);
+    });
+
+    test('is updated on subsequent successful calls', () async {
+      final t1 = DateTime(2026, 2, 20, 10, 0, 0);
+      final t2 = DateTime(2026, 2, 20, 11, 0, 0);
+
+      final mock = _MockGitHubResolverService();
+      final controller = ImportSessionController(bsdResolver: mock);
+
+      mock.setTree(RepoTreeResult(
+        entries: [RepoTreeEntry(path: 'game.gst', blobSha: 'a', extension: '.gst')],
+        fetchedAt: t1,
+      ));
+      await controller.loadRepoCatalogTree(_kTestLocator);
+      expect(controller.lastSyncAt, equals(t1));
+
+      mock.setTree(RepoTreeResult(
+        entries: [RepoTreeEntry(path: 'game.gst', blobSha: 'b', extension: '.gst')],
+        fetchedAt: t2,
+      ));
+      await controller.loadRepoCatalogTree(_kTestLocator);
+      expect(controller.lastSyncAt, equals(t2));
     });
   });
 }

@@ -269,6 +269,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                     ? () => _openFactionPicker(i)
                     : null,
                 onClear: () => controller.clearSlot(i),
+                onRetry: () => controller.retrySlot(i),
               ),
               const SizedBox(height: 12),
             ],
@@ -475,6 +476,9 @@ class _SlotPanel extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback onClear;
 
+  /// Retries a failed slot that still has bytes. Null when not applicable.
+  final VoidCallback? onRetry;
+
   const _SlotPanel({
     required this.index,
     required this.slotState,
@@ -482,6 +486,7 @@ class _SlotPanel extends StatelessWidget {
     required this.hasTree,
     this.onTap,
     required this.onClear,
+    this.onRetry,
   });
 
   @override
@@ -507,7 +512,10 @@ class _SlotPanel extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                   const SizedBox(width: 8),
-                  _StatusChip(status: slotState.status),
+                  _StatusChip(
+                    status: slotState.status,
+                    isBootRestoring: slotState.isBootRestoring,
+                  ),
                   const Spacer(),
                   if (slotState.status != SlotStatus.empty &&
                       slotState.status != SlotStatus.fetching &&
@@ -529,19 +537,32 @@ class _SlotPanel extends StatelessWidget {
                 ),
 
               if (slotState.status == SlotStatus.fetching)
-                const Padding(
-                  padding: EdgeInsets.only(top: 8),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      SizedBox(width: 8),
-                      Text('Downloading…'),
-                    ],
-                  ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: slotState.isBootRestoring
+                      ? Row(
+                          children: [
+                            Icon(Icons.restore,
+                                size: 16,
+                                color: Colors.orange.shade700),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Restoring from snapshot…',
+                              style: TextStyle(color: Colors.orange.shade700),
+                            ),
+                          ],
+                        )
+                      : const Row(
+                          children: [
+                            SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                            SizedBox(width: 8),
+                            Text('Downloading…'),
+                          ],
+                        ),
                 ),
 
               if (slotState.status == SlotStatus.ready)
@@ -638,13 +659,30 @@ class _SlotPanel extends StatelessWidget {
                     ),
                   ),
                 ],
-                if (canTap)
+                if (canTap || onRetry != null)
                   Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      'Tap to try a different faction.',
-                      style: TextStyle(
-                          fontSize: 12, color: Colors.grey.shade600),
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      children: [
+                        if (canTap)
+                          Text(
+                            'Tap to try a different faction.',
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.grey.shade600),
+                          ),
+                        if (onRetry != null && slotState.fetchedBytes != null) ...[
+                          const SizedBox(width: 8),
+                          TextButton(
+                            onPressed: onRetry,
+                            style: TextButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                            ),
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
               ],
@@ -684,13 +722,19 @@ class _SlotPanel extends StatelessWidget {
 class _StatusChip extends StatelessWidget {
   final SlotStatus status;
 
-  const _StatusChip({required this.status});
+  /// When true and [status] == [SlotStatus.fetching], shows "Restoring"
+  /// instead of "Fetching" to distinguish Phase-1 boot restore from a live
+  /// network download.
+  final bool isBootRestoring;
+
+  const _StatusChip({required this.status, this.isBootRestoring = false});
 
   @override
   Widget build(BuildContext context) {
     final (label, color) = switch (status) {
       SlotStatus.empty => ('Empty', Colors.grey),
-      SlotStatus.fetching => ('Fetching', Colors.amber),
+      SlotStatus.fetching =>
+        isBootRestoring ? ('Restoring', Colors.orange) : ('Fetching', Colors.amber),
       SlotStatus.ready => ('Ready', Colors.blue),
       SlotStatus.building => ('Building', Colors.amber),
       SlotStatus.loaded => ('Loaded', Colors.green),
