@@ -227,7 +227,18 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
               updateAvailable: gstUpdateAvailable,
               onLoad: _loadGameSystem,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
+
+            // 2b. Update status panel (visible when updates pending or running)
+            if (controller.isUpdating ||
+                controller.updateCheckStatus ==
+                    UpdateCheckStatus.updatesAvailable)
+              _UpdateStatusPanel(
+                affectedSlots: controller.affectedSlotsForUpdate,
+                affectsGameSystem: controller.updateAffectsGameSystem,
+                isUpdating: controller.isUpdating,
+              ),
+            const SizedBox(height: 8),
 
             // 3. Demo limitation banner
             Container(
@@ -715,6 +726,79 @@ class _SlotPanel extends StatelessWidget {
           style: TextStyle(color: Colors.grey.shade600),
         ),
       ],
+    );
+  }
+}
+
+/// Small informational panel shown when catalog updates are pending or running.
+///
+/// Displays which slots are affected and whether the game system will be
+/// updated. When [isUpdating] is true, shows a progress indicator.
+class _UpdateStatusPanel extends StatelessWidget {
+  final List<int> affectedSlots;
+  final bool affectsGameSystem;
+  final bool isUpdating;
+
+  const _UpdateStatusPanel({
+    required this.affectedSlots,
+    required this.affectsGameSystem,
+    required this.isUpdating,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isUpdating ? Colors.blue : Colors.orange;
+
+    String slotLabel;
+    if (affectedSlots.isEmpty) {
+      slotLabel = 'none';
+    } else {
+      slotLabel = affectedSlots.map((i) => 'Slot ${i + 1}').join(', ');
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          if (isUpdating)
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: color,
+              ),
+            )
+          else
+            Icon(Icons.system_update, size: 16, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isUpdating ? 'Updating…' : 'Update ready',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
+                ),
+                Text(
+                  'Affects: $slotLabel  •  '
+                  'Game system: ${affectsGameSystem ? 'yes' : 'no'}',
+                  style: TextStyle(fontSize: 11, color: color.withValues(alpha: 0.8)),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

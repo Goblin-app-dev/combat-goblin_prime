@@ -55,25 +55,34 @@ class _AppShellState extends State<AppShell> {
   }
 
   void _showUpdatePrompt() {
+    // Capture controller reference before the async dialog gap.
+    final controller = ImportSessionProvider.of(context);
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Updates available'),
         content: const Text(
-          'New versions of your catalog files are available on GitHub. '
-          'Go to Downloads and reload the affected slots to update.',
+          'New versions of your catalog files are available on GitHub.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('Later'),
           ),
-          FilledButton(
+          OutlinedButton(
             onPressed: () {
               Navigator.of(ctx).pop();
               setState(() => _selectedIndex = 1);
             },
             child: const Text('Go to Downloads'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              setState(() => _selectedIndex = 1);
+              controller.updateNow();
+            },
+            child: const Text('Update now'),
           ),
         ],
       ),

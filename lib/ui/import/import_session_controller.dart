@@ -442,6 +442,40 @@ class ImportSessionController extends ChangeNotifier {
   DateTime? _lastSyncAt;
   DateTime? get lastSyncAt => _lastSyncAt;
 
+  // --- Update Diff State ---
+
+  /// Repo paths that changed in the last successful update check.
+  ///
+  /// Sorted, unique, unmodifiable. Empty until the first check finds diffs.
+  /// Computed by [_performUpdateCheck] via comparison of [TrackedFile.blobSha]
+  /// against the fresh repo tree.
+  List<String> _changedRepoPaths = const [];
+
+  /// Sorted, unique list of repo paths that changed (set by [checkForUpdates]).
+  List<String> get changedRepoPaths => List.unmodifiable(_changedRepoPaths);
+
+  /// True if the game system (.gst) is among [changedRepoPaths].
+  bool _updateAffectsGameSystem = false;
+
+  /// True when the last update check determined that the game system changed.
+  bool get updateAffectsGameSystem => _updateAffectsGameSystem;
+
+  /// Slot indices (ascending) affected by the pending update.
+  ///
+  /// A slot is affected if its primary [SlotState.catalogPath] is in
+  /// [changedRepoPaths], or if [updateAffectsGameSystem] is true (in which
+  /// case all non-empty slots need a rebuild).
+  List<int> _affectedSlotsForUpdate = const [];
+
+  /// Slot indices (ascending) that need to be updated via [updateNow].
+  List<int> get affectedSlotsForUpdate => List.unmodifiable(_affectedSlotsForUpdate);
+
+  /// True while [updateNow] is actively running.
+  bool _isUpdating = false;
+
+  /// True while [updateNow] is actively running.
+  bool get isUpdating => _isUpdating;
+
   // --- Boot Perf State ---
 
   /// Wall-clock origin for boot timing: set at [initPersistenceAndRestore]
@@ -669,6 +703,9 @@ class ImportSessionController extends ChangeNotifier {
       final tree = await _bsdResolver.fetchRepoTree(_sourceLocator!);
       if (tree == null) {
         _updateCheckStatus = UpdateCheckStatus.failed;
+        _changedRepoPaths = const [];
+        _updateAffectsGameSystem = false;
+        _affectedSlotsForUpdate = const [];
         _lastUpdateCheckAt = DateTime.now();
         notifyListeners();
         return;
@@ -676,6 +713,9 @@ class ImportSessionController extends ChangeNotifier {
       final service = _gitHubSyncStateService;
       if (service == null) {
         _updateCheckStatus = UpdateCheckStatus.failed;
+        _changedRepoPaths = const [];
+        _updateAffectsGameSystem = false;
+        _affectedSlotsForUpdate = const [];
         _lastUpdateCheckAt = DateTime.now();
         notifyListeners();
         return;
@@ -684,26 +724,188 @@ class ImportSessionController extends ChangeNotifier {
       final repoState = syncState.repos[_sourceLocator!.sourceKey];
       if (repoState == null) {
         _updateCheckStatus = UpdateCheckStatus.failed;
+        _changedRepoPaths = const [];
+        _updateAffectsGameSystem = false;
+        _affectedSlotsForUpdate = const [];
         _lastUpdateCheckAt = DateTime.now();
         notifyListeners();
         return;
       }
-      // Compare SHAs from the fresh tree against persisted tracked files
-      for (final entry in tree.entries) {
-        final tracked = repoState.trackedFiles[entry.path];
-        if (tracked != null && tracked.blobSha != entry.blobSha) {
-          _updateCheckStatus = UpdateCheckStatus.updatesAvailable;
-          _lastUpdateCheckAt = DateTime.now();
-          notifyListeners();
-          return;
+
+      // Build path→blobSha map from the fresh tree.
+      final treeShas = tree.pathToBlobSha;
+
+      // Determine changed paths from tracked files:
+      //   - tracked file absent from tree → changed (treat as deleted/moved)
+      //   - tracked file in tree with different SHA → changed
+      //   - tree paths not tracked → ignored
+      final changed = <String>{};
+      for (final tracked in repoState.trackedFiles.values) {
+        final treeSha = treeShas[tracked.repoPath];
+        if (treeSha == null || treeSha != tracked.blobSha) {
+          changed.add(tracked.repoPath);
         }
       }
-      _updateCheckStatus = UpdateCheckStatus.upToDate;
+
+      final sortedChanged = changed.toList()..sort();
+      _changedRepoPaths = List.unmodifiable(sortedChanged);
+      _computeAffectedSlotsFromChangedPaths(sortedChanged);
+
+      if (sortedChanged.isEmpty) {
+        _updateCheckStatus = UpdateCheckStatus.upToDate;
+      } else {
+        _updateCheckStatus = UpdateCheckStatus.updatesAvailable;
+      }
       _lastUpdateCheckAt = DateTime.now();
       notifyListeners();
     } catch (_) {
       _updateCheckStatus = UpdateCheckStatus.failed;
+      _changedRepoPaths = const [];
+      _updateAffectsGameSystem = false;
+      _affectedSlotsForUpdate = const [];
       _lastUpdateCheckAt = DateTime.now();
+      notifyListeners();
+    }
+  }
+
+  /// Maps [changedPaths] to affected slots and game system flag.
+  ///
+  /// Game system is affected if any path in [changedPaths] ends with `.gst`.
+  /// When the game system changes, all non-empty slots are affected (since
+  /// every slot rebuild depends on the game system).
+  /// Otherwise only slots whose [SlotState.catalogPath] is in [changedPaths]
+  /// are affected.
+  ///
+  /// Results are stable-sorted ascending by slot index.
+  void _computeAffectedSlotsFromChangedPaths(List<String> changedPaths) {
+    _updateAffectsGameSystem = changedPaths.any((p) => p.endsWith('.gst'));
+    final changedSet = changedPaths.toSet();
+
+    final affected = <int>[];
+    for (var i = 0; i < _slots.length; i++) {
+      final s = _slots[i];
+      if (s.status == SlotStatus.empty || s.catalogPath == null) continue;
+      // When gst changed, all non-empty slots need rebuild.
+      // Otherwise only slots whose primary cat is in changedPaths.
+      if (_updateAffectsGameSystem || changedSet.contains(s.catalogPath)) {
+        affected.add(i);
+      }
+    }
+    affected.sort();
+    _affectedSlotsForUpdate = List.unmodifiable(affected);
+  }
+
+  /// Applies pending updates for all affected components.
+  ///
+  /// No-op if [updateCheckStatus] is not [UpdateCheckStatus.updatesAvailable].
+  ///
+  /// Behavior:
+  /// 1. Re-fetches the repo tree to obtain fresh blob SHAs.
+  /// 2. If [updateAffectsGameSystem]: re-downloads the `.gst` and updates the
+  ///    stored SHA in [GitHubSyncStateService].
+  /// 3. For each slot in [affectedSlotsForUpdate] (ascending):
+  ///    - Skips empty slots (no catalog assigned).
+  ///    - Re-downloads the primary `.cat` + any preflight deps via
+  ///      [loadFactionIntoSlot].
+  ///    - On success: updates stored SHA in [GitHubSyncStateService].
+  ///    - On failure: slot enters [SlotStatus.error]; update continues to the
+  ///      next slot (partial success is allowed).
+  /// 4. Clears [changedRepoPaths], [affectedSlotsForUpdate], and sets
+  ///    [updateCheckStatus] back to [UpdateCheckStatus.upToDate].
+  ///
+  /// [isUpdating] is true for the duration; UI should show "Updating…" state.
+  Future<void> updateNow() async {
+    if (_updateCheckStatus != UpdateCheckStatus.updatesAvailable) return;
+
+    final locator = _sourceLocator;
+    final syncService = _gitHubSyncStateService;
+    if (locator == null || syncService == null) {
+      _errorMessage = 'Cannot update: no repository configured.';
+      notifyListeners();
+      return;
+    }
+
+    _isUpdating = true;
+    notifyListeners();
+
+    try {
+      // Fetch a fresh tree to get the updated SHAs.
+      final tree = await _bsdResolver.fetchRepoTree(locator);
+      if (tree == null) {
+        _errorMessage = 'Update failed: could not fetch repository.';
+        return;
+      }
+
+      // Re-fetch game system if it changed.
+      if (_updateAffectsGameSystem) {
+        final gstPath = _changedRepoPaths.firstWhere(
+          (p) => p.endsWith('.gst'),
+          orElse: () => '',
+        );
+        if (gstPath.isNotEmpty) {
+          await fetchAndSetGameSystem(locator, gstPath);
+          final sha = tree.pathToBlobSha[gstPath];
+          if (sha != null) {
+            try {
+              await syncService.updateTrackedFile(
+                locator.sourceKey,
+                TrackedFile(
+                  repoPath: gstPath,
+                  fileType: 'gst',
+                  blobSha: sha,
+                  lastCheckedAt: DateTime.now().toUtc(),
+                ),
+              );
+            } catch (_) {
+              // Non-fatal: next check will re-detect the diff.
+            }
+          }
+        }
+      }
+
+      // Sequential slot updates — slot 0 completes before slot 1 begins.
+      for (final slotIdx in _affectedSlotsForUpdate) {
+        final s = _slots[slotIdx];
+        if (s.status == SlotStatus.empty || s.catalogPath == null) continue;
+
+        final slotLocator = s.sourceLocator ?? locator;
+        final faction = FactionOption(
+          displayName: s.catalogName ?? s.catalogPath!.split('/').last,
+          primaryPath: s.catalogPath!,
+        );
+
+        // loadFactionIntoSlot manages its own fetching, ready, and loadSlot.
+        await loadFactionIntoSlot(slotIdx, faction, slotLocator);
+
+        // On success: update the stored SHA so the next check is clean.
+        if (_slots[slotIdx].status == SlotStatus.loaded) {
+          final sha = tree.pathToBlobSha[s.catalogPath!];
+          if (sha != null) {
+            try {
+              await syncService.updateTrackedFile(
+                locator.sourceKey,
+                TrackedFile(
+                  repoPath: s.catalogPath!,
+                  fileType: 'cat',
+                  blobSha: sha,
+                  lastCheckedAt: DateTime.now().toUtc(),
+                ),
+              );
+            } catch (_) {
+              // Non-fatal: next check will re-detect the diff.
+            }
+          }
+        }
+        // Slot failure is non-fatal — loop continues to the next slot.
+      }
+
+      // Clear pending diff state.
+      _updateCheckStatus = UpdateCheckStatus.upToDate;
+      _changedRepoPaths = const [];
+      _affectedSlotsForUpdate = const [];
+      _updateAffectsGameSystem = false;
+    } finally {
+      _isUpdating = false;
       notifyListeners();
     }
   }

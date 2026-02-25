@@ -157,6 +157,30 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context, _) {
         return Column(
           children: [
+            // --- Update banner (shown while updateNow() is running) ---
+            if (controller.isUpdating)
+              Container(
+                width: double.infinity,
+                color: Colors.blue.shade50,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                child: Row(
+                  children: [
+                    const SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Updating data…',
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.blue.shade800),
+                    ),
+                  ],
+                ),
+              ),
+
             // --- Top: Search Bar ---
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
