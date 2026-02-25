@@ -96,6 +96,30 @@ class _HomeScreenState extends State<HomeScreen> {
     ];
   }
 
+  /// Returns a partial-load hint string when some slots are loaded and others
+  /// are still building/restoring.
+  ///
+  /// Returns null when all active slots are fully loaded (steady state) or
+  /// when no slots are loaded yet.
+  String? _partialLoadHint(ImportSessionController controller) {
+    if (!controller.hasAnyLoaded) return null;
+    final slots = controller.slots;
+    final inProgress = slots.where(
+      (s) =>
+          s.status == SlotStatus.building ||
+          s.status == SlotStatus.fetching ||
+          s.isBootRestoring,
+    );
+    if (inProgress.isEmpty) return null;
+
+    final loadedCount = slots.where((s) => s.status == SlotStatus.loaded).length;
+    final total = slots.where((s) => s.status != SlotStatus.empty).length;
+    if (total > 1) {
+      return 'Searching $loadedCount of $total factions — more loading…';
+    }
+    return null;
+  }
+
   void _showHitDetail(BuildContext context, MultiPackSearchHit hit) {
     showModalBottomSheet(
       context: context,
@@ -201,6 +225,33 @@ class _HomeScreenState extends State<HomeScreen> {
     final bundles = _activeBundles(controller);
 
     if (bundles.isEmpty) {
+      final slots = controller.slots;
+      final isBootRestoring = slots.any((s) => s.isBootRestoring);
+      final isBuilding = slots.any((s) => s.status == SlotStatus.building);
+
+      if (isBootRestoring || isBuilding) {
+        // Two-phase boot in progress — avoid misleading "No catalogs loaded"
+        final label = isBootRestoring ? 'Restoring…' : 'Building index…';
+        final icon = isBootRestoring ? Icons.restore : Icons.build_circle;
+        final color = isBootRestoring ? Colors.orange : Colors.amber;
+        return Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 64, color: color),
+              const SizedBox(height: 16),
+              Text(label),
+              const SizedBox(height: 4),
+              Text(
+                'Search will be available shortly',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+              ),
+            ],
+          ),
+        );
+      }
+
+      // Truly empty — no session to restore
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -273,6 +324,16 @@ class _HomeScreenState extends State<HomeScreen> {
               '$totalUnits units · $totalWeapons weapons · $totalRules rules',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
+            // Partial-load hint: shown only while a second slot is still
+            // building/restoring while the first is already searchable.
+            if (_partialLoadHint(controller) case final hint?)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  hint,
+                  style: TextStyle(fontSize: 12, color: Colors.orange.shade700),
+                ),
+              ),
             const SizedBox(height: 24),
             const Text(
               'Start typing to search',
@@ -384,9 +445,11 @@ class _SlotChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final (label, color, icon) = switch (slot.status) {
       SlotStatus.empty => ('Slot ${index + 1}: Empty', Colors.grey, Icons.add_circle_outline),
-      SlotStatus.fetching => ('Fetching...', Colors.amber, Icons.downloading),
+      SlotStatus.fetching => slot.isBootRestoring
+          ? ('Restoring…', Colors.orange, Icons.restore)
+          : ('Fetching…', Colors.amber, Icons.downloading),
       SlotStatus.ready => (slot.catalogName ?? 'Ready', Colors.blue, Icons.check_circle_outline),
-      SlotStatus.building => ('Building...', Colors.amber, Icons.build_circle),
+      SlotStatus.building => ('Building…', Colors.amber, Icons.build_circle),
       SlotStatus.loaded => (slot.catalogName ?? 'Loaded', Colors.green, Icons.check_circle),
       SlotStatus.error => ('Error', Colors.red, Icons.error_outline),
     };
