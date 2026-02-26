@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 
 import 'package:combat_goblin_prime/modules/m9_index/m9_index.dart';
 import 'package:combat_goblin_prime/modules/m10_structured_search/m10_structured_search.dart';
-import 'package:combat_goblin_prime/services/multi_pack_search_service.dart';
 import 'package:combat_goblin_prime/ui/import/import_session_controller.dart';
 import 'package:combat_goblin_prime/ui/import/import_session_provider.dart';
+import 'package:combat_goblin_prime/voice/models/spoken_entity.dart';
+import 'package:combat_goblin_prime/voice/models/spoken_variant.dart';
+import 'package:combat_goblin_prime/voice/models/voice_search_response.dart';
+import 'package:combat_goblin_prime/voice/voice_search_facade.dart';
 
 /// Home screen with 3-section vertical layout.
 ///
@@ -23,9 +26,9 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final _searchController = TextEditingController();
-  final _multiPackService = MultiPackSearchService();
+  final _facade = VoiceSearchFacade();
 
-  MultiPackSearchResult? _result;
+  VoiceSearchResponse? _voiceResult;
   List<String> _suggestions = [];
   bool _showSuggestions = false;
 
@@ -55,7 +58,7 @@ class _HomeScreenState extends State<HomeScreen> {
       });
       return;
     }
-    final suggestions = _multiPackService.suggest(bundles, query, limit: 8);
+    final suggestions = _facade.suggest(bundles, query, limit: 8);
     setState(() {
       _suggestions = suggestions;
       _showSuggestions = suggestions.isNotEmpty;
@@ -67,17 +70,14 @@ class _HomeScreenState extends State<HomeScreen> {
     final bundles = _activeBundles(controller);
     if (query.isEmpty || bundles.isEmpty) {
       setState(() {
-        _result = null;
+        _voiceResult = null;
         _showSuggestions = false;
       });
       return;
     }
-    final result = _multiPackService.search(
-      bundles,
-      SearchRequest(text: query, limit: 50, sort: SearchSort.relevance),
-    );
+    final result = _facade.searchText(bundles, query);
     setState(() {
-      _result = result;
+      _voiceResult = result;
       _showSuggestions = false;
     });
   }
@@ -120,7 +120,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return null;
   }
 
-  void _showHitDetail(BuildContext context, MultiPackSearchHit hit) {
+  void _showVariantDetail(BuildContext context, SpokenVariant variant) {
     showModalBottomSheet(
       context: context,
       builder: (context) => Padding(
@@ -130,17 +130,17 @@ class _HomeScreenState extends State<HomeScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              hit.displayName,
+              variant.displayName,
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 8),
-            Text('Type: ${hit.docType.name}'),
-            Text('ID: ${hit.docId}'),
-            Text('Key: ${hit.canonicalKey}'),
-            Text('Pack: ${hit.sourcePackKey}'),
+            Text('Type: ${variant.docType.name}'),
+            Text('ID: ${variant.docId}'),
+            Text('Key: ${variant.canonicalKey}'),
+            Text('Slot: ${variant.sourceSlotId}'),
             const SizedBox(height: 16),
             Text(
-              'Match: ${hit.matchReasons.map((r) => r.name).join(', ')}',
+              'Match: ${variant.matchReasons.map((r) => r.name).join(', ')}',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
@@ -298,7 +298,7 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    if (_result == null) {
+    if (_voiceResult == null) {
       // Show aggregate stats
       var totalUnits = 0;
       var totalWeapons = 0;
@@ -368,7 +368,7 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    if (_result!.hits.isEmpty) {
+    if (_voiceResult!.entities.isEmpty) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -376,10 +376,10 @@ class _HomeScreenState extends State<HomeScreen> {
             const Icon(Icons.search_off, size: 64, color: Colors.grey),
             const SizedBox(height: 16),
             const Text('No results found'),
-            if (_result!.diagnostics.isNotEmpty) ...[
+            if (_voiceResult!.diagnostics.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(
-                _result!.diagnostics.first.message,
+                _voiceResult!.diagnostics.first.message,
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
@@ -390,23 +390,55 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: _result!.hits.length,
+      itemCount: _voiceResult!.entities.length,
       itemBuilder: (context, index) {
-        final hit = _result!.hits[index];
-        return Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          child: ListTile(
-            leading: _buildTypeIcon(hit.docType),
-            title: Text(hit.displayName),
-            subtitle: Text(
-              '${hit.docType.name} • ${hit.sourcePackKey}',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _showHitDetail(context, hit),
-          ),
-        );
+        return _buildEntityCard(_voiceResult!.entities[index]);
       },
+    );
+  }
+
+  Widget _buildEntityCard(SpokenEntity entity) {
+    if (entity.variants.length == 1) {
+      final variant = entity.variants.first;
+      return Card(
+        margin: const EdgeInsets.only(bottom: 8),
+        child: ListTile(
+          leading: _buildTypeIcon(variant.docType),
+          title: Text(entity.displayName),
+          subtitle: Text(
+            '${variant.docType.name} • ${entity.slotId}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => _showVariantDetail(context, variant),
+        ),
+      );
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ExpansionTile(
+        leading: _buildTypeIcon(entity.variants.first.docType),
+        title: Text(entity.displayName),
+        subtitle: Text(
+          '${entity.variants.first.docType.name} • ${entity.slotId} • ${entity.variants.length} variants',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        children: [
+          for (final variant in entity.variants)
+            ListTile(
+              contentPadding:
+                  const EdgeInsets.only(left: 32, right: 16),
+              title: Text(variant.displayName),
+              subtitle: Text(
+                variant.docId,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _showVariantDetail(context, variant),
+            ),
+        ],
+      ),
     );
   }
 

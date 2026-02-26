@@ -532,3 +532,39 @@ No silent renames are permitted.
 - New name: SessionPersistenceService._snapshotFileName = 'app_snapshot.json'
 - Reason: Storage file renamed to reflect evolved snapshot format. Migration fallback reads last_session.json if app_snapshot.json absent.
 - Approval reference: Phase 11E Persistence + Fast Boot name proposal (2026-02-20)
+
+## 2026-02-26 (Phase 12A — Voice Seam Extraction — APPROVED)
+- Old name: N/A
+- New name: SpokenVariant
+- Reason: New voice model type. One M10 SearchHit enriched with sourceSlotId and tieBreakKey. Used as the leaf node in voice grouping.
+- Approval reference: Phase 12A Voice Seam Proposal (2026-02-26)
+
+## 2026-02-26 (Phase 12A — Voice Seam Extraction — APPROVED)
+- Old name: N/A
+- New name: SpokenEntity
+- Reason: New voice model type. Groups SpokenVariants sharing the same canonicalKey within the same slot. primaryVariant = variants.first (deterministic auto-pick).
+- Approval reference: Phase 12A Voice Seam Proposal (2026-02-26)
+
+## 2026-02-26 (Phase 12A — Voice Seam Extraction — APPROVED)
+- Old name: N/A
+- New name: VoiceSearchResponse
+- Reason: New output model from VoiceSearchFacade. Contains entities, diagnostics, spokenSummary (pure function, no timestamps).
+- Approval reference: Phase 12A Voice Seam Proposal (2026-02-26)
+
+## 2026-02-26 (Phase 12A — Voice Seam Extraction — APPROVED)
+- Old name: N/A
+- New name: VoiceSelectionSession
+- Reason: New in-memory cursor over List<SpokenEntity>. Clamped cycling (no wrap). Supports nextVariant, previousVariant, nextEntity, previousEntity, chooseEntity, reset.
+- Approval reference: Phase 12A Voice Seam Proposal (2026-02-26)
+
+## 2026-02-26 (Phase 12A — Voice Seam Extraction — APPROVED)
+- Old name: N/A
+- New name: SearchResultGrouper
+- Reason: New pure function service. Groups M10 SearchHit results into SpokenEntity groups by canonicalKey within a single slot. No state, no side effects.
+- Approval reference: Phase 12A Voice Seam Proposal (2026-02-26)
+
+## 2026-02-26 (Phase 12A — Voice Seam Extraction — APPROVED)
+- Old name: N/A
+- New name: VoiceSearchFacade
+- Reason: New app-layer voice search entrypoint. Calls StructuredSearchService per slot bundle (bypasses MultiPackSearchService.search). Returns VoiceSearchResponse. Provides suggest() delegating to MultiPackSearchService.suggest().
+- Approval reference: Phase 12A Voice Seam Proposal (2026-02-26)
