@@ -1,9 +1,9 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 
 import 'audio_focus_gateway.dart';
-import 'audio_frame_stream.dart';
 import 'audio_route_observer.dart';
 import 'mic_permission_gateway.dart';
 import 'voice_listen_mode.dart';
@@ -23,7 +23,19 @@ import 'wake_word_detector.dart';
 /// All platform I/O is injectable via gateway interfaces (Skill 06).
 /// No direct mic/permission/focus platform calls in Phase 12B.
 ///
-/// Invariants:
+/// **Session guard:** every listen attempt increments [_currentSessionId].
+/// Async gateway callbacks and timer callbacks capture this ID at registration
+/// time and compare it before acting, preventing zombie transitions from
+/// stale async callbacks.
+///
+/// **Stop funnel:** all stop paths route through [_stop] to guarantee
+/// consistent cleanup and deterministic event/state ordering.
+///
+/// **Ordering invariant (Rule A):** state is updated FIRST, then the
+/// corresponding event is emitted. Listeners can safely read [state.value]
+/// inside an event callback and observe the post-transition state.
+///
+/// **Other invariants:**
 /// - [beginListening] is a no-op if state is not [IdleState].
 /// - [endListening] is a no-op if state is not [ListeningState].
 /// - [VoiceStopReason] is always set when leaving [ListeningState].
@@ -39,24 +51,35 @@ class VoiceRuntimeController {
   /// Constructor-injected so tests can pass a short duration (Skill 10).
   final Duration listenTimeout;
 
-  final ValueNotifier<VoiceRuntimeState> _stateNotifier =
-      ValueNotifier(const IdleState());
+  /// Monotonically increasing session counter.
+  ///
+  /// Incremented by [_nextSessionId] at the start of each listen attempt.
+  /// Async gateway callbacks and timer callbacks guard themselves with this.
+  int _currentSessionId = 0;
 
   final ValueNotifier<VoiceListenMode> _modeNotifier =
       ValueNotifier(VoiceListenMode.pushToTalkSearch);
 
+  late final ValueNotifier<VoiceRuntimeState> _stateNotifier;
+
+  /// Synchronous broadcast so Rule A is testable: listeners observe the
+  /// post-transition [state.value] synchronously when an event fires.
   final StreamController<VoiceRuntimeEvent> _eventController =
-      StreamController<VoiceRuntimeEvent>.broadcast();
+      StreamController<VoiceRuntimeEvent>.broadcast(sync: true);
 
   StreamSubscription<void>? _routeSub;
   StreamSubscription<WakeEvent>? _wakeSub;
   Timer? _listenTimer;
 
-  /// Placeholder callback for future STT engines (Phase 12D+).
+  /// Session-complete callback for future STT engines (Phase 12D+).
   ///
-  /// Called with an empty [AudioFrameStream] when [endListening] completes in
-  /// Phase 12B. Real mic frame delivery is wired in Phase 12C+.
-  void Function(AudioFrameStream stream)? onAudioCaptured;
+  /// Called once per session, at the stop boundary, with the full buffered
+  /// session audio. In Phase 12B receives an empty [Uint8List] (no real
+  /// capture yet). Real mic accumulation is wired in Phase 12C+.
+  ///
+  /// Streaming transcription is a separate port; do not overload this
+  /// callback with incremental frame chunks.
+  void Function(Uint8List audio)? onAudioCaptured;
 
   VoiceRuntimeController({
     required MicPermissionGateway permissionGateway,
@@ -68,10 +91,12 @@ class VoiceRuntimeController {
         _focusGateway = focusGateway,
         _routeObserver = routeObserver,
         _wakeWordDetector = wakeWordDetector {
+    _stateNotifier = ValueNotifier(
+      IdleState(mode: VoiceListenMode.pushToTalkSearch, sessionId: 0),
+    );
     _routeSub = _routeObserver.routeChanges.listen((_) => _handleRouteChange());
     if (wakeWordDetector != null) {
-      _wakeSub =
-          wakeWordDetector.wakeEvents.listen((e) => _handleWakeEvent(e));
+      _wakeSub = wakeWordDetector.wakeEvents.listen(_handleWakeEvent);
     }
   }
 
@@ -93,99 +118,31 @@ class VoiceRuntimeController {
 
   /// Change the interaction mode.
   ///
-  /// If currently [ListeningState], stops with [VoiceStopReason.modeDisabled].
+  /// If currently [ListeningState], routes through [_stop] with
+  /// [VoiceStopReason.modeDisabled].
   void setMode(VoiceListenMode newMode) {
     if (_modeNotifier.value == newMode) return;
     _modeNotifier.value = newMode;
     if (_stateNotifier.value is ListeningState) {
-      endListening(reason: VoiceStopReason.modeDisabled);
+      unawaited(_stop(VoiceStopReason.modeDisabled));
     }
   }
 
   /// Attempt to open a listen session.
   ///
-  /// No-op if state is not [IdleState].
-  ///
-  /// Transition sequence:
-  /// 1. idle → [ArmingState]
-  /// 2a. Permission denied → emit [PermissionDenied], emit [ErrorRaised],
-  ///     → [ErrorState]
-  /// 2b. Focus denied → emit [AudioFocusDenied], emit [ErrorRaised],
-  ///     → [ErrorState]
-  /// 3. arming → [ListeningState], emit [ListeningBegan]
-  /// 4. Start timeout timer if [VoiceListenMode.handsFreeAssistant]
+  /// No-op if state is not [IdleState]. Delegates to [_beginListeningInternal].
   Future<void> beginListening({required VoiceListenTrigger trigger}) async {
     if (_stateNotifier.value is! IdleState) return;
-
-    final currentMode = _modeNotifier.value;
-    _setState(ArmingState(mode: currentMode, trigger: trigger));
-
-    final permitted = await _permissionGateway.requestPermission();
-    if (permitted == false) {
-      _emit(const PermissionDenied());
-      _emit(ErrorRaised(
-        reason: VoiceStopReason.permissionDenied,
-        message: 'Microphone permission denied',
-      ));
-      _setState(ErrorState(
-        reason: VoiceStopReason.permissionDenied,
-        message: 'Microphone permission denied',
-      ));
-      return;
-    }
-
-    final focused = await _focusGateway.requestFocus();
-    if (focused == false) {
-      _emit(const AudioFocusDenied());
-      _emit(ErrorRaised(
-        reason: VoiceStopReason.focusLost,
-        message: 'Audio focus denied',
-      ));
-      _setState(ErrorState(
-        reason: VoiceStopReason.focusLost,
-        message: 'Audio focus denied',
-      ));
-      return;
-    }
-
-    _setState(ListeningState(mode: currentMode, trigger: trigger));
-    _emit(ListeningBegan(mode: currentMode, trigger: trigger));
-
-    if (currentMode == VoiceListenMode.handsFreeAssistant) {
-      _listenTimer = Timer(listenTimeout, () {
-        endListening(reason: VoiceStopReason.wakeTimeout);
-      });
-    }
+    await _beginListeningInternal(
+        trigger: trigger, sessionId: _nextSessionId());
   }
 
   /// Close the active listen session.
   ///
-  /// No-op if state is not [ListeningState].
-  ///
-  /// Transition sequence:
-  /// 1. listening → [ProcessingState], emit [ListeningEnded]
-  /// 2. Invoke [onAudioCaptured] placeholder (empty stream in 12B)
-  /// 3. processing → [IdleState] (no STT pipeline in 12B)
+  /// No-op if state is not [ListeningState]. All stop paths funnel through
+  /// [_stop] for consistent cleanup and ordering.
   Future<void> endListening({required VoiceStopReason reason}) async {
-    if (_stateNotifier.value is! ListeningState) return;
-
-    _listenTimer?.cancel();
-    _listenTimer = null;
-
-    final mode = (_stateNotifier.value as ListeningState).mode;
-
-    _setState(ProcessingState(mode: mode));
-    _emit(ListeningEnded(reason: reason));
-
-    // Placeholder: inform future STT engine of the captured audio.
-    onAudioCaptured?.call(const Stream.empty());
-
-    await _focusGateway.abandonFocus();
-
-    // Phase 12B: no STT pipeline — immediately return to idle.
-    if (_stateNotifier.value is ProcessingState) {
-      _setState(const IdleState());
-    }
+    await _stop(reason);
   }
 
   /// Release all resources. Must be called when the controller is no longer needed.
@@ -202,34 +159,164 @@ class VoiceRuntimeController {
   }
 
   // ---------------------------------------------------------------------------
-  // Private helpers
+  // Private: session management
   // ---------------------------------------------------------------------------
 
-  void _setState(VoiceRuntimeState next) {
-    _stateNotifier.value = next;
-  }
+  int _nextSessionId() => ++_currentSessionId;
 
-  void _emit(VoiceRuntimeEvent event) {
-    if (!_eventController.isClosed) {
-      _eventController.add(event);
+  /// Core listen startup. Separated from [beginListening] so that
+  /// [_handleWakeEvent] can pre-allocate the session ID and share it between
+  /// the [WakeDetected] event and the resulting listen session for correlation.
+  Future<void> _beginListeningInternal({
+    required VoiceListenTrigger trigger,
+    required int sessionId,
+  }) async {
+    _setState(ArmingState(
+      mode: _modeNotifier.value,
+      trigger: trigger,
+      sessionId: sessionId,
+    ));
+
+    final permitted = await _permissionGateway.requestPermission();
+    if (_currentSessionId != sessionId) return; // Session guard
+
+    if (!permitted) {
+      // Rule A: update state FIRST, then emit events.
+      _setState(ErrorState(
+        mode: _modeNotifier.value,
+        trigger: trigger,
+        sessionId: sessionId,
+        reason: VoiceStopReason.permissionDenied,
+        message: 'Microphone permission denied',
+      ));
+      _emit(PermissionDenied(sessionId: sessionId));
+      _emit(ErrorRaised(
+        reason: VoiceStopReason.permissionDenied,
+        message: 'Microphone permission denied',
+        sessionId: sessionId,
+      ));
+      return;
+    }
+
+    final focused = await _focusGateway.requestFocus();
+    if (_currentSessionId != sessionId) return; // Session guard
+
+    if (!focused) {
+      // Rule A: update state FIRST, then emit events.
+      _setState(ErrorState(
+        mode: _modeNotifier.value,
+        trigger: trigger,
+        sessionId: sessionId,
+        reason: VoiceStopReason.focusLost,
+        message: 'Audio focus denied',
+      ));
+      _emit(AudioFocusDenied(sessionId: sessionId));
+      _emit(ErrorRaised(
+        reason: VoiceStopReason.focusLost,
+        message: 'Audio focus denied',
+        sessionId: sessionId,
+      ));
+      return;
+    }
+
+    // Rule A: state → ListeningState, THEN emit ListeningBegan.
+    _setState(ListeningState(
+      mode: _modeNotifier.value,
+      trigger: trigger,
+      sessionId: sessionId,
+    ));
+    _emit(ListeningBegan(
+      mode: _modeNotifier.value,
+      trigger: trigger,
+      sessionId: sessionId,
+    ));
+
+    if (_modeNotifier.value == VoiceListenMode.handsFreeAssistant) {
+      final capturedId = sessionId;
+      _listenTimer = Timer(listenTimeout, () {
+        if (_currentSessionId == capturedId) {
+          unawaited(_stop(VoiceStopReason.wakeTimeout));
+        }
+      });
     }
   }
 
+  /// Single stop funnel: all paths that end a listen session route here.
+  ///
+  /// No-op if state is not [ListeningState].
+  ///
+  /// Transition sequence (Rule A: state before event):
+  /// 1. state → [ProcessingState]
+  /// 2. emit [ListeningEnded]
+  /// 3. invoke [onAudioCaptured] with full session audio (empty [Uint8List] in 12B)
+  /// 4. await focus release
+  /// 5. state → [IdleState] (session-guarded)
+  Future<void> _stop(VoiceStopReason reason) async {
+    if (_stateNotifier.value is! ListeningState) return;
+
+    final sessionId = _currentSessionId;
+    final priorState = _stateNotifier.value as ListeningState;
+    final trigger = priorState.trigger!; // Always non-null for ListeningState.
+
+    _listenTimer?.cancel();
+    _listenTimer = null;
+
+    // Rule A: state update before event emit.
+    _setState(ProcessingState(
+      mode: priorState.mode,
+      trigger: trigger,
+      sessionId: sessionId,
+    ));
+    _emit(ListeningEnded(reason: reason, sessionId: sessionId));
+
+    // Phase 12B: empty buffer — real accumulation wired in 12C.
+    onAudioCaptured?.call(Uint8List(0));
+
+    await _focusGateway.abandonFocus();
+
+    // Session guard: only idle if no new session started during the await.
+    if (_stateNotifier.value is ProcessingState &&
+        _currentSessionId == sessionId) {
+      _setState(IdleState(
+        mode: _modeNotifier.value,
+        trigger: trigger,
+        sessionId: sessionId,
+      ));
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private: event handlers
+  // ---------------------------------------------------------------------------
+
   void _handleWakeEvent(WakeEvent event) {
-    // In pushToTalkSearch mode, wake events are silently ignored.
     if (_modeNotifier.value == VoiceListenMode.pushToTalkSearch) return;
-    // Only react when idle.
     if (_stateNotifier.value is! IdleState) return;
 
-    _emit(WakeDetected(wakeEvent: event));
-    // Fire-and-forget; state transitions are guarded inside beginListening.
-    beginListening(trigger: VoiceListenTrigger.wakeWord);
+    // Pre-allocate session ID so WakeDetected and the listen session share it.
+    final sessionId = _nextSessionId();
+    _emit(WakeDetected(wakeEvent: event, sessionId: sessionId));
+    unawaited(_beginListeningInternal(
+      trigger: VoiceListenTrigger.wakeWord,
+      sessionId: sessionId,
+    ));
   }
 
   void _handleRouteChange() {
-    _emit(const RouteChanged());
+    // Informational event: emitted before the resulting stop (if any).
+    _emit(RouteChanged(sessionId: _currentSessionId));
     if (_stateNotifier.value is ListeningState) {
-      endListening(reason: VoiceStopReason.routeChanged);
+      unawaited(_stop(VoiceStopReason.routeChanged));
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private helpers
+  // ---------------------------------------------------------------------------
+
+  void _setState(VoiceRuntimeState next) => _stateNotifier.value = next;
+
+  void _emit(VoiceRuntimeEvent event) {
+    if (!_eventController.isClosed) _eventController.add(event);
   }
 }
