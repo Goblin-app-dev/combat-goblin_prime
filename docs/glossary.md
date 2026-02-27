@@ -395,6 +395,47 @@ Field `dependencyStoredPaths` on `PersistedCatalog`. Maps targetId → M1 local 
 
 Any concept used in code must appear here first.
 
+---
+
+## Voice Stop Reason (Phase 12B — Audio Runtime)
+Closed enum `VoiceStopReason` with eight values: `userReleasedPushToTalk`, `userCancelled`, `wakeTimeout`, `permissionDenied`, `focusLost`, `engineError`, `modeDisabled`, `routeChanged`. Always set when leaving `ListeningState`. No `unknown` or `other` values permitted.
+
+## Voice Listen Mode (Phase 12B — Audio Runtime)
+Enum `VoiceListenMode` with two values: `pushToTalkSearch` (mic open only while PTT held/toggled) and `handsFreeAssistant` (wake events open mic in a bounded window). User-controlled via UI toggle.
+
+## Voice Listen Trigger (Phase 12B — Audio Runtime)
+Enum `VoiceListenTrigger` with two values: `pushToTalk` and `wakeWord`. Passed to `VoiceRuntimeController.beginListening(trigger:)` to record the originating action for diagnostics and log explainability.
+
+## Voice Runtime State (Phase 12B — Audio Runtime)
+Sealed class base `VoiceRuntimeState` with five concrete subtypes: `IdleState`, `ArmingState`, `ListeningState`, `ProcessingState`, `ErrorState`. Each subtype carries attached data: mode/trigger (Arming, Listening), mode (Processing), reason+message (Error). Deterministic: same event sequence → same final state.
+
+## Voice Runtime Event (Phase 12B — Audio Runtime)
+Sealed class base `VoiceRuntimeEvent` with eight concrete subtypes emitted by `VoiceRuntimeController`: `WakeDetected`, `ListeningBegan`, `ListeningEnded`, `StopRequested`, `ErrorRaised`, `RouteChanged`, `PermissionDenied`, `AudioFocusDenied`. Exposed as `Stream<VoiceRuntimeEvent>` on the controller.
+
+## Audio Frame Stream (Phase 12B — Audio Runtime)
+Type alias `typedef AudioFrameStream = Stream<Uint8List>`. Placeholder for mic frame delivery to future STT engines (Phase 12D+). In 12B, `onAudioCaptured` is invoked with an empty stream.
+
+## Wake Event (Phase 12B — Audio Runtime)
+Data class `WakeEvent` with fields: `phrase` (String, detected wake phrase), optional `confidence` (double?). Produced by a `WakeWordDetector` and passed in the `WakeDetected` event. Does not carry timestamps (determinism contract).
+
+## Wake Word Detector (Phase 12B — Audio Runtime)
+Abstract interface class `WakeWordDetector`. Plug point for Sherpa ONNX keyword spotting (Phase 12C). Exposes `Stream<WakeEvent> get wakeEvents` and `void dispose()`. A `FakeWakeWordDetector` is provided for testing.
+
+## Mic Permission Gateway (Phase 12B — Audio Runtime)
+Abstract interface class `MicPermissionGateway`. Injectable boundary for microphone permission checks. Methods: `Future<bool> requestPermission()`, `Future<bool> hasPermission()`. Real platform adapter deferred to Phase 12C.
+
+## Audio Focus Gateway (Phase 12B — Audio Runtime)
+Abstract interface class `AudioFocusGateway`. Injectable boundary for audio focus acquisition. Methods: `Future<bool> requestFocus()`, `Future<void> abandonFocus()`. Real platform adapter deferred to Phase 12C.
+
+## Audio Route Observer (Phase 12B — Audio Runtime)
+Abstract interface class `AudioRouteObserver`. Injectable boundary for audio route change notifications (Bluetooth connect/disconnect, etc.). Exposes `Stream<void> get routeChanges` and `void dispose()`. Real platform adapter deferred to Phase 12C.
+
+## Voice Runtime Controller (Phase 12B — Audio Runtime)
+Stateful controller class `VoiceRuntimeController`. Owns the listen state machine. Injected with `MicPermissionGateway`, `AudioFocusGateway`, `AudioRouteObserver`, optional `WakeWordDetector`, and `Duration listenTimeout`. Exposes `ValueNotifier<VoiceRuntimeState> state`, `Stream<VoiceRuntimeEvent> events`, `ValueNotifier<VoiceListenMode> modeNotifier`, and methods `setMode`, `beginListening`, `endListening`, `dispose`. Placeholder `onAudioCaptured` callback for future STT wiring.
+
+## Voice Control Bar (Phase 12B — Audio Runtime)
+Stateful widget `VoiceControlBar`. Minimal UI for voice runtime: mode toggle switch (`pushToTalkSearch` ↔ `handsFreeAssistant`) and a push-to-talk mic button. Observes `VoiceRuntimeController.state` and `VoiceRuntimeController.modeNotifier`. No direct mic logic in the widget. Located at `lib/ui/voice/voice_control_bar.dart`.
+
 ## Repo Search Query (PROPOSED — GitHub Repository Search)
 Feature-level request object for GitHub repository search. Contains free text, sort/order, pageSize, mode, and fallback selector. Deterministic intent: same fields produce same request query and params.
 

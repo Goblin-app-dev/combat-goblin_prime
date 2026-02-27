@@ -4,9 +4,14 @@ import 'package:combat_goblin_prime/modules/m9_index/m9_index.dart';
 import 'package:combat_goblin_prime/modules/m10_structured_search/m10_structured_search.dart';
 import 'package:combat_goblin_prime/ui/import/import_session_controller.dart';
 import 'package:combat_goblin_prime/ui/import/import_session_provider.dart';
+import 'package:combat_goblin_prime/ui/voice/voice_control_bar.dart';
 import 'package:combat_goblin_prime/voice/models/spoken_entity.dart';
 import 'package:combat_goblin_prime/voice/models/spoken_variant.dart';
 import 'package:combat_goblin_prime/voice/models/voice_search_response.dart';
+import 'package:combat_goblin_prime/voice/runtime/voice_runtime_controller.dart';
+import 'package:combat_goblin_prime/voice/runtime/testing/fake_audio_focus_gateway.dart';
+import 'package:combat_goblin_prime/voice/runtime/testing/fake_audio_route_observer.dart';
+import 'package:combat_goblin_prime/voice/runtime/testing/fake_mic_permission_gateway.dart';
 import 'package:combat_goblin_prime/voice/voice_search_facade.dart';
 
 /// Home screen with 3-section vertical layout.
@@ -28,13 +33,27 @@ class _HomeScreenState extends State<HomeScreen> {
   final _searchController = TextEditingController();
   final _facade = VoiceSearchFacade();
 
+  // Phase 12B: fakes used until real platform adapters arrive in Phase 12C.
+  late final VoiceRuntimeController _voiceController;
+
   VoiceSearchResponse? _voiceResult;
   List<String> _suggestions = [];
   bool _showSuggestions = false;
 
   @override
+  void initState() {
+    super.initState();
+    _voiceController = VoiceRuntimeController(
+      permissionGateway: FakeMicPermissionGateway(allow: true),
+      focusGateway: FakeAudioFocusGateway(allow: true),
+      routeObserver: FakeAudioRouteObserver(),
+    );
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
+    _voiceController.dispose();
     super.dispose();
   }
 
@@ -230,6 +249,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
+
+            // --- Voice Control Bar ---
+            VoiceControlBar(controller: _voiceController),
 
             // --- Middle: Results ---
             Expanded(child: _buildResults(controller)),
