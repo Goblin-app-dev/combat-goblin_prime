@@ -617,6 +617,9 @@ void registerMultiCatalogTests() {
   _retrySlotTests();
   _updateCheckTimestampTests();
   _lastSyncAtTests();
+  _changedRepoPathsTests();
+  _affectedSlotsForUpdateTests();
+  _updateNowTests();
 }
 
 // --- Enhanced mock for GitHub import tests ---
@@ -1264,6 +1267,12 @@ class _FakeGitHubSyncStateService extends GitHubSyncStateService {
   Future<GitHubSyncState> loadState() async {
     if (throwOnLoad) throw Exception('network error');
     return _state;
+  }
+
+  /// In-memory save — no disk I/O.
+  @override
+  Future<void> saveState(GitHubSyncState state) async {
+    _state = state;
   }
 }
 
@@ -2296,6 +2305,685 @@ void _lastSyncAtTests() {
       ));
       await controller.loadRepoCatalogTree(_kTestLocator);
       expect(controller.lastSyncAt, equals(t2));
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Phase 11F: changedRepoPaths tests (D1)
+// ---------------------------------------------------------------------------
+
+void _changedRepoPathsTests() {
+  group('ImportSessionController: changedRepoPaths', () {
+    test('is empty before any update check', () {
+      final controller = ImportSessionController();
+      expect(controller.changedRepoPaths, isEmpty);
+      expect(() => controller.changedRepoPaths.add('x'), throwsUnsupportedError);
+    });
+
+    test('is empty when check finds no SHA diffs (upToDate)', () async {
+      const sourceKey = 'bsdata_wh40k';
+      const sha = 'abc123';
+      final tree = RepoTreeResult(
+        entries: [
+          RepoTreeEntry(path: 'game.gst', blobSha: sha, extension: '.gst'),
+        ],
+        fetchedAt: DateTime(2026, 2, 20),
+      );
+      final syncState = GitHubSyncState(
+        repos: {
+          sourceKey: RepoSyncState(
+            repoUrl: 'https://github.com/BSData/wh40k-10e',
+            branch: 'main',
+            trackedFiles: {
+              'game.gst': TrackedFile(
+                repoPath: 'game.gst',
+                fileType: 'gst',
+                blobSha: sha, // same → no diff
+                lastCheckedAt: DateTime(2026, 2, 19),
+              ),
+            },
+          ),
+        },
+      );
+      final mock = _MockGitHubResolverService()..setTree(tree);
+      final controller = ImportSessionController(
+        bsdResolver: mock,
+        gitHubSyncStateService: _FakeGitHubSyncStateService(syncState),
+      );
+      controller.setSourceLocatorForTesting(_kTestLocator);
+
+      await controller.checkForUpdates();
+
+      expect(controller.updateCheckStatus, equals(UpdateCheckStatus.upToDate));
+      expect(controller.changedRepoPaths, isEmpty);
+    });
+
+    test('is stable-sorted when multiple paths change', () async {
+      const sourceKey = 'bsdata_wh40k';
+      final tree = RepoTreeResult(
+        entries: [
+          RepoTreeEntry(path: 'game.gst', blobSha: 'gst-new', extension: '.gst'),
+          RepoTreeEntry(path: 'Zeta.cat', blobSha: 'zeta-new', extension: '.cat'),
+          RepoTreeEntry(path: 'Alpha.cat', blobSha: 'alpha-new', extension: '.cat'),
+        ],
+        fetchedAt: DateTime(2026, 2, 20),
+      );
+      final syncState = GitHubSyncState(
+        repos: {
+          sourceKey: RepoSyncState(
+            repoUrl: 'https://github.com/BSData/wh40k-10e',
+            branch: 'main',
+            trackedFiles: {
+              'game.gst': TrackedFile(
+                repoPath: 'game.gst',
+                fileType: 'gst',
+                blobSha: 'gst-old',
+                lastCheckedAt: DateTime(2026, 2, 19),
+              ),
+              'Zeta.cat': TrackedFile(
+                repoPath: 'Zeta.cat',
+                fileType: 'cat',
+                blobSha: 'zeta-old',
+                lastCheckedAt: DateTime(2026, 2, 19),
+              ),
+              'Alpha.cat': TrackedFile(
+                repoPath: 'Alpha.cat',
+                fileType: 'cat',
+                blobSha: 'alpha-old',
+                lastCheckedAt: DateTime(2026, 2, 19),
+              ),
+            },
+          ),
+        },
+      );
+      final mock = _MockGitHubResolverService()..setTree(tree);
+      final controller = ImportSessionController(
+        bsdResolver: mock,
+        gitHubSyncStateService: _FakeGitHubSyncStateService(syncState),
+      );
+      controller.setSourceLocatorForTesting(_kTestLocator);
+
+      await controller.checkForUpdates();
+
+      expect(controller.updateCheckStatus,
+          equals(UpdateCheckStatus.updatesAvailable));
+      // Must be stable-sorted
+      final paths = controller.changedRepoPaths;
+      expect(paths, equals(List.of(paths)..sort()));
+      expect(paths, containsAll(['Alpha.cat', 'Zeta.cat', 'game.gst']));
+      // Must be unmodifiable
+      expect(() => controller.changedRepoPaths.add('x'),
+          throwsUnsupportedError);
+    });
+
+    test('missing tracked path (absent from tree) counts as changed', () async {
+      const sourceKey = 'bsdata_wh40k';
+      // Tree has only the gst — the tracked .cat is absent (e.g. deleted).
+      final tree = RepoTreeResult(
+        entries: [
+          RepoTreeEntry(path: 'game.gst', blobSha: 'gst-sha', extension: '.gst'),
+        ],
+        fetchedAt: DateTime(2026, 2, 20),
+      );
+      final syncState = GitHubSyncState(
+        repos: {
+          sourceKey: RepoSyncState(
+            repoUrl: 'https://github.com/BSData/wh40k-10e',
+            branch: 'main',
+            trackedFiles: {
+              'game.gst': TrackedFile(
+                repoPath: 'game.gst',
+                fileType: 'gst',
+                blobSha: 'gst-sha', // same → no diff
+                lastCheckedAt: DateTime(2026, 2, 19),
+              ),
+              'Gone.cat': TrackedFile(
+                repoPath: 'Gone.cat',
+                fileType: 'cat',
+                blobSha: 'cat-sha',
+                lastCheckedAt: DateTime(2026, 2, 19),
+              ),
+            },
+          ),
+        },
+      );
+      final mock = _MockGitHubResolverService()..setTree(tree);
+      final controller = ImportSessionController(
+        bsdResolver: mock,
+        gitHubSyncStateService: _FakeGitHubSyncStateService(syncState),
+      );
+      controller.setSourceLocatorForTesting(_kTestLocator);
+
+      await controller.checkForUpdates();
+
+      expect(controller.updateCheckStatus,
+          equals(UpdateCheckStatus.updatesAvailable));
+      expect(controller.changedRepoPaths, contains('Gone.cat'));
+    });
+
+    test('exception during check → status failed + changedRepoPaths empty',
+        () async {
+      final mock = _MockGitHubResolverService()
+        ..setTreeError(const BsdResolverException(
+          code: BsdResolverErrorCode.networkError,
+          message: 'connection refused',
+        ));
+      final controller = ImportSessionController(
+        bsdResolver: mock,
+        gitHubSyncStateService:
+            _FakeGitHubSyncStateService(const GitHubSyncState()),
+      );
+      controller.setSourceLocatorForTesting(_kTestLocator);
+
+      await controller.checkForUpdates();
+
+      expect(controller.updateCheckStatus, equals(UpdateCheckStatus.failed));
+      expect(controller.changedRepoPaths, isEmpty);
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Phase 11F: affectedSlotsForUpdate tests (D2)
+// ---------------------------------------------------------------------------
+
+void _affectedSlotsForUpdateTests() {
+  group('ImportSessionController: affectedSlotsForUpdate', () {
+    test('empty and unmodifiable before any update check', () {
+      final controller = ImportSessionController();
+      expect(controller.affectedSlotsForUpdate, isEmpty);
+      expect(() => controller.affectedSlotsForUpdate.add(0),
+          throwsUnsupportedError);
+    });
+
+    test('slot 0 affected when its primary cat path is in changedPaths',
+        () async {
+      const sourceKey = 'bsdata_wh40k';
+      const cat0Path = 'Alpha.cat';
+      const cat1Path = 'Beta.cat';
+
+      final tree = RepoTreeResult(
+        entries: [
+          RepoTreeEntry(
+              path: 'game.gst', blobSha: 'gst-sha', extension: '.gst'),
+          RepoTreeEntry(
+              path: cat0Path, blobSha: 'alpha-new', extension: '.cat'),
+          RepoTreeEntry(path: cat1Path, blobSha: 'beta-sha', extension: '.cat'),
+        ],
+        fetchedAt: DateTime(2026, 2, 20),
+      );
+      final syncState = GitHubSyncState(
+        repos: {
+          sourceKey: RepoSyncState(
+            repoUrl: 'https://github.com/BSData/wh40k-10e',
+            branch: 'main',
+            trackedFiles: {
+              cat0Path: TrackedFile(
+                repoPath: cat0Path,
+                fileType: 'cat',
+                blobSha: 'alpha-old', // changed
+                lastCheckedAt: DateTime(2026, 2, 19),
+              ),
+              cat1Path: TrackedFile(
+                repoPath: cat1Path,
+                fileType: 'cat',
+                blobSha: 'beta-sha', // same
+                lastCheckedAt: DateTime(2026, 2, 19),
+              ),
+            },
+          ),
+        },
+      );
+
+      final mock = _MockGitHubResolverService()
+        ..setTree(tree)
+        ..setFile(cat0Path, Uint8List.fromList([1]))
+        ..setFile(cat1Path, Uint8List.fromList([2]));
+
+      final controller = ImportSessionController(bsdResolver: mock);
+      controller.setSourceLocatorForTesting(_kTestLocator);
+
+      // Assign catalogs to slots so controller knows their paths.
+      await controller.assignCatalogToSlot(0, cat0Path, _kTestLocator);
+      await controller.assignCatalogToSlot(1, cat1Path, _kTestLocator);
+
+      // Now run update check with sync state that shows cat0 changed.
+      controller.setGitHubSyncStateService(
+          _FakeGitHubSyncStateService(syncState));
+      await controller.checkForUpdates();
+
+      expect(controller.affectedSlotsForUpdate, equals([0]));
+      expect(controller.updateAffectsGameSystem, isFalse);
+    });
+
+    test('all non-empty slots affected when gst changes', () async {
+      const sourceKey = 'bsdata_wh40k';
+      const cat0Path = 'Alpha.cat';
+      const cat1Path = 'Beta.cat';
+
+      final tree = RepoTreeResult(
+        entries: [
+          RepoTreeEntry(
+              path: 'game.gst', blobSha: 'gst-new', extension: '.gst'),
+          RepoTreeEntry(path: cat0Path, blobSha: 'alpha', extension: '.cat'),
+          RepoTreeEntry(path: cat1Path, blobSha: 'beta', extension: '.cat'),
+        ],
+        fetchedAt: DateTime(2026, 2, 20),
+      );
+      final syncState = GitHubSyncState(
+        repos: {
+          sourceKey: RepoSyncState(
+            repoUrl: 'https://github.com/BSData/wh40k-10e',
+            branch: 'main',
+            trackedFiles: {
+              'game.gst': TrackedFile(
+                repoPath: 'game.gst',
+                fileType: 'gst',
+                blobSha: 'gst-old', // changed
+                lastCheckedAt: DateTime(2026, 2, 19),
+              ),
+            },
+          ),
+        },
+      );
+
+      final mock = _MockGitHubResolverService()
+        ..setTree(tree)
+        ..setFile(cat0Path, Uint8List.fromList([1]))
+        ..setFile(cat1Path, Uint8List.fromList([2]));
+
+      final controller = ImportSessionController(bsdResolver: mock);
+      controller.setSourceLocatorForTesting(_kTestLocator);
+
+      await controller.assignCatalogToSlot(0, cat0Path, _kTestLocator);
+      await controller.assignCatalogToSlot(1, cat1Path, _kTestLocator);
+
+      controller.setGitHubSyncStateService(
+          _FakeGitHubSyncStateService(syncState));
+      await controller.checkForUpdates();
+
+      expect(controller.updateAffectsGameSystem, isTrue);
+      // Both slots must be affected (gst change forces full rebuild).
+      expect(controller.affectedSlotsForUpdate, equals([0, 1]));
+      // Unmodifiable
+      expect(() => controller.affectedSlotsForUpdate.add(2),
+          throwsUnsupportedError);
+    });
+
+    test('determinism: same inputs produce same affectedSlotsForUpdate',
+        () async {
+      const sourceKey = 'bsdata_wh40k';
+      const catPath = 'Alpha.cat';
+
+      RepoTreeResult makeTree(String catSha) => RepoTreeResult(
+            entries: [
+              RepoTreeEntry(
+                  path: 'game.gst', blobSha: 'gst-sha', extension: '.gst'),
+              RepoTreeEntry(path: catPath, blobSha: catSha, extension: '.cat'),
+            ],
+            fetchedAt: DateTime(2026, 2, 20),
+          );
+
+      final syncState = GitHubSyncState(
+        repos: {
+          sourceKey: RepoSyncState(
+            repoUrl: 'https://github.com/BSData/wh40k-10e',
+            branch: 'main',
+            trackedFiles: {
+              catPath: TrackedFile(
+                repoPath: catPath,
+                fileType: 'cat',
+                blobSha: 'alpha-old',
+                lastCheckedAt: DateTime(2026, 2, 19),
+              ),
+            },
+          ),
+        },
+      );
+
+      // First controller
+      final mock1 = _MockGitHubResolverService()
+        ..setTree(makeTree('alpha-new'))
+        ..setFile(catPath, Uint8List.fromList([1]));
+      final ctrl1 = ImportSessionController(bsdResolver: mock1);
+      ctrl1.setSourceLocatorForTesting(_kTestLocator);
+      await ctrl1.assignCatalogToSlot(0, catPath, _kTestLocator);
+      ctrl1.setGitHubSyncStateService(
+          _FakeGitHubSyncStateService(syncState));
+      await ctrl1.checkForUpdates();
+
+      // Second controller with identical inputs
+      final mock2 = _MockGitHubResolverService()
+        ..setTree(makeTree('alpha-new'))
+        ..setFile(catPath, Uint8List.fromList([1]));
+      final ctrl2 = ImportSessionController(bsdResolver: mock2);
+      ctrl2.setSourceLocatorForTesting(_kTestLocator);
+      await ctrl2.assignCatalogToSlot(0, catPath, _kTestLocator);
+      ctrl2.setGitHubSyncStateService(
+          _FakeGitHubSyncStateService(syncState));
+      await ctrl2.checkForUpdates();
+
+      expect(ctrl1.changedRepoPaths, equals(ctrl2.changedRepoPaths));
+      expect(ctrl1.affectedSlotsForUpdate,
+          equals(ctrl2.affectedSlotsForUpdate));
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Phase 11F: updateNow tests (D3)
+// ---------------------------------------------------------------------------
+
+void _updateNowTests() {
+  group('ImportSessionController: updateNow', () {
+    test('is a no-op when updateCheckStatus is upToDate', () async {
+      final mock = _MockGitHubResolverService();
+      final controller = ImportSessionController(bsdResolver: mock);
+      // No source locator set → update check stays unknown, but status is
+      // not updatesAvailable, so updateNow must be a no-op regardless.
+      await controller.updateNow();
+
+      // No tree fetches happened.
+      expect(mock.downloadedPaths, isEmpty);
+    });
+
+    test('is a no-op when updateCheckStatus is unknown', () async {
+      final mock = _MockGitHubResolverService();
+      final controller = ImportSessionController(bsdResolver: mock);
+
+      expect(controller.updateCheckStatus, equals(UpdateCheckStatus.unknown));
+      await controller.updateNow();
+
+      expect(mock.downloadedPaths, isEmpty);
+    });
+
+    test('is a no-op when updateCheckStatus is failed', () async {
+      final mock = _MockGitHubResolverService()
+        ..setTreeError(const BsdResolverException(
+          code: BsdResolverErrorCode.networkError,
+          message: 'fail',
+        ));
+      final controller = ImportSessionController(
+        bsdResolver: mock,
+        gitHubSyncStateService:
+            _FakeGitHubSyncStateService(const GitHubSyncState()),
+      );
+      controller.setSourceLocatorForTesting(_kTestLocator);
+      await controller.checkForUpdates();
+      expect(controller.updateCheckStatus, equals(UpdateCheckStatus.failed));
+
+      mock.downloadedPaths.clear();
+      await controller.updateNow();
+
+      // No additional downloads should happen.
+      expect(mock.downloadedPaths, isEmpty);
+    });
+
+    test(
+        'slot 0 primary cat is downloaded before slot 1 primary cat '
+        '(sequential ordering)', () async {
+      const cat0Path = 'Alpha.cat';
+      const cat1Path = 'Beta.cat';
+      const sourceKey = 'bsdata_wh40k';
+
+      final tree = RepoTreeResult(
+        entries: [
+          RepoTreeEntry(
+              path: 'game.gst', blobSha: 'gst-sha', extension: '.gst'),
+          RepoTreeEntry(path: cat0Path, blobSha: 'alpha-new', extension: '.cat'),
+          RepoTreeEntry(path: cat1Path, blobSha: 'beta-new', extension: '.cat'),
+        ],
+        fetchedAt: DateTime(2026, 2, 20),
+      );
+      final syncState = GitHubSyncState(
+        repos: {
+          sourceKey: RepoSyncState(
+            repoUrl: 'https://github.com/BSData/wh40k-10e',
+            branch: 'main',
+            trackedFiles: {
+              cat0Path: TrackedFile(
+                repoPath: cat0Path,
+                fileType: 'cat',
+                blobSha: 'alpha-old',
+                lastCheckedAt: DateTime(2026, 2, 19),
+              ),
+              cat1Path: TrackedFile(
+                repoPath: cat1Path,
+                fileType: 'cat',
+                blobSha: 'beta-old',
+                lastCheckedAt: DateTime(2026, 2, 19),
+              ),
+            },
+          ),
+        },
+      );
+
+      final mock = _MockGitHubResolverService()
+        ..setTree(tree)
+        ..setFile('game.gst', Uint8List.fromList([0]))
+        ..setFile(cat0Path, Uint8List.fromList([1]))
+        ..setFile(cat1Path, Uint8List.fromList([2]));
+
+      // Use throwing acquire so loadSlot fails fast without pipeline.
+      final controller = ImportSessionController(
+        bsdResolver: mock,
+        gitHubSyncStateService: _FakeGitHubSyncStateService(syncState),
+        acquireServiceFactory: (_) =>
+            _ThrowingAcquireService(const AcquireFailure(message: 'skip')),
+      );
+      controller.setSourceLocatorForTesting(_kTestLocator);
+
+      // Assign catalogs to populate slot paths.
+      await controller.assignCatalogToSlot(0, cat0Path, _kTestLocator);
+      await controller.assignCatalogToSlot(1, cat1Path, _kTestLocator);
+
+      // Run update check.
+      await controller.checkForUpdates();
+      expect(controller.updateCheckStatus,
+          equals(UpdateCheckStatus.updatesAvailable));
+      expect(controller.affectedSlotsForUpdate, containsAll([0, 1]));
+
+      // Clear history so we only observe updateNow downloads.
+      mock.downloadedPaths.clear();
+
+      await controller.updateNow();
+
+      // Verify ordering: cat0 appears before cat1 in the download log.
+      final catDownloads =
+          mock.downloadedPaths.where((p) => p.endsWith('.cat')).toList();
+      expect(catDownloads.indexOf(cat0Path),
+          lessThan(catDownloads.indexOf(cat1Path)),
+          reason: 'Slot 0 (Alpha.cat) must be downloaded before Slot 1 (Beta.cat)');
+    });
+
+    test('updateCheckStatus is upToDate after updateNow completes', () async {
+      const cat0Path = 'Alpha.cat';
+      const sourceKey = 'bsdata_wh40k';
+
+      final tree = RepoTreeResult(
+        entries: [
+          RepoTreeEntry(
+              path: 'game.gst', blobSha: 'gst-sha', extension: '.gst'),
+          RepoTreeEntry(
+              path: cat0Path, blobSha: 'alpha-new', extension: '.cat'),
+        ],
+        fetchedAt: DateTime(2026, 2, 20),
+      );
+      final syncState = GitHubSyncState(
+        repos: {
+          sourceKey: RepoSyncState(
+            repoUrl: 'https://github.com/BSData/wh40k-10e',
+            branch: 'main',
+            trackedFiles: {
+              cat0Path: TrackedFile(
+                repoPath: cat0Path,
+                fileType: 'cat',
+                blobSha: 'alpha-old',
+                lastCheckedAt: DateTime(2026, 2, 19),
+              ),
+            },
+          ),
+        },
+      );
+
+      final mock = _MockGitHubResolverService()
+        ..setTree(tree)
+        ..setFile('game.gst', Uint8List.fromList([0]))
+        ..setFile(cat0Path, Uint8List.fromList([1]));
+
+      final controller = ImportSessionController(
+        bsdResolver: mock,
+        gitHubSyncStateService: _FakeGitHubSyncStateService(syncState),
+        acquireServiceFactory: (_) =>
+            _ThrowingAcquireService(const AcquireFailure(message: 'skip')),
+      );
+      controller.setSourceLocatorForTesting(_kTestLocator);
+      await controller.assignCatalogToSlot(0, cat0Path, _kTestLocator);
+
+      await controller.checkForUpdates();
+      expect(controller.updateCheckStatus,
+          equals(UpdateCheckStatus.updatesAvailable));
+
+      await controller.updateNow();
+
+      expect(controller.updateCheckStatus, equals(UpdateCheckStatus.upToDate));
+      expect(controller.changedRepoPaths, isEmpty);
+      expect(controller.affectedSlotsForUpdate, isEmpty);
+    });
+
+    test('slot failure leaves slot in error but does not crash and does '
+        'not prevent next slot from attempting update', () async {
+      const cat0Path = 'Alpha.cat';
+      const cat1Path = 'Beta.cat';
+      const sourceKey = 'bsdata_wh40k';
+
+      final tree = RepoTreeResult(
+        entries: [
+          RepoTreeEntry(
+              path: 'game.gst', blobSha: 'gst-sha', extension: '.gst'),
+          RepoTreeEntry(
+              path: cat0Path, blobSha: 'alpha-new', extension: '.cat'),
+          RepoTreeEntry(path: cat1Path, blobSha: 'beta-new', extension: '.cat'),
+        ],
+        fetchedAt: DateTime(2026, 2, 20),
+      );
+      final syncState = GitHubSyncState(
+        repos: {
+          sourceKey: RepoSyncState(
+            repoUrl: 'https://github.com/BSData/wh40k-10e',
+            branch: 'main',
+            trackedFiles: {
+              cat0Path: TrackedFile(
+                repoPath: cat0Path,
+                fileType: 'cat',
+                blobSha: 'alpha-old',
+                lastCheckedAt: DateTime(2026, 2, 19),
+              ),
+              cat1Path: TrackedFile(
+                repoPath: cat1Path,
+                fileType: 'cat',
+                blobSha: 'beta-old',
+                lastCheckedAt: DateTime(2026, 2, 19),
+              ),
+            },
+          ),
+        },
+      );
+
+      // slot 0 download returns null → slot 0 errors on fetch.
+      // slot 1 download returns bytes → slot 1 proceeds (but pipeline fails).
+      final mock = _MockGitHubResolverService()
+        ..setTree(tree)
+        ..setFile('game.gst', Uint8List.fromList([0]))
+        ..setFile(cat0Path, null) // causes download failure for slot 0
+        ..setFile(cat1Path, Uint8List.fromList([2]));
+
+      final controller = ImportSessionController(
+        bsdResolver: mock,
+        gitHubSyncStateService: _FakeGitHubSyncStateService(syncState),
+        acquireServiceFactory: (_) =>
+            _ThrowingAcquireService(const AcquireFailure(message: 'skip')),
+      );
+      controller.setSourceLocatorForTesting(_kTestLocator);
+
+      await controller.assignCatalogToSlot(0, cat0Path, _kTestLocator);
+      await controller.assignCatalogToSlot(1, cat1Path, _kTestLocator);
+
+      await controller.checkForUpdates();
+      expect(controller.updateCheckStatus,
+          equals(UpdateCheckStatus.updatesAvailable));
+
+      // Must not throw — partial failure is allowed.
+      await expectLater(controller.updateNow(), completes);
+
+      // Slot 0 failed to download → error.
+      expect(controller.slotState(0).status, equals(SlotStatus.error));
+      // Slot 1 downloaded successfully → ready (no game system loaded so
+      // pipeline was not invoked, but the download itself succeeded).
+      expect(controller.slotState(1).status, equals(SlotStatus.ready));
+      // Beta.cat was still downloaded despite slot 0 failing.
+      expect(mock.downloadedPaths, contains(cat1Path));
+    });
+
+    test('isUpdating is true while updateNow runs and false after', () async {
+      const cat0Path = 'Alpha.cat';
+      const sourceKey = 'bsdata_wh40k';
+
+      final tree = RepoTreeResult(
+        entries: [
+          RepoTreeEntry(
+              path: 'game.gst', blobSha: 'gst-sha', extension: '.gst'),
+          RepoTreeEntry(
+              path: cat0Path, blobSha: 'alpha-new', extension: '.cat'),
+        ],
+        fetchedAt: DateTime(2026, 2, 20),
+      );
+      final syncState = GitHubSyncState(
+        repos: {
+          sourceKey: RepoSyncState(
+            repoUrl: 'https://github.com/BSData/wh40k-10e',
+            branch: 'main',
+            trackedFiles: {
+              cat0Path: TrackedFile(
+                repoPath: cat0Path,
+                fileType: 'cat',
+                blobSha: 'alpha-old',
+                lastCheckedAt: DateTime(2026, 2, 19),
+              ),
+            },
+          ),
+        },
+      );
+
+      final mock = _MockGitHubResolverService()
+        ..setTree(tree)
+        ..setFile('game.gst', Uint8List.fromList([0]))
+        ..setFile(cat0Path, Uint8List.fromList([1]));
+
+      final controller = ImportSessionController(
+        bsdResolver: mock,
+        gitHubSyncStateService: _FakeGitHubSyncStateService(syncState),
+        acquireServiceFactory: (_) =>
+            _ThrowingAcquireService(const AcquireFailure(message: 'skip')),
+      );
+      controller.setSourceLocatorForTesting(_kTestLocator);
+      await controller.assignCatalogToSlot(0, cat0Path, _kTestLocator);
+      await controller.checkForUpdates();
+      expect(controller.updateCheckStatus,
+          equals(UpdateCheckStatus.updatesAvailable));
+
+      var seenUpdating = false;
+      controller.addListener(() {
+        if (controller.isUpdating) seenUpdating = true;
+      });
+
+      await controller.updateNow();
+
+      expect(seenUpdating, isTrue,
+          reason: 'isUpdating must be true during updateNow');
+      expect(controller.isUpdating, isFalse,
+          reason: 'isUpdating must be false after updateNow completes');
     });
   });
 }

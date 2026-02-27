@@ -444,3 +444,21 @@ Bounded deterministic intent for assistant mode. V1 intents include: unit abilit
 
 ## Voice Session Memory (PROPOSAL — Phase 12 Voice)
 Bounded session context for follow-up queries. Tracks "current subject" docId and follow-up window timer (~5 seconds). Enables conversational flow ("repeat", "next") without full LLM conversation state.
+
+## Spoken Variant (Phase 12A)
+One underlying search hit (from M10 `SearchHit`) enriched with its source slot id (`slot_0`, `slot_1`). Contains: `sourceSlotId`, `docType`, `docId`, `canonicalKey`, `displayName`, `matchReasons`, `tieBreakKey`. The `tieBreakKey` is always `'$canonicalKey\x00$docId'`.
+
+## Spoken Entity (Phase 12A)
+A voice-oriented group of one or more `SpokenVariant` objects that share the same `canonicalKey` within the same catalog slot. Fields: `slotId`, `groupKey`, `displayName`, `variants`. Phase 12A is slot-local only; no cross-slot groups. `primaryVariant` is always `variants.first` (deterministic auto-pick).
+
+## Voice Search Response (Phase 12A)
+The complete output of `VoiceSearchFacade.searchText()`. Contains a deterministically ordered `List<SpokenEntity>`, `diagnostics`, and a `spokenSummary` string. `spokenSummary` is a pure function of the entity list; no timestamps.
+
+## Voice Selection Session (Phase 12A)
+An in-memory cursor over a `List<SpokenEntity>` returned by `VoiceSearchFacade`. Supports `nextVariant()`, `previousVariant()`, `nextEntity()`, `previousEntity()`, `chooseEntity(int)`, and `reset()`. Cycling is clamped (no wrap).
+
+## Search Result Grouper (Phase 12A)
+Pure function helper (`SearchResultGrouper.group(slotId, hits)`) that converts a list of M10 `SearchHit` results into a sorted list of `SpokenEntity` groups. Groups by `canonicalKey` within a single slot. No side effects; no state.
+
+## Voice Search Facade (Phase 12A)
+App-layer voice search entrypoint (`VoiceSearchFacade`). Iterates loaded slot `IndexBundle`s in lexicographic key order, calls `StructuredSearchService.search()` on each, groups results via `SearchResultGrouper`, and returns a `VoiceSearchResponse`. Does NOT call `MultiPackSearchService.search()`. Provides `suggest()` (delegates to `MultiPackSearchService.suggest()`) for typeahead.
