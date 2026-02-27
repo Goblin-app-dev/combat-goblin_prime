@@ -568,3 +568,69 @@ No silent renames are permitted.
 - New name: VoiceSearchFacade
 - Reason: New app-layer voice search entrypoint. Calls StructuredSearchService per slot bundle (bypasses MultiPackSearchService.search). Returns VoiceSearchResponse. Provides suggest() delegating to MultiPackSearchService.suggest().
 - Approval reference: Phase 12A Voice Seam Proposal (2026-02-26)
+
+## 2026-02-27 (Phase 12B — Audio Runtime — APPROVED)
+- Old name: N/A
+- New name: VoiceStopReason
+- Reason: Closed enum (8 values) for the reason a listen session ended. Always set when leaving ListeningState. No unknown/other values.
+- Approval reference: Phase 12B Audio Runtime Proposal (2026-02-27)
+
+## 2026-02-27 (Phase 12B — Audio Runtime — APPROVED)
+- Old name: N/A
+- New name: VoiceListenMode
+- Reason: Enum for user-selected interaction mode: pushToTalkSearch, handsFreeAssistant.
+- Approval reference: Phase 12B Audio Runtime Proposal (2026-02-27)
+
+## 2026-02-27 (Phase 12B — Audio Runtime — APPROVED)
+- Old name: N/A
+- New name: VoiceListenTrigger
+- Reason: Enum for the originator of beginListening: pushToTalk, wakeWord. Enables explainable log diagnostics (Skill 11).
+- Approval reference: Phase 12B Audio Runtime Proposal (2026-02-27)
+
+## 2026-02-27 (Phase 12B — Audio Runtime — APPROVED)
+- Old name: N/A
+- New name: VoiceRuntimeState, IdleState, ArmingState, ListeningState, ProcessingState, ErrorState
+- Reason: Sealed class hierarchy for listen state machine. Carries attached data (mode, trigger, reason, message) per state.
+- Approval reference: Phase 12B Audio Runtime Proposal (2026-02-27)
+
+## 2026-02-27 (Phase 12B — Audio Runtime — APPROVED)
+- Old name: N/A
+- New name: VoiceRuntimeEvent, WakeDetected, ListeningBegan, ListeningEnded, StopRequested, ErrorRaised, RouteChanged, PermissionDenied, AudioFocusDenied
+- Reason: Sealed class hierarchy for controller event stream. Eight concrete subtypes with attached data.
+- Approval reference: Phase 12B Audio Runtime Proposal (2026-02-27)
+
+## 2026-02-27 (Phase 12B — Audio Runtime — APPROVED)
+- Old name: N/A
+- New name: AudioFrameStream
+- Reason: typedef AudioFrameStream = Stream<Uint8List>. Placeholder for mic frame delivery to future STT engines.
+- Approval reference: Phase 12B Audio Runtime Proposal (2026-02-27)
+
+## 2026-02-27 (Phase 12B — Audio Runtime — APPROVED)
+- Old name: N/A
+- New name: WakeEvent, WakeWordDetector
+- Reason: WakeEvent is a named data class (phrase, confidence?). WakeWordDetector is an abstract interface with stream-based API for Sherpa plug-in (Phase 12C).
+- Approval reference: Phase 12B Audio Runtime Proposal (2026-02-27)
+
+## 2026-02-27 (Phase 12B — Audio Runtime — APPROVED)
+- Old name: N/A
+- New name: MicPermissionGateway, AudioFocusGateway, AudioRouteObserver
+- Reason: Injectable gateway interfaces for platform audio I/O. Real adapters deferred to Phase 12C. Enables deterministic unit tests without platform dependencies.
+- Approval reference: Phase 12B Audio Runtime Proposal (2026-02-27)
+
+## 2026-02-27 (Phase 12B — Audio Runtime — APPROVED)
+- Old name: N/A
+- New name: VoiceRuntimeController
+- Reason: State machine owner for mic lifecycle. Injected dependencies, closed enums, stream-based events, ValueNotifier state. Public API: state, events, mode, modeNotifier, onAudioCaptured, setMode(), beginListening(), endListening(), dispose().
+- Approval reference: Phase 12B Audio Runtime Proposal (2026-02-27)
+
+## 2026-02-27 (Phase 12B — Audio Runtime — APPROVED)
+- Old name: N/A
+- New name: FakeWakeWordDetector, FakeMicPermissionGateway, FakeAudioFocusGateway, FakeAudioRouteObserver
+- Reason: Testing helpers in lib/voice/runtime/testing/. Configurable fakes with simulation methods for deterministic contract tests.
+- Approval reference: Phase 12B Audio Runtime Proposal (2026-02-27)
+
+## 2026-02-27 (Phase 12B — Audio Runtime — APPROVED)
+- Old name: N/A
+- New name: VoiceControlBar
+- Reason: Minimal UI widget at lib/ui/voice/voice_control_bar.dart. Mode toggle + PTT button. Observes VoiceRuntimeController; no direct mic logic in widget (Skill 06).
+- Approval reference: Phase 12B Audio Runtime Proposal (2026-02-27)
