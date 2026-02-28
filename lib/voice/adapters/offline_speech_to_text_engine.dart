@@ -78,7 +78,7 @@ final class OfflineSpeechToTextEngine implements SpeechToTextEngine {
     final tokens = await extractAsset('assets/voice/asr/tokens.txt');
 
     final config = sherpa.OfflineRecognizerConfig(
-      feat: sherpa.FeatureExtractorConfig(
+      feat: sherpa.FeatureConfig(
         sampleRate: 16000,
         featureDim: 80,
       ),

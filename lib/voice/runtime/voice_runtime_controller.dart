@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 
@@ -287,11 +286,12 @@ class VoiceRuntimeController {
     ));
 
     // Start mic capture and accumulate frames.
-    if (_captureGateway != null) {
-      final started = await _captureGateway.start();
+    final capture = _captureGateway;
+    if (capture != null) {
+      final started = await capture.start();
       if (_currentSessionId != sessionId) return; // Session guard
       if (started) {
-        _frameSub = _captureGateway.audioFrames.listen((frame) {
+        _frameSub = capture.audioFrames.listen((frame) {
           if (_currentSessionId == sessionId) {
             _sessionFrames.add(frame);
           }

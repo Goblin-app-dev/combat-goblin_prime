@@ -1,17 +1,25 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart' show openAppSettings;
 
 import 'package:combat_goblin_prime/modules/m9_index/m9_index.dart';
 import 'package:combat_goblin_prime/modules/m10_structured_search/m10_structured_search.dart';
 import 'package:combat_goblin_prime/ui/import/import_session_controller.dart';
 import 'package:combat_goblin_prime/ui/import/import_session_provider.dart';
 import 'package:combat_goblin_prime/ui/voice/voice_control_bar.dart';
+import 'package:combat_goblin_prime/voice/adapters/voice_platform_factory.dart';
 import 'package:combat_goblin_prime/voice/models/spoken_entity.dart';
 import 'package:combat_goblin_prime/voice/models/spoken_variant.dart';
+import 'package:combat_goblin_prime/voice/models/text_candidate.dart';
 import 'package:combat_goblin_prime/voice/models/voice_search_response.dart';
-import 'package:combat_goblin_prime/voice/runtime/voice_runtime_controller.dart';
 import 'package:combat_goblin_prime/voice/runtime/testing/fake_audio_focus_gateway.dart';
 import 'package:combat_goblin_prime/voice/runtime/testing/fake_audio_route_observer.dart';
 import 'package:combat_goblin_prime/voice/runtime/testing/fake_mic_permission_gateway.dart';
+import 'package:combat_goblin_prime/voice/runtime/voice_runtime_controller.dart';
+import 'package:combat_goblin_prime/voice/runtime/voice_runtime_event.dart';
+import 'package:combat_goblin_prime/voice/runtime/voice_stop_reason.dart';
+import 'package:combat_goblin_prime/voice/settings/voice_settings.dart';
 import 'package:combat_goblin_prime/voice/voice_search_facade.dart';
 
 /// Home screen with 3-section vertical layout.
@@ -33,8 +41,12 @@ class _HomeScreenState extends State<HomeScreen> {
   final _searchController = TextEditingController();
   final _facade = VoiceSearchFacade();
 
-  // Phase 12B: fakes used until real platform adapters arrive in Phase 12C.
-  late final VoiceRuntimeController _voiceController;
+  // Phase 12C: two-phase init — fakes first, real adapters async.
+  late VoiceRuntimeController _voiceController;
+  StreamSubscription<VoiceRuntimeEvent>? _voiceEventSub;
+
+  /// Guards against duplicate SnackBars per (sessionId, reason) pair.
+  final Set<(int, VoiceStopReason)> _shownVoiceErrors = {};
 
   VoiceSearchResponse? _voiceResult;
   List<String> _suggestions = [];
@@ -43,28 +55,143 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    // Synchronous bootstrap with fakes so the widget is immediately usable.
     _voiceController = VoiceRuntimeController(
       permissionGateway: FakeMicPermissionGateway(allow: true),
       focusGateway: FakeAudioFocusGateway(allow: true),
       routeObserver: FakeAudioRouteObserver(),
     );
+    _attachVoiceCallbacks(_voiceController);
+    // Upgrade to real platform adapters asynchronously.
+    unawaited(_initRealVoice());
+  }
+
+  /// Attaches [onTextCandidate] and the event listener to [controller].
+  void _attachVoiceCallbacks(VoiceRuntimeController controller) {
+    _voiceEventSub?.cancel();
+    controller.onTextCandidate = _onTextCandidate;
+    _voiceEventSub = controller.events.listen(_onVoiceEvent);
+  }
+
+  /// Async init: creates real platform adapters and replaces the controller.
+  Future<void> _initRealVoice() async {
+    const settings = VoiceSettings.defaults;
+    final factory = VoicePlatformFactory(settings: settings);
+    final captureGateway = factory.createCaptureGateway();
+    final wakeDetector = await factory.createWakeWordDetector(
+      captureGateway: captureGateway,
+    );
+    if (!mounted) {
+      captureGateway.dispose();
+      wakeDetector?.dispose();
+      return;
+    }
+    final newController = VoiceRuntimeController(
+      permissionGateway: factory.createPermissionGateway(),
+      focusGateway: factory.createFocusGateway(),
+      routeObserver: factory.createRouteObserver(),
+      captureGateway: captureGateway,
+      sttEngine: factory.createSttEngine(),
+      wakeWordDetector: wakeDetector,
+      maxCaptureDuration: Duration(seconds: settings.maxCaptureDurationSeconds),
+    );
+    final oldController = _voiceController;
+    _attachVoiceCallbacks(newController);
+    _voiceController = newController;
+    oldController.dispose();
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    _voiceEventSub?.cancel();
     _searchController.dispose();
     _voiceController.dispose();
     super.dispose();
   }
 
+  // ---------------------------------------------------------------------------
+  // Voice callbacks
+  // ---------------------------------------------------------------------------
+
+  /// Routes a [TextCandidate] to [VoiceSearchFacade] and updates the UI.
+  void _onTextCandidate(TextCandidate candidate) {
+    if (!mounted) return;
+    final sessionController = ImportSessionProvider.of(context);
+    final bundles = _activeBundles(sessionController);
+    if (bundles.isEmpty || candidate.text.isEmpty) return;
+    final result = _facade.searchText(bundles, candidate.text);
+    setState(() {
+      _voiceResult = result;
+      _showSuggestions = false;
+      _searchController.text = candidate.text;
+    });
+  }
+
+  /// Shows a one-time SnackBar for voice permission/focus errors.
+  void _onVoiceEvent(VoiceRuntimeEvent event) {
+    if (!mounted) return;
+    int? sessionId;
+    VoiceStopReason? reason;
+    if (event is PermissionDenied) {
+      sessionId = event.sessionId;
+      reason = VoiceStopReason.permissionDenied;
+    } else if (event is AudioFocusDenied) {
+      sessionId = event.sessionId;
+      reason = VoiceStopReason.focusLost;
+    }
+    if (sessionId == null || reason == null) return;
+    final key = (sessionId, reason);
+    if (_shownVoiceErrors.contains(key)) return;
+    _shownVoiceErrors.add(key);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          reason == VoiceStopReason.permissionDenied
+              ? 'Microphone permission denied'
+              : 'Audio focus denied',
+        ),
+        action: reason == VoiceStopReason.permissionDenied
+            ? SnackBarAction(label: 'Settings', onPressed: openAppSettings)
+            : null,
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Search helpers
+  // ---------------------------------------------------------------------------
+
   Map<String, IndexBundle> _activeBundles(ImportSessionController c) {
-    // Combine slot-based and legacy indexBundles
     final bundles = <String, IndexBundle>{};
     bundles.addAll(c.slotIndexBundles);
     if (bundles.isEmpty) {
       bundles.addAll(c.indexBundles);
     }
     return bundles;
+  }
+
+  /// Builds STT context hints: faction names + unit/weapon keys, capped at 50.
+  List<String> _buildContextHints(ImportSessionController controller) {
+    final hints = <String>[];
+    for (var i = 0; i < kMaxSelectedCatalogs; i++) {
+      final slot = controller.slotState(i);
+      if (slot.status == SlotStatus.loaded && slot.catalogName != null) {
+        hints.add(slot.catalogName!);
+      }
+    }
+    final bundles = _activeBundles(controller);
+    for (final bundle in bundles.values) {
+      for (final key in bundle.unitKeyToDocIds.keys.take(20)) {
+        hints.add(key);
+        if (hints.length >= 50) return hints;
+      }
+      for (final key in bundle.weaponKeyToDocIds.keys.take(15)) {
+        hints.add(key);
+        if (hints.length >= 50) return hints;
+      }
+    }
+    return hints.take(50).toList();
   }
 
   void _onChanged(String query) {
@@ -115,11 +242,6 @@ class _HomeScreenState extends State<HomeScreen> {
     ];
   }
 
-  /// Returns a partial-load hint string when some slots are loaded and others
-  /// are still building/restoring.
-  ///
-  /// Returns null when all active slots are fully loaded (steady state) or
-  /// when no slots are loaded yet.
   String? _partialLoadHint(ImportSessionController controller) {
     if (!controller.hasAnyLoaded) return null;
     final slots = controller.slots;
@@ -171,12 +293,14 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final controller = ImportSessionProvider.of(context);
+    // Keep STT context hints current with loaded bundles.
+    _voiceController.contextHints = _buildContextHints(controller);
     return AnimatedBuilder(
       animation: controller,
       builder: (context, _) {
         return Column(
           children: [
-            // --- Update banner (shown while updateNow() is running) ---
+            // --- Update banner ---
             if (controller.isUpdating)
               Container(
                 width: double.infinity,
@@ -276,7 +400,6 @@ class _HomeScreenState extends State<HomeScreen> {
       final isBuilding = slots.any((s) => s.status == SlotStatus.building);
 
       if (isBootRestoring || isBuilding) {
-        // Two-phase boot in progress — avoid misleading "No catalogs loaded"
         final label = isBootRestoring ? 'Restoring…' : 'Building index…';
         final icon = isBootRestoring ? Icons.restore : Icons.build_circle;
         final color = isBootRestoring ? Colors.orange : Colors.amber;
@@ -297,7 +420,6 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
 
-      // Truly empty — no session to restore
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -321,7 +443,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     if (_voiceResult == null) {
-      // Show aggregate stats
       var totalUnits = 0;
       var totalWeapons = 0;
       var totalRules = 0;
@@ -353,7 +474,6 @@ class _HomeScreenState extends State<HomeScreen> {
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
-            // Show loaded faction names per slot
             ..._loadedFactionNames(controller).map(
               (name) => Padding(
                 padding: const EdgeInsets.only(bottom: 2),
@@ -370,8 +490,6 @@ class _HomeScreenState extends State<HomeScreen> {
               '$totalUnits units · $totalWeapons weapons · $totalRules rules',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
-            // Partial-load hint: shown only while a second slot is still
-            // building/restoring while the first is already searchable.
             if (_partialLoadHint(controller) case final hint?)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
@@ -449,8 +567,7 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           for (final variant in entity.variants)
             ListTile(
-              contentPadding:
-                  const EdgeInsets.only(left: 32, right: 16),
+              contentPadding: const EdgeInsets.only(left: 32, right: 16),
               title: Text(variant.displayName),
               subtitle: Text(
                 variant.docId,

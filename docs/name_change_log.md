@@ -634,3 +634,63 @@ No silent renames are permitted.
 - New name: VoiceControlBar
 - Reason: Minimal UI widget at lib/ui/voice/voice_control_bar.dart. Mode toggle + PTT button. Observes VoiceRuntimeController; no direct mic logic in widget (Skill 06).
 - Approval reference: Phase 12B Audio Runtime Proposal (2026-02-27)
+
+## 2026-02-28 (Phase 12C — Real Audio I/O — APPROVED)
+- Old name: N/A
+- New name: AudioCaptureGateway, PlatformAudioCaptureGateway, FakeAudioCaptureGateway
+- Reason: Platform mic capture gateway. Streams canonical PCM16/16kHz/mono frames. `record` package in real adapter; pushFrame-based fake for tests.
+- Approval reference: Phase 12C Real Audio I/O Proposal (2026-02-28)
+
+## 2026-02-28 (Phase 12C — Real Audio I/O — APPROVED)
+- Old name: N/A
+- New name: SpeechToTextEngine, OfflineSpeechToTextEngine, OnlineSpeechToTextEngine
+- Reason: Batch STT interface and implementations. Offline: sherpa_onnx transducer, lazy-init, VOICE PERF logging. Online: stub (Phase 12D), always throws UnsupportedError.
+- Approval reference: Phase 12C Real Audio I/O Proposal (2026-02-28)
+
+## 2026-02-28 (Phase 12C — Real Audio I/O — APPROVED)
+- Old name: N/A
+- New name: TextCandidate
+- Reason: STT output model at lib/voice/models/text_candidate.dart. Engine fills text/confidence/isFinal; controller overwrites sessionId/mode/trigger with actual session context.
+- Approval reference: Phase 12C Real Audio I/O Proposal (2026-02-28)
+
+## 2026-02-28 (Phase 12C — Real Audio I/O — APPROVED)
+- Old name: N/A
+- New name: VoiceSettings, VoiceSettingsService
+- Reason: Persisted voice preferences (lastMode, onlineSttEnabled, wakeWordEnabled, maxCaptureDurationSeconds). Atomic-write JSON pattern identical to SessionPersistenceService.
+- Approval reference: Phase 12C Real Audio I/O Proposal (2026-02-28)
+
+## 2026-02-28 (Phase 12C — Real Audio I/O — APPROVED)
+- Old name: N/A
+- New name: PlatformWakeWordDetector
+- Reason: Sherpa ONNX KWS adapter. Keywords in BPE token space. Async factory with graceful degradation on missing model assets.
+- Approval reference: Phase 12C Real Audio I/O Proposal (2026-02-28)
+
+## 2026-02-28 (Phase 12C — Real Audio I/O — APPROVED)
+- Old name: N/A
+- New name: VoicePlatformFactory
+- Reason: Synchronous factory for all platform adapters. Real on Android/iOS; no-op fakes on Web/Desktop. Wake-word init async via createWakeWordDetector().
+- Approval reference: Phase 12C Real Audio I/O Proposal (2026-02-28)
+
+## 2026-02-28 (Phase 12C — Real Audio I/O — APPROVED)
+- Old name: PlatformAudioFocusGateway (stub, Phase 12B deferred)
+- New name: PlatformAudioFocusGateway (real, audio_session backed)
+- Reason: Phase 12C implements real audio_session AVAudioSession/AudioFocus management.
+- Approval reference: Phase 12C Real Audio I/O Proposal (2026-02-28)
+
+## 2026-02-28 (Phase 12C — Real Audio I/O — APPROVED)
+- Old name: PlatformMicPermissionGateway (stub, Phase 12B deferred)
+- New name: PlatformMicPermissionGateway (real, permission_handler backed)
+- Reason: Phase 12C implements real permission_handler mic permission requests.
+- Approval reference: Phase 12C Real Audio I/O Proposal (2026-02-28)
+
+## 2026-02-28 (Phase 12C — Real Audio I/O — APPROVED)
+- Old name: N/A
+- New name: TextCandidateProducedEvent
+- Reason: New VoiceRuntimeEvent subtype. Emitted after state transitions to IdleState (Rule A). Carries the TextCandidate produced by the STT engine for the completed session.
+- Approval reference: Phase 12C Real Audio I/O Proposal (2026-02-28)
+
+## 2026-02-28 (Phase 12C — Real Audio I/O — APPROVED)
+- Old name: VoiceStopReason (8 values)
+- New name: VoiceStopReason (11 values, +sttFailed, +captureLimitReached, +wakeEngineUnavailable)
+- Reason: Phase 12C adds three new stop reasons for STT failure, hard capture limit, and wake engine unavailability. Additive change; backward-compatible.
+- Approval reference: Phase 12C Real Audio I/O Proposal (2026-02-28)

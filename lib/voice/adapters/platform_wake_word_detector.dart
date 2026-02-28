@@ -62,7 +62,7 @@ final class PlatformWakeWordDetector implements WakeWordDetector {
       final keywords = await extractAsset('assets/voice/kws/keywords.txt');
 
       final config = sherpa.KeywordSpotterConfig(
-        feat: sherpa.FeatureExtractorConfig(
+        feat: sherpa.FeatureConfig(
           sampleRate: 16000,
           featureDim: 80,
         ),

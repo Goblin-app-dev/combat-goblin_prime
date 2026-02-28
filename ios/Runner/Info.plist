@@ -45,5 +45,11 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- Phase 12C: microphone access for wake-word detection and speech capture. -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Combat Goblin uses the microphone for hands-free voice search ("Hey Goblin") and push-to-talk unit lookup.</string>
+	<!-- Phase 12C: on-device speech recognition (sherpa_onnx offline ASR). -->
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Combat Goblin uses on-device speech recognition to convert your voice queries into unit and weapon searches.</string>
 </dict>
 </plist>

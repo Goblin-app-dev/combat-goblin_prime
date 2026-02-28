@@ -15,8 +15,11 @@ final class FakeAudioCaptureGateway implements AudioCaptureGateway {
 
   FakeAudioCaptureGateway({this.allowStart = true});
 
+  // sync: true so pushFrame delivers frames immediately (no microtask delay),
+  // matching the test contract: frame is visible to the listener before the
+  // next call returns.
   final StreamController<Uint8List> _frames =
-      StreamController<Uint8List>.broadcast();
+      StreamController<Uint8List>.broadcast(sync: true);
 
   bool _isActive = false;
 
