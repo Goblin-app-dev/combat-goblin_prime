@@ -26,4 +26,23 @@ enum VoiceStopReason {
 
   /// Audio route changed (Bluetooth device connected/disconnected, etc.).
   routeChanged,
+
+  /// STT engine threw during transcription.
+  ///
+  /// Controller transitions to [ErrorState] with this reason when
+  /// [SpeechToTextEngine.transcribe] throws.
+  sttFailed,
+
+  /// Hard capture-duration limit exceeded.
+  ///
+  /// Both PTT and hands-free sessions stop with this reason when
+  /// [VoiceRuntimeController.maxCaptureDuration] is exceeded.
+  captureLimitReached,
+
+  /// Wake-word engine is unavailable in hands-free mode.
+  ///
+  /// Emitted momentarily as [ErrorState] when [setMode] is called with
+  /// [VoiceListenMode.handsFreeAssistant] but no [WakeWordDetector] is wired.
+  /// The controller immediately returns to [IdleState]; PTT remains functional.
+  wakeEngineUnavailable,
 }

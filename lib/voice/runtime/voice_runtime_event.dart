@@ -1,3 +1,4 @@
+import '../models/text_candidate.dart';
 import 'voice_listen_mode.dart';
 import 'voice_listen_trigger.dart';
 import 'voice_stop_reason.dart';
@@ -99,4 +100,17 @@ final class PermissionDenied extends VoiceRuntimeEvent {
 /// Informational event: emitted just before [ErrorRaised] and [ErrorState].
 final class AudioFocusDenied extends VoiceRuntimeEvent {
   const AudioFocusDenied({required super.sessionId});
+}
+
+/// STT engine produced a [TextCandidate] from the session audio.
+///
+/// Ordering invariant (Rule A): state is already [IdleState] when this event
+/// is received by any listener. [onTextCandidate] callback fires after this
+/// event is emitted, within the same synchronous turn.
+final class TextCandidateProducedEvent extends VoiceRuntimeEvent {
+  final TextCandidate candidate;
+  const TextCandidateProducedEvent({
+    required this.candidate,
+    required super.sessionId,
+  });
 }
