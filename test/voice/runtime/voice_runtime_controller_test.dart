@@ -285,4 +285,92 @@ void main() {
       controller.dispose();
     });
   });
+
+  // ── Ordering tests (Rule A: state update BEFORE event emit) ───────────────
+
+  // ── Test 13 ───────────────────────────────────────────────────────────────
+  test('13. ordering: state is ListeningState when ListeningBegan is received', () {
+    fakeAsync((fake) {
+      final controller = _makeController();
+
+      // Record the state value at the moment each event fires.
+      // Because the stream is sync (broadcast(sync: true)), the listener runs
+      // inline inside _emit — AFTER _setState has already updated state.value.
+      VoiceRuntimeState? stateAtListeningBegan;
+      controller.events.listen((event) {
+        if (event is ListeningBegan) {
+          stateAtListeningBegan = controller.state.value;
+        }
+      });
+
+      controller.beginListening(trigger: VoiceListenTrigger.pushToTalk);
+      fake.flushMicrotasks();
+
+      // Rule A: listener sees ListeningState, not the pre-transition state.
+      expect(stateAtListeningBegan, isA<ListeningState>());
+
+      controller.dispose();
+    });
+  });
+
+  // ── Test 14 ───────────────────────────────────────────────────────────────
+  test('14. ordering: state is ProcessingState when ListeningEnded is received', () {
+    fakeAsync((fake) {
+      final controller = _makeController();
+
+      VoiceRuntimeState? stateAtListeningEnded;
+      controller.events.listen((event) {
+        if (event is ListeningEnded) {
+          stateAtListeningEnded = controller.state.value;
+        }
+      });
+
+      controller.beginListening(trigger: VoiceListenTrigger.pushToTalk);
+      fake.flushMicrotasks();
+
+      controller.endListening(reason: VoiceStopReason.userReleasedPushToTalk);
+      fake.flushMicrotasks();
+
+      // Rule A: listener sees ProcessingState (the stop-boundary state),
+      // not the pre-transition ListeningState or the final IdleState.
+      expect(stateAtListeningEnded, isA<ProcessingState>());
+
+      controller.dispose();
+    });
+  });
+
+  // ── Test 15 ───────────────────────────────────────────────────────────────
+  test('15. ordering: WakeDetected emitted while still IdleState, then arming completes', () {
+    fakeAsync((fake) {
+      final fakeDetector = FakeWakeWordDetector();
+      final controller = _makeController(wakeDetector: fakeDetector);
+      controller.setMode(VoiceListenMode.handsFreeAssistant);
+
+      // Record state at every event emission.
+      VoiceRuntimeState? stateAtWakeDetected;
+      VoiceRuntimeState? stateAtListeningBegan;
+      controller.events.listen((event) {
+        if (event is WakeDetected) stateAtWakeDetected = controller.state.value;
+        if (event is ListeningBegan) stateAtListeningBegan = controller.state.value;
+      });
+
+      fakeDetector.simulateWake(const WakeEvent(phrase: 'hey goblin'));
+      fake.flushMicrotasks();
+
+      // WakeDetected is informational and is emitted BEFORE beginListening
+      // transitions the state — so at that moment state is still IdleState.
+      expect(stateAtWakeDetected, isA<IdleState>());
+
+      // ListeningBegan is emitted AFTER the state becomes ListeningState
+      // (Rule A), so listener sees ListeningState.
+      expect(stateAtListeningBegan, isA<ListeningState>());
+
+      // WakeDetected and ListeningBegan share the same sessionId (pre-allocated
+      // in _handleWakeEvent so both events are correlated to the same session).
+      // Events already fired; verify final state.
+      expect(controller.state.value, isA<ListeningState>());
+
+      controller.dispose();
+    });
+  });
 }
