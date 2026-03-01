@@ -19,6 +19,7 @@ final class PlatformAudioCaptureGateway implements AudioCaptureGateway {
   StreamController<Uint8List>? _framesController;
   StreamSubscription<Uint8List>? _recordSub;
   bool _isActive = false;
+  bool _disposed = false;
 
   @override
   AudioFrameStream get audioFrames =>
@@ -29,6 +30,7 @@ final class PlatformAudioCaptureGateway implements AudioCaptureGateway {
 
   @override
   Future<bool> start() async {
+    if (_disposed) return false;
     if (_recordSub != null) {
       // Recorder is already streaming (e.g., started by WakeWordDetector).
       // Re-use the existing broadcast stream; do not open a second session.
@@ -69,8 +71,10 @@ final class PlatformAudioCaptureGateway implements AudioCaptureGateway {
 
   @override
   void dispose() {
+    _disposed = true;
     _isActive = false;
     _recordSub?.cancel();
+    _recordSub = null;
     _framesController?.close();
     _framesController = null;
     _recorder.dispose();
