@@ -11,8 +11,10 @@ import 'package:combat_goblin_prime/ui/voice/voice_control_bar.dart';
 import 'package:combat_goblin_prime/voice/adapters/voice_platform_factory.dart';
 import 'package:combat_goblin_prime/voice/models/spoken_entity.dart';
 import 'package:combat_goblin_prime/voice/models/spoken_variant.dart';
+import 'package:combat_goblin_prime/voice/models/spoken_response_plan.dart';
 import 'package:combat_goblin_prime/voice/models/text_candidate.dart';
 import 'package:combat_goblin_prime/voice/models/voice_search_response.dart';
+import 'package:combat_goblin_prime/voice/understanding/voice_assistant_coordinator.dart';
 import 'package:combat_goblin_prime/voice/runtime/testing/fake_audio_focus_gateway.dart';
 import 'package:combat_goblin_prime/voice/runtime/testing/fake_audio_route_observer.dart';
 import 'package:combat_goblin_prime/voice/runtime/testing/fake_mic_permission_gateway.dart';
@@ -40,6 +42,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _searchController = TextEditingController();
   final _facade = VoiceSearchFacade();
+  late final VoiceAssistantCoordinator _coordinator;
 
   // Phase 12C: two-phase init — fakes first, real adapters async.
   late VoiceRuntimeController _voiceController;
@@ -49,12 +52,17 @@ class _HomeScreenState extends State<HomeScreen> {
   final Set<(int, VoiceStopReason)> _shownVoiceErrors = {};
 
   VoiceSearchResponse? _voiceResult;
+
+  /// Phase 12D: structured plan from the voice coordinator.
+  SpokenResponsePlan? _voicePlan;
+
   List<String> _suggestions = [];
   bool _showSuggestions = false;
 
   @override
   void initState() {
     super.initState();
+    _coordinator = VoiceAssistantCoordinator(searchFacade: _facade);
     // Synchronous bootstrap with fakes so the widget is immediately usable.
     _voiceController = VoiceRuntimeController(
       permissionGateway: FakeMicPermissionGateway(allow: true),
@@ -114,15 +122,20 @@ class _HomeScreenState extends State<HomeScreen> {
   // Voice callbacks
   // ---------------------------------------------------------------------------
 
-  /// Routes a [TextCandidate] to [VoiceSearchFacade] and updates the UI.
-  void _onTextCandidate(TextCandidate candidate) {
-    if (!mounted) return;
+  /// Routes a [TextCandidate] through [VoiceAssistantCoordinator] and updates UI.
+  Future<void> _onTextCandidate(TextCandidate candidate) async {
+    if (!mounted || candidate.text.isEmpty) return;
     final sessionController = ImportSessionProvider.of(context);
     final bundles = _activeBundles(sessionController);
-    if (bundles.isEmpty || candidate.text.isEmpty) return;
-    final result = _facade.searchText(bundles, candidate.text);
+    final plan = await _coordinator.handleTranscript(
+      transcript: candidate.text,
+      slotBundles: bundles,
+      contextHints: _buildContextHints(sessionController),
+    );
+    if (!mounted) return;
     setState(() {
-      _voiceResult = result;
+      _voicePlan = plan;
+      _voiceResult = null;
       _showSuggestions = false;
       _searchController.text = candidate.text;
     });
@@ -224,6 +237,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final result = _facade.searchText(bundles, query);
     setState(() {
       _voiceResult = result;
+      _voicePlan = null;
       _showSuggestions = false;
     });
   }
@@ -442,6 +456,11 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
+    // --- Phase 12D: voice coordinator plan takes priority over text search result ---
+    if (_voicePlan != null) {
+      return _buildPlanResults(_voicePlan!);
+    }
+
     if (_voiceResult == null) {
       var totalUnits = 0;
       var totalWeapons = 0;
@@ -537,46 +556,102 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildEntityCard(SpokenEntity entity) {
+  /// Renders a [SpokenResponsePlan]: primary text banner + entity list.
+  ///
+  /// When [plan.selectedIndex] is non-null, the highlighted entity row is
+  /// rendered with a subtle accent border.
+  Widget _buildPlanResults(SpokenResponsePlan plan) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Primary text banner
+        Container(
+          margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.secondaryContainer,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            plan.primaryText,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSecondaryContainer,
+                ),
+          ),
+        ),
+        if (plan.entities.isNotEmpty)
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: plan.entities.length,
+              itemBuilder: (context, index) {
+                final isSelected = index == plan.selectedIndex;
+                return _buildEntityCard(
+                  plan.entities[index],
+                  isSelected: isSelected,
+                );
+              },
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildEntityCard(SpokenEntity entity, {bool isSelected = false}) {
+    final selectedDecoration = isSelected
+        ? BoxDecoration(
+            border: Border.all(
+              color: Theme.of(context).colorScheme.primary,
+              width: 2,
+            ),
+            borderRadius: BorderRadius.circular(12),
+          )
+        : null;
     if (entity.variants.length == 1) {
       final variant = entity.variants.first;
-      return Card(
-        margin: const EdgeInsets.only(bottom: 8),
-        child: ListTile(
-          leading: _buildTypeIcon(variant.docType),
-          title: Text(entity.displayName),
-          subtitle: Text(
-            '${variant.docType.name} • ${entity.slotId}',
-            style: Theme.of(context).textTheme.bodySmall,
+      return Container(
+        decoration: selectedDecoration,
+        child: Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          child: ListTile(
+            leading: _buildTypeIcon(variant.docType),
+            title: Text(entity.displayName),
+            subtitle: Text(
+              '${variant.docType.name} • ${entity.slotId}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _showVariantDetail(context, variant),
           ),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => _showVariantDetail(context, variant),
         ),
       );
     }
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ExpansionTile(
-        leading: _buildTypeIcon(entity.variants.first.docType),
-        title: Text(entity.displayName),
-        subtitle: Text(
-          '${entity.variants.first.docType.name} • ${entity.slotId} • ${entity.variants.length} variants',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-        children: [
-          for (final variant in entity.variants)
-            ListTile(
-              contentPadding: const EdgeInsets.only(left: 32, right: 16),
-              title: Text(variant.displayName),
-              subtitle: Text(
-                variant.docId,
-                style: Theme.of(context).textTheme.bodySmall,
+    return Container(
+      decoration: selectedDecoration,
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 8),
+        child: ExpansionTile(
+          leading: _buildTypeIcon(entity.variants.first.docType),
+          title: Text(entity.displayName),
+          subtitle: Text(
+            '${entity.variants.first.docType.name} • ${entity.slotId} • ${entity.variants.length} variants',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          children: [
+            for (final variant in entity.variants)
+              ListTile(
+                contentPadding: const EdgeInsets.only(left: 32, right: 16),
+                title: Text(variant.displayName),
+                subtitle: Text(
+                  variant.docId,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _showVariantDetail(context, variant),
               ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => _showVariantDetail(context, variant),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }

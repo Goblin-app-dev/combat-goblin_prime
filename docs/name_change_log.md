@@ -694,3 +694,39 @@ No silent renames are permitted.
 - New name: VoiceStopReason (11 values, +sttFailed, +captureLimitReached, +wakeEngineUnavailable)
 - Reason: Phase 12C adds three new stop reasons for STT failure, hard capture limit, and wake engine unavailability. Additive change; backward-compatible.
 - Approval reference: Phase 12C Real Audio I/O Proposal (2026-02-28)
+
+## 2026-03-01 (Phase 12D — Voice Understanding — APPROVED)
+- Old name: N/A
+- New name: VoiceIntentKind, VoiceIntent (sealed), SearchIntent, AssistantQuestionIntent, DisambiguationCommandIntent, UnknownIntent
+- Reason: New Phase 12D intent classification hierarchy. Sealed class enables exhaustive switch in coordinator and tests. Four subtypes cover all recognized transcript patterns.
+- Approval reference: Phase 12D Voice Understanding Proposal (2026-03-01)
+
+## 2026-03-01 (Phase 12D — Voice Understanding — APPROVED)
+- Old name: N/A
+- New name: DisambiguationCommand
+- Reason: New Phase 12D enum for the four voice navigation commands (next/previous/select/cancel). Recognized by exact string match in VoiceIntentClassifier; multiple surface forms accepted.
+- Approval reference: Phase 12D Voice Understanding Proposal (2026-03-01)
+
+## 2026-03-01 (Phase 12D — Voice Understanding — APPROVED)
+- Old name: N/A
+- New name: SpokenResponsePlan
+- Reason: New Phase 12D coordinator output model. Carries primaryText, entities, selectedIndex, followUps, debugSummary. No timestamps. Enables Phase 12E TTS without coordinator rewrite.
+- Approval reference: Phase 12D Voice Understanding Proposal (2026-03-01)
+
+## 2026-03-01 (Phase 12D — Voice Understanding — APPROVED)
+- Old name: N/A
+- New name: VoiceIntentClassifier
+- Reason: New Phase 12D stateless service for intent classification. Command match → question heuristic → search default ordering.
+- Approval reference: Phase 12D Voice Understanding Proposal (2026-03-01)
+
+## 2026-03-01 (Phase 12D — Voice Understanding — APPROVED)
+- Old name: DomainCanonicalizer (Phase 12 proposal, 2026-02-18, not yet implemented)
+- New name: DomainCanonicalizer (Phase 12D implementation, lib/voice/understanding/domain_canonicalizer.dart)
+- Reason: Phase 12 originally proposed DomainCanonicalizer. Phase 12D implements it with normalized Levenshtein fuzzy matching (threshold ≥ 0.75), 128-char length cap, and stable tie-break.
+- Approval reference: Phase 12D Voice Understanding Proposal (2026-03-01)
+
+## 2026-03-01 (Phase 12D — Voice Understanding — APPROVED)
+- Old name: N/A
+- New name: VoiceAssistantCoordinator
+- Reason: New Phase 12D coordinator class. Owns in-memory VoiceSelectionSession for disambiguation. Produces SpokenResponsePlan from transcript + slotBundles + contextHints. Injected with VoiceSearchFacade, VoiceIntentClassifier, DomainCanonicalizer.
+- Approval reference: Phase 12D Voice Understanding Proposal (2026-03-01)

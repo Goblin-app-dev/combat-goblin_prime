@@ -533,3 +533,24 @@ Hard cap on mic capture duration enforced for both PTT and hands-free sessions. 
 
 ## BPE Token (Phase 12C context)
 Byte-Pair Encoding subword unit produced by sentencepiece. Sherpa ONNX KWS zipformer models require keywords expressed as BPE tokens from the model's `bpe.model`, not as CMU phonemes. Generated via: `spm_encode --model=bpe.model --output_format=piece`.
+
+## Voice Intent (Phase 12D)
+Classified output of `VoiceIntentClassifier.classify()`. A sealed type hierarchy: `SearchIntent`, `AssistantQuestionIntent`, `DisambiguationCommandIntent`, `UnknownIntent`. Determines how `VoiceAssistantCoordinator` processes a transcript.
+
+## Voice Intent Kind (Phase 12D)
+Enum with four values: `search`, `assistantQuestion`, `disambiguationCommand`, `unknown`. Attached to every `VoiceIntent` via the `kind` getter.
+
+## Disambiguation Command (Phase 12D)
+Enum with four values: `next`, `previous`, `select`, `cancel`. Recognized by exact string match (trimmed + lowercased) from a voice transcript during an active `VoiceSelectionSession`. Multiple surface forms map to the same command (e.g. "back" → `previous`).
+
+## Spoken Response Plan (Phase 12D)
+Structured output from `VoiceAssistantCoordinator.handleTranscript()`. Contains `primaryText` (what to display/speak), `entities` (ranked candidates), `selectedIndex` (highlighted row if session is active), `followUps` (suggested next commands), and `debugSummary` (deterministic, no timestamps).
+
+## Voice Intent Classifier (Phase 12D)
+Stateless service that maps a raw STT transcript string to a `VoiceIntent`. Classification order: (1) exact disambiguation command match, (2) assistant-question leading-keyword heuristic, (3) default search.
+
+## Domain Canonicalizer (Phase 12D)
+Stateless service that normalizes a raw STT transcript and fuzzy-matches it against contextHints (faction names, unit/weapon keys). Uses normalized Levenshtein similarity with threshold ≥ 0.75. Stable tie-break: first hint in iteration order.
+
+## Voice Assistant Coordinator (Phase 12D)
+Stateful coordinator that turns a `TextCandidate` transcript into a `SpokenResponsePlan`. Owns a `VoiceSelectionSession?` for multi-entity disambiguation. Injected with `VoiceSearchFacade`, `VoiceIntentClassifier`, and `DomainCanonicalizer`.
