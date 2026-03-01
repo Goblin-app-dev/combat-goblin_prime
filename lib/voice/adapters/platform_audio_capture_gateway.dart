@@ -9,7 +9,10 @@ import '../runtime/audio_frame_stream.dart';
 /// [AudioCaptureGateway] backed by the `record` package.
 ///
 /// Streams PCM16 / 16 kHz / mono frames via [AudioRecorder.startStream].
-/// Each [start] call creates a fresh stream subscription; [stop] cancels it.
+/// [start] is idempotent — recorder starts once and stays running (warm mic).
+/// [stop] ends a capture session but does not stop the recorder so that a
+/// [WakeWordDetector] can continue receiving frames between sessions.
+/// Full teardown occurs only in [dispose].
 final class PlatformAudioCaptureGateway implements AudioCaptureGateway {
   final AudioRecorder _recorder = AudioRecorder();
 
@@ -26,6 +29,14 @@ final class PlatformAudioCaptureGateway implements AudioCaptureGateway {
 
   @override
   Future<bool> start() async {
+    if (_recordSub != null) {
+      // Recorder is already streaming (e.g., started by WakeWordDetector).
+      // Re-use the existing broadcast stream; do not open a second session.
+      // TODO(12E): make this policy-driven so PTT-only mode can stop recorder
+      // on stop() to conserve battery/privacy when wake word is disabled.
+      _isActive = true;
+      return true;
+    }
     try {
       _framesController ??= StreamController<Uint8List>.broadcast();
       final stream = await _recorder.startStream(
@@ -50,14 +61,10 @@ final class PlatformAudioCaptureGateway implements AudioCaptureGateway {
 
   @override
   Future<void> stop() async {
+    // Session-stop only. The recorder intentionally stays running so
+    // WakeWordDetector continues to receive frames between sessions.
+    // Full teardown (recorder stop + subscription cancel) is in dispose().
     _isActive = false;
-    await _recordSub?.cancel();
-    _recordSub = null;
-    try {
-      await _recorder.stop();
-    } catch (_) {
-      // Best-effort.
-    }
   }
 
   @override
