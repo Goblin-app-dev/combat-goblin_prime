@@ -503,3 +503,54 @@ Pure function helper (`SearchResultGrouper.group(slotId, hits)`) that converts a
 
 ## Voice Search Facade (Phase 12A)
 App-layer voice search entrypoint (`VoiceSearchFacade`). Iterates loaded slot `IndexBundle`s in lexicographic key order, calls `StructuredSearchService.search()` on each, groups results via `SearchResultGrouper`, and returns a `VoiceSearchResponse`. Does NOT call `MultiPackSearchService.search()`. Provides `suggest()` (delegates to `MultiPackSearchService.suggest()`) for typeahead.
+
+## AudioCaptureGateway (Phase 12C)
+Injectable interface for platform mic capture. Streams canonical PCM16/16kHz/mono `Uint8List` frames via `audioFrames`. Real implementation: `PlatformAudioCaptureGateway` (`record` package). Test fake: `FakeAudioCaptureGateway` (pushFrame, startCallCount, stopCallCount).
+
+## SpeechToTextEngine (Phase 12C)
+Injectable interface for batch speech-to-text. Accepts buffered `Uint8List` PCM and returns a `TextCandidate`. Controller fills `sessionId`, `mode`, and `trigger` after receiving the result. Real implementation: `OfflineSpeechToTextEngine` (sherpa_onnx offline transducer). Stub: `OnlineSpeechToTextEngine` (Phase 12D).
+
+## TextCandidate (Phase 12C)
+STT output model. Fields: `text` (transcribed string), `confidence` (-1.0 if not reported by engine), `isFinal` (always true in 12C), `sessionId`, `mode`, `trigger`. Engine returns placeholder sessionId/mode/trigger; controller overwrites with actual session context before forwarding to `onTextCandidate`.
+
+## VoiceSettings (Phase 12C)
+Immutable persisted voice preferences: `lastMode`, `onlineSttEnabled` (default false), `wakeWordEnabled` (default true), `maxCaptureDurationSeconds` (default 15). Stored as `voice_settings.json` via `VoiceSettingsService`.
+
+## VoiceSettingsService (Phase 12C)
+Persistence service for `VoiceSettings`. Atomic-write pattern (write temp, rename). Stored alongside `app_snapshot.json`.
+
+## PlatformWakeWordDetector (Phase 12C)
+Sherpa ONNX keyword-spotting `WakeWordDetector`. Uses `sherpa-onnx-kws-zipformer-gigaspeech-3.3M` model. Keywords expressed as BPE tokens from the model's `bpe.model` (NOT CMU phonemes). Async factory `create()` returns null on init failure (graceful degradation). Owns its own AudioRecorder instance for continuous listening.
+
+## OfflineSpeechToTextEngine (Phase 12C)
+Sherpa ONNX offline ASR `SpeechToTextEngine`. Lazy-initializes on first `transcribe()` call. Extracts bundled model assets to app documents directory. Emits `[VOICE PERF]` latency logs. Throws `StateError` if model assets are missing; controller catches and emits `ErrorState(sttFailed)`.
+
+## VoicePlatformFactory (Phase 12C)
+Synchronous factory for platform adapters. Returns real adapters on Android/iOS; no-op fakes on Web/Desktop. Wake-word detector initialized asynchronously via `createWakeWordDetector()`.
+
+## Capture-Limit Timer (Phase 12C)
+Hard cap on mic capture duration enforced for both PTT and hands-free sessions. Configured via `VoiceRuntimeController.maxCaptureDuration` (from `VoiceSettings.maxCaptureDurationSeconds`, default 15s). Fires `VoiceStopReason.captureLimitReached`.
+
+## BPE Token (Phase 12C context)
+Byte-Pair Encoding subword unit produced by sentencepiece. Sherpa ONNX KWS zipformer models require keywords expressed as BPE tokens from the model's `bpe.model`, not as CMU phonemes. Generated via: `spm_encode --model=bpe.model --output_format=piece`.
+
+## Voice Intent (Phase 12D)
+Classified output of `VoiceIntentClassifier.classify()`. A sealed type hierarchy: `SearchIntent`, `AssistantQuestionIntent`, `DisambiguationCommandIntent`, `UnknownIntent`. Determines how `VoiceAssistantCoordinator` processes a transcript.
+
+## Voice Intent Kind (Phase 12D)
+Enum with four values: `search`, `assistantQuestion`, `disambiguationCommand`, `unknown`. Attached to every `VoiceIntent` via the `kind` getter.
+
+## Disambiguation Command (Phase 12D)
+Enum with four values: `next`, `previous`, `select`, `cancel`. Recognized by exact string match (trimmed + lowercased) from a voice transcript during an active `VoiceSelectionSession`. Multiple surface forms map to the same command (e.g. "back" → `previous`).
+
+## Spoken Response Plan (Phase 12D)
+Structured output from `VoiceAssistantCoordinator.handleTranscript()`. Contains `primaryText` (what to display/speak), `entities` (ranked candidates), `selectedIndex` (highlighted row if session is active), `followUps` (suggested next commands), and `debugSummary` (deterministic, no timestamps).
+
+## Voice Intent Classifier (Phase 12D)
+Stateless service that maps a raw STT transcript string to a `VoiceIntent`. Classification order: (1) exact disambiguation command match, (2) assistant-question leading-keyword heuristic, (3) default search.
+
+## Domain Canonicalizer (Phase 12D)
+Stateless service that normalizes a raw STT transcript and fuzzy-matches it against contextHints (faction names, unit/weapon keys). Uses normalized Levenshtein similarity with threshold ≥ 0.75. Stable tie-break: first hint in iteration order.
+
+## Voice Assistant Coordinator (Phase 12D)
+Stateful coordinator that turns a `TextCandidate` transcript into a `SpokenResponsePlan`. Owns a `VoiceSelectionSession?` for multi-entity disambiguation. Injected with `VoiceSearchFacade`, `VoiceIntentClassifier`, and `DomainCanonicalizer`.
