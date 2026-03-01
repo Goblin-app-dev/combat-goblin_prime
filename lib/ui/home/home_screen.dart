@@ -556,7 +556,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// DEBUG BRIDGE UI — validation and testing only, not final UX.
+  ///
   /// Renders a [SpokenResponsePlan]: primary text banner + entity list.
+  /// This rendering exists to validate voice coordinator output on-device
+  /// during Phase 12D development. It is intentionally minimal and will be
+  /// replaced by the proper spoken-response UX in a future phase.
   ///
   /// When [plan.selectedIndex] is non-null, the highlighted entity row is
   /// rendered with a subtle accent border.
