@@ -44,12 +44,11 @@ final class SpokenResponsePlan {
         entities = List.unmodifiable(List.of(entities)),
         followUps = List.unmodifiable(List.of(followUps)) {
     assert(primaryText.trim().isNotEmpty, 'SpokenResponsePlan: primaryText must not be empty');
+    final idx = selectedIndex;
     assert(
-      selectedIndex == null ||
-          (this.entities.isNotEmpty &&
-              selectedIndex! >= 0 &&
-              selectedIndex! < this.entities.length),
-      'SpokenResponsePlan: selectedIndex $selectedIndex out of bounds '
+      idx == null ||
+          (this.entities.isNotEmpty && idx >= 0 && idx < this.entities.length),
+      'SpokenResponsePlan: selectedIndex $idx out of bounds '
       'for ${this.entities.length} entities',
     );
   }
