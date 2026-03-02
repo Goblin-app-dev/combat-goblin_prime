@@ -99,9 +99,19 @@ These are the **single source of truth** for all names. Read before modifying an
 
 ## Phase Documentation
 
-Per-phase proposals live in `docs/phases/`. Current Phase 11B:
+Per-phase proposals live in `docs/phases/`. All approved.
 
-- `docs/phases/phase_11b_multi_catalog_names_proposal.md` — **APPROVED**
+| Phase | File(s) |
+|-------|---------|
+| 11B Multi-Catalog | `phase_11b_multi_catalog_names_proposal.md` |
+| 12 Voice Integration | `phase_12_voice_integration_proposal.md` |
+| 12A Voice Seam Extraction | `phase_12a_voice_seam_proposal.md`, `phase_12a_voice_seam_extraction.md` |
+| 12B Audio Runtime | `phase_12b_audio_runtime_proposal.md` |
+| 12C Platform Audio | `phase_12c_platform_audio_proposal.md` |
+| 12D Voice Understanding | `phase_12d_voice_understanding_proposal.md` |
+| 12E Spoken Output (TTS) | `phase_12e_spoken_output_proposal.md` |
+
+Current work: **Phase 12E prerequisite** — `SpokenResponsePlan` hardening complete (immutability + debug asserts). TTS implementation next.
 
 ---
 

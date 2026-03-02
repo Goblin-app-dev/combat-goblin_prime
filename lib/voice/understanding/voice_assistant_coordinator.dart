@@ -65,10 +65,10 @@ final class VoiceAssistantCoordinator {
 
     // --- Unknown / empty transcript ---
     if (intent is UnknownIntent) {
-      return const SpokenResponsePlan(
+      return SpokenResponsePlan(
         primaryText: "Sorry, I didn't catch that. Please say a search term.",
-        entities: [],
-        followUps: [],
+        entities: const [],
+        followUps: const [],
         debugSummary: 'unknown-empty',
       );
     }
@@ -90,10 +90,10 @@ final class VoiceAssistantCoordinator {
     );
 
     if (canonical.isEmpty) {
-      return const SpokenResponsePlan(
+      return SpokenResponsePlan(
         primaryText: "Sorry, I didn't catch that. Please say a search term.",
-        entities: [],
-        followUps: [],
+        entities: const [],
+        followUps: const [],
         debugSummary: 'empty-canonical',
       );
     }
@@ -138,10 +138,10 @@ final class VoiceAssistantCoordinator {
         _lastSelected = entity;
         _session = null;
         if (entity == null) {
-          return const SpokenResponsePlan(
+          return SpokenResponsePlan(
             primaryText: 'Nothing to select.',
-            entities: [],
-            followUps: [],
+            entities: const [],
+            followUps: const [],
             debugSummary: 'select-empty',
           );
         }
@@ -154,10 +154,10 @@ final class VoiceAssistantCoordinator {
         );
       case DisambiguationCommand.cancel:
         _session = null;
-        return const SpokenResponsePlan(
+        return SpokenResponsePlan(
           primaryText: 'Cancelled.',
-          entities: [],
-          followUps: [],
+          entities: const [],
+          followUps: const [],
           debugSummary: 'cancelled',
         );
     }
@@ -166,10 +166,10 @@ final class VoiceAssistantCoordinator {
   SpokenResponsePlan _planForSession(VoiceSelectionSession session) {
     final entity = session.currentEntity;
     if (entity == null) {
-      return const SpokenResponsePlan(
+      return SpokenResponsePlan(
         primaryText: 'No results to navigate.',
-        entities: [],
-        followUps: [],
+        entities: const [],
+        followUps: const [],
         debugSummary: 'navigate-empty',
       );
     }

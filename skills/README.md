@@ -69,10 +69,13 @@ This prevents:
 ---
 
 ### 3. Mechanical Safety Nets
-Skills 05, 07, and the name audit tool enforce discipline mechanically:
+Skills 05, 06, 07, and the name audit tool enforce discipline mechanically:
 
 - **Skill 05 — Full File Output Only**
   - Prevents copy/paste and context loss.
+
+- **Skill 06 — Module Boundary Integrity**
+  - Each module may only access its declared inputs. No cross-module data leaks or side-channel flow.
 
 - **Skill 07 — Module IO Accountability**
   - Prevents hidden data flow and leaky abstractions.
@@ -100,7 +103,20 @@ This makes:
 
 ---
 
-### 5. Stop When Unsure
+### 5. IP and Data Guardrails
+Skills 09 and 14 protect against IP exposure and data integrity violations:
+
+- **Skill 09 — Copyright Guardrail**
+  - No copyrighted or trademarked IP terms in code. If uncertain, STOP and request permission.
+
+- **Skill 14 — Single Game System Only**
+  - At any time the app holds exactly one game system. Importing a different system without clearing existing data is forbidden.
+
+These are non-negotiable external constraints, not style preferences.
+
+---
+
+### 6. Stop When Unsure
 Skill 12 is the final guardrail:
 
 - **Skill 12 — Stop When Uncertain**
@@ -119,6 +135,8 @@ A change is invalid if it:
 - violates freeze rules
 - omits full file outputs
 - skips the name audit checklist
+- introduces copyrighted or trademarked IP terms (Skill 09)
+- imports a second game system without clearing existing data (Skill 14)
 
 These skills exist to make the system:
 **clean, elegant, stable, and safe**.
