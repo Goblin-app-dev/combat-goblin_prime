@@ -543,8 +543,8 @@ Enum with four values: `search`, `assistantQuestion`, `disambiguationCommand`, `
 ## Disambiguation Command (Phase 12D)
 Enum with four values: `next`, `previous`, `select`, `cancel`. Recognized by exact string match (trimmed + lowercased) from a voice transcript during an active `VoiceSelectionSession`. Multiple surface forms map to the same command (e.g. "back" → `previous`).
 
-## Spoken Response Plan (Phase 12D)
-Structured output from `VoiceAssistantCoordinator.handleTranscript()`. Contains `primaryText` (what to display/speak), `entities` (ranked candidates), `selectedIndex` (highlighted row if session is active), `followUps` (suggested next commands), and `debugSummary` (deterministic, no timestamps).
+## Spoken Response Plan (Phase 12D, hardened Phase 12E prerequisite)
+Structured output from `VoiceAssistantCoordinator.handleTranscript()`. Contains `primaryText` (what to display/speak), `entities` (ranked candidates), `selectedIndex` (highlighted row if session is active), `followUps` (suggested next commands), and `debugSummary` (deterministic, no timestamps). `entities` and `followUps` are defensively copied and wrapped in unmodifiable views at construction time — the plan is an immutable snapshot safe for concurrent UI rendering and TTS playback. Debug-time asserts enforce: `primaryText` is non-empty; `selectedIndex` is either null or a valid index into `entities`.
 
 ## Voice Intent Classifier (Phase 12D)
 Stateless service that maps a raw STT transcript string to a `VoiceIntent`. Classification order: (1) exact disambiguation command match, (2) assistant-question leading-keyword heuristic, (3) default search.
