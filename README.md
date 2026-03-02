@@ -38,6 +38,7 @@ Source Files → M1 Acquire → M2 Parse → M3 Wrap → M4 Link → M5 Bind →
 | M7 | Applicability | 5 | Condition evaluation (tri-state: applies/skipped/unknown) |
 | M8 | Modifiers | 6 | Value modification operations |
 | M9 | Index | - | Search-ready document generation |
+| M10 | Structured Search | - | Deterministic query execution over frozen M9 index |
 | Orchestrator | - | - | Coordinates M6/M7/M8 evaluation flow |
 
 ### UI Architecture
@@ -46,6 +47,8 @@ The Flutter app uses an **AppShell** with a navigation drawer hosting two screen
 
 - **Home** (`HomeScreen`) — search bar + results + slot status bar
 - **Downloads** (`DownloadsScreen`) — GitHub repo picker, game system selector, and per-slot catalog management
+
+A **`FactionPickerScreen`** is pushed from the Downloads screen to let the user select a specific faction/game system within a catalog. A **`VoiceControlBar`** overlays the home screen and provides wake-word activation and live listen controls.
 
 #### Per-Slot Catalog Model
 
@@ -124,6 +127,7 @@ lib/
 │   ├── m7_applicability/  # Condition evaluation
 │   ├── m8_modifiers/      # Value modification
 │   ├── m9_index/          # Search index generation
+│   ├── m10_structured_search/  # Deterministic query execution over frozen M9 index
 │   └── orchestrator/      # Evaluation coordination
 ├── features/
 │   └── github_repository_search/  # GitHub repo search (models + service)
@@ -132,12 +136,23 @@ lib/
 │   ├── github_sync_state.dart          # Blob SHA tracking for update checks
 │   ├── multi_pack_search_service.dart  # Cross-slot search aggregation
 │   └── session_persistence_service.dart # Session save/restore
+├── voice/                              # Voice processing pipeline
+│   ├── adapters/                       # Platform audio adapters
+│   ├── models/                         # Voice domain models
+│   ├── runtime/                        # Audio session runtime
+│   ├── services/                       # KWS and ASR services
+│   ├── settings/                       # Voice configuration
+│   ├── understanding/                  # Intent parsing and disambiguation
+│   └── voice_search_facade.dart        # Unified voice-to-search entry point
 └── ui/
     ├── app_shell.dart           # Navigation drawer + AppBar with update badge
     ├── home/
     │   └── home_screen.dart     # Search bar, results, slot status bar
     ├── downloads/
-    │   └── downloads_screen.dart  # GitHub picker, game system selector, slot panels
+    │   ├── downloads_screen.dart     # GitHub picker, game system selector, slot panels
+    │   └── faction_picker_screen.dart  # Faction/game system selection within a catalog
+    ├── voice/
+    │   └── voice_control_bar.dart   # Wake-word activation and live listen controls
     └── import/
         ├── import_session_controller.dart  # ChangeNotifier — all session state
         └── import_session_provider.dart    # InheritedWidget accessor
@@ -148,6 +163,12 @@ docs/
 ├── module_io_registry.md  # Module input/output contracts
 ├── naming_contract.md     # Naming conventions
 ├── name_change_log.md     # Name change history
+├── features/              # Feature-level design docs
+│   └── github_repository_search.md
+├── handoff/               # Session continuity and development planning
+│   ├── 01_session_history.md
+│   ├── 02_skills_and_rules_reference.md
+│   └── 03_ui_development_plan.md
 └── phases/                # Per-phase design and naming proposals
 
 skills/                    # Development discipline rules
@@ -186,6 +207,18 @@ Design proposals and approved names for each phase are in `docs/phases/`:
 - M10 Structured Search: `m10_structured_search_proposal.md`
 - Phase 11B (Multi-Catalog): `phase_11b_multi_catalog_names_proposal.md`
 - Phase 12 (Voice Integration): `phase_12_voice_integration_proposal.md`
+- Phase 12A (Voice Seam Extraction): `phase_12a_voice_seam_proposal.md`, `phase_12a_voice_seam_extraction.md`
+- Phase 12B (Audio Runtime): `phase_12b_audio_runtime_proposal.md`
+- Phase 12C (Platform Audio): `phase_12c_platform_audio_proposal.md`
+- Phase 12D (Voice Understanding): `phase_12d_voice_understanding_proposal.md`
+
+### Feature Documentation
+- [GitHub Repository Search](docs/features/github_repository_search.md)
+
+### Handoff & Planning
+- [Session History](docs/handoff/01_session_history.md)
+- [Skills & Rules Reference](docs/handoff/02_skills_and_rules_reference.md)
+- [UI Development Plan](docs/handoff/03_ui_development_plan.md)
 
 ### Reference
 - [BSD Parsing Reference](docs/bsd-parsing-reference.md)
