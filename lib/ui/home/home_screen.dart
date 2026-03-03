@@ -262,16 +262,27 @@ class _HomeScreenState extends State<HomeScreen> {
     if (query.isEmpty || bundles.isEmpty) {
       setState(() {
         _voiceResult = null;
+        _voicePlan = null;
         _showSuggestions = false;
       });
       return;
     }
-    final result = _facade.searchText(bundles, query);
-    setState(() {
-      _voiceResult = result;
-      _voicePlan = null;
-      _showSuggestions = false;
-    });
+    // Route through coordinator so typed questions use the full intent pipeline.
+    // _search stays sync; async work launches internally and checks mounted before setState.
+    final hints = _buildContextHints(controller);
+    unawaited(() async {
+      final plan = await _coordinator.handleTranscript(
+        transcript: query,
+        slotBundles: bundles,
+        contextHints: hints,
+      );
+      if (!mounted) return;
+      setState(() {
+        _voicePlan = plan;
+        _voiceResult = null;
+        _showSuggestions = false;
+      });
+    }());
   }
 
   void _selectSuggestion(String suggestion) {
@@ -308,30 +319,270 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showVariantDetail(BuildContext context, SpokenVariant variant) {
+    // Resolve bundle once at tap time — not inside the sheet builder.
+    final controller = ImportSessionProvider.of(context);
+    final bundle = _activeBundles(controller)[variant.sourceSlotId];
     showModalBottomSheet(
       context: context,
-      builder: (context) => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              variant.displayName,
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 8),
-            Text('Type: ${variant.docType.name}'),
-            Text('ID: ${variant.docId}'),
-            Text('Key: ${variant.canonicalKey}'),
-            Text('Slot: ${variant.sourceSlotId}'),
-            const SizedBox(height: 16),
-            Text(
-              'Match: ${variant.matchReasons.map((r) => r.name).join(', ')}',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
+      isScrollControlled: true,
+      builder: (sheetContext) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        maxChildSize: 0.92,
+        minChildSize: 0.3,
+        expand: false,
+        builder: (_, scrollController) => SingleChildScrollView(
+          controller: scrollController,
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
+          child: _buildDetailContent(sheetContext, variant, bundle),
         ),
+      ),
+    );
+  }
+
+  Widget _buildDetailContent(
+    BuildContext context,
+    SpokenVariant variant,
+    IndexBundle? bundle,
+  ) {
+    final children = <Widget>[
+      Text(variant.displayName, style: Theme.of(context).textTheme.headlineSmall),
+      const SizedBox(height: 4),
+      Text(
+        '${variant.docType.name} · ${variant.sourceSlotId}',
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Colors.grey.shade600,
+            ),
+      ),
+      const Divider(height: 24),
+    ];
+
+    if (bundle == null) {
+      children.add(Text(
+        '[no bundle available for slot ${variant.sourceSlotId}]',
+        style: TextStyle(color: Colors.orange.shade700),
+      ));
+      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: children);
+    }
+
+    switch (variant.docType) {
+      case SearchDocType.unit:
+        _addUnitDetail(context, children, variant.docId, bundle);
+      case SearchDocType.weapon:
+        _addWeaponDetail(context, children, variant.docId, bundle);
+      case SearchDocType.rule:
+        _addRuleDetail(context, children, variant.docId, bundle);
+    }
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: children);
+  }
+
+  void _addUnitDetail(
+    BuildContext ctx,
+    List<Widget> out,
+    String docId,
+    IndexBundle bundle,
+  ) {
+    final unit = bundle.unitByDocId(docId);
+    if (unit == null) {
+      out.add(Text('[missing unit: $docId]',
+          style: TextStyle(color: Colors.orange.shade700)));
+      return;
+    }
+
+    if (unit.characteristics.isNotEmpty) {
+      out.add(_sectionLabel(ctx, 'Stats'));
+      out.add(_characteristicsRow(unit.characteristics));
+      out.add(const SizedBox(height: 12));
+    }
+
+    if (unit.costs.isNotEmpty) {
+      out.add(_sectionLabel(ctx, 'Points'));
+      for (final cost in unit.costs) {
+        out.add(Text('${cost.typeName}: ${cost.value.toStringAsFixed(0)}'));
+      }
+      out.add(const SizedBox(height: 12));
+    }
+
+    if (unit.keywordTokens.isNotEmpty) {
+      out.add(_sectionLabel(ctx, 'Keywords'));
+      out.add(Text(
+        unit.keywordTokens.join(', '),
+        style: Theme.of(ctx).textTheme.bodySmall,
+      ));
+      out.add(const SizedBox(height: 12));
+    }
+
+    // Weapons: resolve, sort by (name, docId), render.
+    final weapons = unit.weaponDocRefs
+        .map(bundle.weaponByDocId)
+        .whereType<WeaponDoc>()
+        .toList()
+      ..sort((a, b) {
+        final n = a.name.compareTo(b.name);
+        return n != 0 ? n : a.docId.compareTo(b.docId);
+      });
+    final missingWeapons =
+        unit.weaponDocRefs.where((r) => bundle.weaponByDocId(r) == null).toList();
+
+    if (weapons.isNotEmpty || missingWeapons.isNotEmpty) {
+      out.add(_sectionLabel(ctx, 'Weapons'));
+      for (final w in weapons) {
+        out.add(Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(w.name, style: Theme.of(ctx).textTheme.titleSmall),
+        ));
+        out.add(_characteristicsRow(w.characteristics));
+        if (w.keywordTokens.isNotEmpty) {
+          out.add(Text(
+            w.keywordTokens.join(', '),
+            style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                  color: Colors.grey.shade600,
+                ),
+          ));
+        }
+      }
+      for (final ref in missingWeapons) {
+        out.add(Text('[missing weapon: $ref]',
+            style: TextStyle(color: Colors.orange.shade700)));
+      }
+      out.add(const SizedBox(height: 12));
+    }
+
+    // Rules/Abilities: resolve, sort by (name, docId), render.
+    final rules = unit.ruleDocRefs
+        .map(bundle.ruleByDocId)
+        .whereType<RuleDoc>()
+        .toList()
+      ..sort((a, b) {
+        final n = a.name.compareTo(b.name);
+        return n != 0 ? n : a.docId.compareTo(b.docId);
+      });
+    final missingRules =
+        unit.ruleDocRefs.where((r) => bundle.ruleByDocId(r) == null).toList();
+
+    if (rules.isNotEmpty || missingRules.isNotEmpty) {
+      out.add(_sectionLabel(ctx, 'Abilities'));
+      for (final rule in rules) {
+        out.add(Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(
+            rule.page != null ? '${rule.name} (p. ${rule.page})' : rule.name,
+            style: Theme.of(ctx).textTheme.titleSmall,
+          ),
+        ));
+        out.add(Text(rule.description, style: Theme.of(ctx).textTheme.bodySmall));
+      }
+      for (final ref in missingRules) {
+        out.add(Text('[missing rule: $ref]',
+            style: TextStyle(color: Colors.orange.shade700)));
+      }
+    }
+  }
+
+  void _addWeaponDetail(
+    BuildContext ctx,
+    List<Widget> out,
+    String docId,
+    IndexBundle bundle,
+  ) {
+    final weapon = bundle.weaponByDocId(docId);
+    if (weapon == null) {
+      out.add(Text('[missing weapon: $docId]',
+          style: TextStyle(color: Colors.orange.shade700)));
+      return;
+    }
+
+    if (weapon.characteristics.isNotEmpty) {
+      out.add(_sectionLabel(ctx, 'Profile'));
+      out.add(_characteristicsRow(weapon.characteristics));
+      out.add(const SizedBox(height: 12));
+    }
+
+    if (weapon.keywordTokens.isNotEmpty) {
+      out.add(_sectionLabel(ctx, 'Keywords'));
+      out.add(Text(
+        weapon.keywordTokens.join(', '),
+        style: Theme.of(ctx).textTheme.bodySmall,
+      ));
+      out.add(const SizedBox(height: 12));
+    }
+
+    final rules = weapon.ruleDocRefs
+        .map(bundle.ruleByDocId)
+        .whereType<RuleDoc>()
+        .toList()
+      ..sort((a, b) {
+        final n = a.name.compareTo(b.name);
+        return n != 0 ? n : a.docId.compareTo(b.docId);
+      });
+
+    if (rules.isNotEmpty) {
+      out.add(_sectionLabel(ctx, 'Rules'));
+      for (final rule in rules) {
+        out.add(Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(rule.name, style: Theme.of(ctx).textTheme.titleSmall),
+        ));
+        out.add(Text(rule.description, style: Theme.of(ctx).textTheme.bodySmall));
+        if (rule.page != null) {
+          out.add(Text('Page: ${rule.page}', style: Theme.of(ctx).textTheme.bodySmall));
+        }
+      }
+    }
+  }
+
+  void _addRuleDetail(
+    BuildContext ctx,
+    List<Widget> out,
+    String docId,
+    IndexBundle bundle,
+  ) {
+    final rule = bundle.ruleByDocId(docId);
+    if (rule == null) {
+      out.add(Text('[missing rule: $docId]',
+          style: TextStyle(color: Colors.orange.shade700)));
+      return;
+    }
+
+    out.add(Text(rule.description));
+    if (rule.page != null) {
+      out.add(const SizedBox(height: 8));
+      out.add(Text('Page: ${rule.page}', style: Theme.of(ctx).textTheme.bodySmall));
+    }
+  }
+
+  Widget _characteristicsRow(List<IndexedCharacteristic> chars) {
+    return Wrap(
+      spacing: 12,
+      runSpacing: 4,
+      children: [
+        for (final c in chars)
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                c.name,
+                style: const TextStyle(fontSize: 10, color: Colors.grey),
+              ),
+              Text(
+                c.valueText,
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+      ],
+    );
+  }
+
+  Widget _sectionLabel(BuildContext ctx, String label) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Text(
+        label,
+        style: Theme.of(ctx)
+            .textTheme
+            .titleSmall
+            ?.copyWith(fontWeight: FontWeight.bold),
       ),
     );
   }
