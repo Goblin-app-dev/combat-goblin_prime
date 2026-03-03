@@ -6,7 +6,9 @@ import '../runtime/audio_capture_gateway.dart';
 import '../runtime/audio_focus_gateway.dart';
 import '../runtime/audio_route_observer.dart';
 import '../runtime/mic_permission_gateway.dart';
+import '../runtime/noop_text_to_speech_engine.dart';
 import '../runtime/speech_to_text_engine.dart';
+import '../runtime/text_to_speech_engine.dart';
 import '../runtime/testing/fake_audio_capture_gateway.dart';
 import '../runtime/testing/fake_audio_focus_gateway.dart';
 import '../runtime/testing/fake_audio_route_observer.dart';
@@ -20,6 +22,7 @@ import 'platform_audio_capture_gateway.dart';
 import 'platform_audio_focus_gateway.dart';
 import 'platform_audio_route_observer.dart';
 import 'platform_mic_permission_gateway.dart';
+import 'platform_text_to_speech_engine.dart';
 import 'platform_wake_word_detector.dart';
 
 /// Synchronous factory that creates platform adapters based on the runtime
@@ -54,6 +57,13 @@ final class VoicePlatformFactory {
   AudioCaptureGateway createCaptureGateway() {
     if (_isMobile) return PlatformAudioCaptureGateway();
     return FakeAudioCaptureGateway(allowStart: false);
+  }
+
+  /// Returns [PlatformTextToSpeechEngine] on Android/iOS; [NoopTextToSpeechEngine]
+  /// elsewhere (Web, Desktop).
+  TextToSpeechEngine createTtsEngine() {
+    if (_isMobile) return PlatformTextToSpeechEngine();
+    return NoopTextToSpeechEngine();
   }
 
   SpeechToTextEngine createSttEngine() {

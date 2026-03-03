@@ -15,6 +15,8 @@ import 'package:combat_goblin_prime/voice/models/spoken_response_plan.dart';
 import 'package:combat_goblin_prime/voice/models/text_candidate.dart';
 import 'package:combat_goblin_prime/voice/models/voice_search_response.dart';
 import 'package:combat_goblin_prime/voice/understanding/voice_assistant_coordinator.dart';
+import 'package:combat_goblin_prime/voice/runtime/noop_text_to_speech_engine.dart';
+import 'package:combat_goblin_prime/voice/runtime/spoken_plan_player.dart';
 import 'package:combat_goblin_prime/voice/runtime/testing/fake_audio_focus_gateway.dart';
 import 'package:combat_goblin_prime/voice/runtime/testing/fake_audio_route_observer.dart';
 import 'package:combat_goblin_prime/voice/runtime/testing/fake_mic_permission_gateway.dart';
@@ -48,6 +50,9 @@ class _HomeScreenState extends State<HomeScreen> {
   late VoiceRuntimeController _voiceController;
   StreamSubscription<VoiceRuntimeEvent>? _voiceEventSub;
 
+  // Phase 12E: spoken output player, two-phase init mirrors _voiceController.
+  late SpokenPlanPlayer _spokenPlanPlayer;
+
   /// Guards against duplicate SnackBars per (sessionId, reason) pair.
   final Set<(int, VoiceStopReason)> _shownVoiceErrors = {};
 
@@ -70,6 +75,12 @@ class _HomeScreenState extends State<HomeScreen> {
       routeObserver: FakeAudioRouteObserver(),
     );
     _attachVoiceCallbacks(_voiceController);
+    // Silent until real voice is initialized; Noop (not Fake) keeps production
+    // code free of test-only artifacts.
+    _spokenPlanPlayer = SpokenPlanPlayer(
+      engine: NoopTextToSpeechEngine(),
+      settings: VoiceSettings.defaults,
+    );
     // Upgrade to real platform adapters asynchronously.
     unawaited(_initRealVoice());
   }
@@ -107,6 +118,16 @@ class _HomeScreenState extends State<HomeScreen> {
     _attachVoiceCallbacks(newController);
     _voiceController = newController;
     oldController.dispose();
+
+    // Replace spoken plan player with one backed by the real TTS engine.
+    final oldPlayer = _spokenPlanPlayer;
+    await oldPlayer.stop(); // stop any in-flight audio before swap
+    _spokenPlanPlayer = SpokenPlanPlayer(
+      engine: factory.createTtsEngine(),
+      settings: settings,
+    );
+    oldPlayer.dispose(); // fire-and-forget; stop() already called
+
     if (mounted) setState(() {});
   }
 
@@ -115,6 +136,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _voiceEventSub?.cancel();
     _searchController.dispose();
     _voiceController.dispose();
+    _spokenPlanPlayer.dispose();
     super.dispose();
   }
 
@@ -139,11 +161,21 @@ class _HomeScreenState extends State<HomeScreen> {
       _showSuggestions = false;
       _searchController.text = candidate.text;
     });
+    // Speak the plan. play() handles its own concurrency: any previous
+    // playback is cancelled before the new plan starts.
+    unawaited(_spokenPlanPlayer.play(plan));
   }
 
   /// Shows a one-time SnackBar for voice permission/focus errors.
   void _onVoiceEvent(VoiceRuntimeEvent event) {
     if (!mounted) return;
+
+    // Stop funnel: silence TTS before mic capture begins to prevent echo.
+    if (event is ListeningBegan) {
+      unawaited(_spokenPlanPlayer.stop());
+      return;
+    }
+
     int? sessionId;
     VoiceStopReason? reason;
     if (event is PermissionDenied) {

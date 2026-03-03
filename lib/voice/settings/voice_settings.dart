@@ -26,11 +26,22 @@ final class VoiceSettings {
   /// [VoiceStopReason.captureLimitReached] when this duration is exceeded.
   final int maxCaptureDurationSeconds;
 
+  /// Whether to speak [SpokenResponsePlan] output via TTS. Default: true.
+  ///
+  /// Set to false to silence all TTS output while keeping voice search active.
+  final bool isSpokenOutputEnabled;
+
+  /// Whether to speak the follow-up suggestions after [SpokenResponsePlan.primaryText].
+  /// Default: false (primary text only).
+  final bool speakFollowUps;
+
   const VoiceSettings({
     this.lastMode = VoiceListenMode.pushToTalkSearch,
     this.onlineSttEnabled = false,
     this.wakeWordEnabled = true,
     this.maxCaptureDurationSeconds = 15,
+    this.isSpokenOutputEnabled = true,
+    this.speakFollowUps = false,
   });
 
   static const VoiceSettings defaults = VoiceSettings();
@@ -40,6 +51,8 @@ final class VoiceSettings {
         'onlineSttEnabled': onlineSttEnabled,
         'wakeWordEnabled': wakeWordEnabled,
         'maxCaptureDurationSeconds': maxCaptureDurationSeconds,
+        'isSpokenOutputEnabled': isSpokenOutputEnabled,
+        'speakFollowUps': speakFollowUps,
       };
 
   factory VoiceSettings.fromJson(Map<String, dynamic> json) {
@@ -52,6 +65,8 @@ final class VoiceSettings {
       wakeWordEnabled: json['wakeWordEnabled'] as bool? ?? true,
       maxCaptureDurationSeconds:
           json['maxCaptureDurationSeconds'] as int? ?? 15,
+      isSpokenOutputEnabled: json['isSpokenOutputEnabled'] as bool? ?? true,
+      speakFollowUps: json['speakFollowUps'] as bool? ?? false,
     );
   }
 
@@ -60,6 +75,8 @@ final class VoiceSettings {
     bool? onlineSttEnabled,
     bool? wakeWordEnabled,
     int? maxCaptureDurationSeconds,
+    bool? isSpokenOutputEnabled,
+    bool? speakFollowUps,
   }) {
     return VoiceSettings(
       lastMode: lastMode ?? this.lastMode,
@@ -67,6 +84,9 @@ final class VoiceSettings {
       wakeWordEnabled: wakeWordEnabled ?? this.wakeWordEnabled,
       maxCaptureDurationSeconds:
           maxCaptureDurationSeconds ?? this.maxCaptureDurationSeconds,
+      isSpokenOutputEnabled:
+          isSpokenOutputEnabled ?? this.isSpokenOutputEnabled,
+      speakFollowUps: speakFollowUps ?? this.speakFollowUps,
     );
   }
 }
