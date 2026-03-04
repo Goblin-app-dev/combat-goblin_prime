@@ -77,8 +77,7 @@ String formatAttributeAnswer(
 /// - [_lastSelected]: last entity confirmed via "select".
 ///
 /// The method is `async` for future extensibility (e.g. online STT, async
-/// canonicalization). The current implementation is synchronous internally
-/// except for attribute question handling.
+/// canonicalization). The current implementation is fully synchronous internally.
 final class VoiceAssistantCoordinator {
   final VoiceSearchFacade _searchFacade;
   final VoiceIntentClassifier _classifier;
@@ -87,7 +86,6 @@ final class VoiceAssistantCoordinator {
   VoiceSelectionSession? _session;
   List<SpokenEntity> _lastEntities = const [];
 
-  // ignore: unused_field — reserved for Phase 12E entity detail responses.
   SpokenEntity? _lastSelected;
 
   VoiceAssistantCoordinator({
@@ -126,7 +124,7 @@ final class VoiceAssistantCoordinator {
 
     // --- Attribute question: intercept before normal search path ---
     if (intent is AssistantQuestionIntent) {
-      return await _handleAttributeQuestion(
+      return _handleAttributeQuestion(
         transcript: transcript,
         slotBundles: slotBundles,
         contextHints: contextHints,
@@ -166,11 +164,11 @@ final class VoiceAssistantCoordinator {
   // Private
   // ---------------------------------------------------------------------------
 
-  Future<SpokenResponsePlan> _handleAttributeQuestion({
+  SpokenResponsePlan _handleAttributeQuestion({
     required String transcript,
     required Map<String, IndexBundle> slotBundles,
     required List<String> contextHints,
-  }) async {
+  }) {
     final normalized = _normalizeForParsing(transcript);
 
     // 1. Detect attribute token — multi-word keys checked first (insertion order).
@@ -217,9 +215,7 @@ final class VoiceAssistantCoordinator {
     }
 
     // 4. Search for the entity.
-    // searchText is currently sync; await is intentional for forward-compatibility.
-    // ignore: await_only_futures
-    final response = await _searchFacade.searchText(slotBundles, canonical);
+    final response = _searchFacade.searchText(slotBundles, canonical);
     _lastEntities = response.entities;
 
     if (response.entities.isEmpty) {
