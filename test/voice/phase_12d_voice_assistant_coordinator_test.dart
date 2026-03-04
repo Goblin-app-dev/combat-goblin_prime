@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:combat_goblin_prime/modules/m10_structured_search/m10_structured_search.dart';
+import 'package:combat_goblin_prime/modules/m3_wrap/m3_wrap.dart';
 import 'package:combat_goblin_prime/modules/m9_index/m9_index.dart';
 import 'package:combat_goblin_prime/voice/models/disambiguation_command.dart';
 import 'package:combat_goblin_prime/voice/models/spoken_entity.dart';
@@ -277,7 +278,7 @@ void main() {
       expect(plan.debugSummary, 'unknown-empty');
     });
 
-    test('3.5 Assistant question with 1 result → confirmation plan', () async {
+    test('3.5 Assistant question with unrecognized attribute falls back to search plan', () async {
       final entity = _entity('Intercessor', 'intercessor', 'slot_0');
       final coord = _coordWith([entity]);
       final plan = await coord.handleTranscript(
@@ -285,8 +286,11 @@ void main() {
         slotBundles: _noopBundles,
         contextHints: const [],
       );
-      expect(plan.debugSummary, startsWith('assistant-single:'));
-      expect(plan.primaryText, contains('Phase 12E'));
+      // No recognized attribute → _handleAttributeQuestion falls back to _runSearch.
+      // Fake returns 1 entity → single: plan.
+      expect(plan.debugSummary, startsWith('single:'));
+      expect(plan.primaryText, isNot(contains('Phase 12E')));
+      expect(plan.entities, hasLength(1));
     });
 
     test('3.6 Deterministic: same transcript + same result → same plan', () async {
@@ -483,6 +487,193 @@ void main() {
       expect(plan.entities, hasLength(2));
       expect(plan.entities[0].slotId, 'slot_0');
       expect(plan.entities[1].slotId, 'slot_1');
+    });
+  });
+
+  // =========================================================================
+  // Pure attribute helpers
+  // =========================================================================
+  group('6. Pure attribute helpers — extractAttributeValues + formatAttributeAnswer', () {
+    const nodeRef = NodeRef(0);
+
+    WeaponDoc makeWeapon(
+      String name,
+      String docId,
+      List<IndexedCharacteristic> chars,
+    ) =>
+        WeaponDoc(
+          docId: docId,
+          canonicalKey: name.toLowerCase(),
+          profileId: docId,
+          name: name,
+          characteristics: chars,
+          keywordTokens: const [],
+          ruleDocRefs: const [],
+          sourceFileId: 'test',
+          sourceNode: nodeRef,
+        );
+
+    IndexedCharacteristic char(String name, String value) =>
+        IndexedCharacteristic(name: name, typeId: name.toLowerCase(), valueText: value);
+
+    test('6.1 extractAttributeValues: returns only BS lines', () {
+      final weapons = [
+        makeWeapon('Bolt Rifle', 'weapon:br', [
+          char('BS', '3+'),
+          char('Range', '24"'),
+          char('S', '4'),
+        ]),
+      ];
+      final lines = extractAttributeValues('BS', weapons);
+      expect(lines, [('Bolt Rifle', '3+')]);
+    });
+
+    test('6.2 extractAttributeValues: stable-ordered across two weapons (pre-sorted input)', () {
+      // Caller is responsible for sorting; we pass pre-sorted (Bolt Pistol < Bolt Rifle).
+      final weapons = [
+        makeWeapon('Bolt Pistol', 'weapon:bp', [char('BS', '3+')]),
+        makeWeapon('Bolt Rifle', 'weapon:br', [char('BS', '3+')]),
+      ];
+      final lines = extractAttributeValues('BS', weapons);
+      expect(lines, [('Bolt Pistol', '3+'), ('Bolt Rifle', '3+')]);
+    });
+
+    test('6.3 extractAttributeValues: skips weapons without the attribute', () {
+      final weapons = [
+        makeWeapon('Bolt Rifle', 'weapon:br', [char('BS', '3+')]),
+        makeWeapon('Power Sword', 'weapon:ps', [char('WS', '3+'), char('S', '5')]),
+      ];
+      final lines = extractAttributeValues('BS', weapons);
+      expect(lines, hasLength(1));
+      expect(lines.first.$1, 'Bolt Rifle');
+    });
+
+    test('6.4 extractAttributeValues: empty list when no weapon has the attribute', () {
+      final weapons = [
+        makeWeapon('Power Sword', 'weapon:ps', [char('WS', '3+')]),
+        makeWeapon('Chainsword', 'weapon:cs', [char('WS', '4+')]),
+      ];
+      expect(extractAttributeValues('BS', weapons), isEmpty);
+    });
+
+    test('6.5 formatAttributeAnswer: correct format string', () {
+      final text = formatAttributeAnswer(
+        'Intercessors',
+        'BS',
+        [('Bolt Pistol', '3+'), ('Bolt Rifle', '3+')],
+      );
+      expect(text, 'Intercessors BS — Bolt Pistol: 3+, Bolt Rifle: 3+');
+    });
+
+    test('6.6 formatAttributeAnswer: single weapon', () {
+      final text = formatAttributeAnswer('Scout', 'BS', [('Sniper Rifle', '3+')]);
+      expect(text, 'Scout BS — Sniper Rifle: 3+');
+    });
+
+    test('6.7 Deterministic: same inputs → same output', () {
+      final lines = [('Bolt Rifle', '3+'), ('Bolt Pistol', '3+')];
+      expect(
+        formatAttributeAnswer('Unit A', 'BS', lines),
+        formatAttributeAnswer('Unit A', 'BS', lines),
+      );
+    });
+  });
+
+  // =========================================================================
+  // Coordinator — attribute question routing
+  // =========================================================================
+  group('7. Coordinator — attribute question routing', () {
+    test('7.1 BS question with 1 result → non-placeholder plan (no "Phase 12E")', () async {
+      final entity = _entity('Intercessor', 'intercessor', 'slot_0');
+      final coord = _coordWith([entity]);
+      final plan = await coord.handleTranscript(
+        transcript: 'what is the BS of Intercessors',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.primaryText, isNot(contains('Phase 12E')));
+      // slotBundles is empty → bundle lookup fails gracefully
+      expect(plan.debugSummary, startsWith('attr-'));
+      expect(plan.entities, hasLength(1));
+    });
+
+    test('7.2 BS question, no results → no-results plan', () async {
+      final coord = _coordWith([]);
+      final plan = await coord.handleTranscript(
+        transcript: 'what is the BS of Unknown Unit',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.entities, isEmpty);
+      expect(plan.debugSummary, startsWith('no-results:'));
+    });
+
+    test('7.3 BS question, multiple results → disambiguation plan', () async {
+      final e1 = _entity('Intercessor', 'intercessor', 'slot_0');
+      final e2 = _entity('Intercessor Squad', 'intercessor_squad', 'slot_0');
+      final coord = _coordWith([e1, e2]);
+      final plan = await coord.handleTranscript(
+        transcript: 'what is the BS of Intercessors',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, startsWith('disambiguation:'));
+      expect(plan.followUps, containsAll(['next', 'select', 'cancel']));
+    });
+
+    test('7.4 Unrecognized attribute → falls back to plain search plan', () async {
+      final entity = _entity('Intercessor', 'intercessor', 'slot_0');
+      final coord = _coordWith([entity]);
+      final plan = await coord.handleTranscript(
+        transcript: 'what are the abilities of Intercessors',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      // No attribute recognized → _runSearch → single: plan.
+      expect(plan.debugSummary, startsWith('single:'));
+      expect(plan.entities, hasLength(1));
+    });
+
+    test('7.5 "ballistic skill" synonym recognized same as "bs"', () async {
+      final entity = _entity('Intercessor', 'intercessor', 'slot_0');
+      final coord = _coordWith([entity]);
+      final plan = await coord.handleTranscript(
+        transcript: 'what is the ballistic skill of Intercessors',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      // Recognized synonym → routes through _handleAttributeQuestion → attr- prefix
+      expect(plan.debugSummary, startsWith('attr-'));
+      expect(plan.primaryText, isNot(contains('Phase 12E')));
+    });
+
+    test('7.6 "ballistic" synonym recognized', () async {
+      final entity = _entity('Intercessor', 'intercessor', 'slot_0');
+      final coord = _coordWith([entity]);
+      final plan = await coord.handleTranscript(
+        transcript: 'show me the ballistic of Intercessors',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, startsWith('attr-'));
+    });
+
+    test('7.7 Deterministic: same transcript + same fake → same plan', () async {
+      final entity = _entity('Intercessor', 'intercessor', 'slot_0');
+      final coord1 = _coordWith([entity]);
+      final coord2 = _coordWith([entity]);
+      final plan1 = await coord1.handleTranscript(
+        transcript: 'what is the BS of Intercessors',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      final plan2 = await coord2.handleTranscript(
+        transcript: 'what is the BS of Intercessors',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan1.primaryText, plan2.primaryText);
+      expect(plan1.debugSummary, plan2.debugSummary);
     });
   });
 }
