@@ -22,7 +22,8 @@
       "Bash(curl *)",
       "Bash(chmod *)",
       "Bash(jq *)",
-      "Bash(run *)"
+      "Bash(run *)",
+      "Bash(edit *)"
     ]
   },
   "hooks": {
