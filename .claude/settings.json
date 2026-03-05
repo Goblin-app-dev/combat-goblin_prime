@@ -21,7 +21,8 @@
       "Bash(awk *)",
       "Bash(curl *)",
       "Bash(chmod *)",
-      "Bash(jq *)"
+      "Bash(jq *)",
+      "Bash(run *)"
     ]
   },
   "hooks": {
