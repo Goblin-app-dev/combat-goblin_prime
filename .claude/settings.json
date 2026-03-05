@@ -2,12 +2,26 @@
   "permissions": {
     "allow": [
       "Bash(git *)",
+      "Bash(gh *)",
       "Bash(dart *)",
       "Bash(flutter *)",
       "Bash(cat *)",
       "Bash(ls *)",
       "Bash(find *)",
-      "Bash(grep *)"
+      "Bash(grep *)",
+      "Bash(mkdir *)",
+      "Bash(cp *)",
+      "Bash(mv *)",
+      "Bash(rm *)",
+      "Bash(which *)",
+      "Bash(pwd)",
+      "Bash(echo *)",
+      "Bash(touch *)",
+      "Bash(sed *)",
+      "Bash(awk *)",
+      "Bash(curl *)",
+      "Bash(chmod *)",
+      "Bash(jq *)"
     ]
   },
   "hooks": {
