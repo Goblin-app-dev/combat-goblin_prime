@@ -23,7 +23,15 @@
       "Bash(chmod *)",
       "Bash(jq *)",
       "Bash(run *)",
-      "Bash(edit *)"
+      "Bash(edit *)",
+      "Read",
+      "Edit",
+      "Write",
+      "Glob",
+      "Grep",
+      "TodoWrite",
+      "WebFetch",
+      "WebSearch"
     ]
   },
   "hooks": {
