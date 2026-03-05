@@ -78,6 +78,7 @@ class BindService {
               nodeLookup: nodeLookup,
               fileLookup: fileLookup,
               diagnostics: diagnostics,
+              visited: {},
             );
             if (entry != null) {
               allEntries.add(entry);
@@ -188,6 +189,7 @@ class BindService {
     required Map<(String, int), WrappedNode> nodeLookup,
     required Map<String, WrappedFile> fileLookup,
     required List<BindDiagnostic> diagnostics,
+    required Set<(String, int)> visited,
   }) {
     // Verify eligibility
     if (!_entryTags.contains(node.tagName)) {
@@ -200,6 +202,10 @@ class BindService {
     final name = node.attributes['name'] ?? '';
     final isGroup = node.tagName == 'selectionEntryGroup';
     final isHidden = node.attributes['hidden'] == 'true';
+
+    // Mark as currently on the expansion path (removed after children bound).
+    final visitKey = (file.fileId, node.ref.nodeIndex);
+    visited.add(visitKey);
 
     // Bind children (nested entries + resolved entryLinks)
     final children = <BoundEntry>[];
@@ -220,19 +226,22 @@ class BindService {
           nodeLookup: nodeLookup,
           fileLookup: fileLookup,
           diagnostics: diagnostics,
+          visited: visited,
         );
         if (childEntry != null) {
           children.add(childEntry);
         }
       }
-      // entryLink - resolve and bind target
+      // entryLink - resolve and bind target recursively
       else if (_entryLinkTags.contains(childNode.tagName)) {
         final resolved = _resolveEntryLink(
           linkNode: childNode,
           file: file,
           resolvedRefIndex: resolvedRefIndex,
           nodeLookup: nodeLookup,
+          fileLookup: fileLookup,
           diagnostics: diagnostics,
+          visited: visited,
         );
         if (resolved != null) {
           children.add(resolved);
@@ -307,9 +316,13 @@ class BindService {
           categories: categories,
           costs: costs,
           constraints: constraints,
+          visited: visited,
         );
       }
     }
+
+    // Unmark: allow sibling paths to expand the same target independently.
+    visited.remove(visitKey);
 
     return BoundEntry(
       id: id,
@@ -354,6 +367,7 @@ class BindService {
     required List<BoundCategory> categories,
     required List<BoundCost> costs,
     required List<BoundConstraint> constraints,
+    required Set<(String, int)> visited,
   }) {
     for (final childRef in container.children) {
       final childNode = file.nodes[childRef.nodeIndex];
@@ -366,6 +380,7 @@ class BindService {
           nodeLookup: nodeLookup,
           fileLookup: fileLookup,
           diagnostics: diagnostics,
+          visited: visited,
         );
         if (entry != null) children.add(entry);
       } else if (_entryLinkTags.contains(childNode.tagName)) {
@@ -374,7 +389,9 @@ class BindService {
           file: file,
           resolvedRefIndex: resolvedRefIndex,
           nodeLookup: nodeLookup,
+          fileLookup: fileLookup,
           diagnostics: diagnostics,
+          visited: visited,
         );
         if (entry != null) children.add(entry);
       } else if (_profileTags.contains(childNode.tagName)) {
@@ -412,13 +429,15 @@ class BindService {
     }
   }
 
-  /// Resolves an entryLink to its target entry.
+  /// Resolves an entryLink to its target entry, recursively binding its content.
   BoundEntry? _resolveEntryLink({
     required WrappedNode linkNode,
     required WrappedFile file,
     required Map<(String, int), ResolvedRef> resolvedRefIndex,
     required Map<(String, int), WrappedNode> nodeLookup,
+    required Map<String, WrappedFile> fileLookup,
     required List<BindDiagnostic> diagnostics,
+    required Set<(String, int)> visited,
   }) {
     final resolvedRef = resolvedRefIndex[(file.fileId, linkNode.ref.nodeIndex)];
     if (resolvedRef == null || resolvedRef.targets.isEmpty) {
@@ -474,18 +493,40 @@ class BindService {
       ));
     }
 
-    return BoundEntry(
-      id: selectedNode.attributes['id'] ?? '',
-      name: selectedNode.attributes['name'] ?? '',
-      isGroup: selectedNode.tagName == 'selectionEntryGroup',
-      isHidden: selectedNode.attributes['hidden'] == 'true',
-      children: const [], // Linked entries don't recurse further
-      profiles: const [],
-      categories: const [],
-      costs: const [],
-      constraints: const [],
-      sourceFileId: selectedFileId!,
-      sourceNode: selectedNode.ref,
+    // Cycle guard: if target is already on the current expansion path, truncate.
+    final targetKey = (selectedFileId!, selectedNode.ref.nodeIndex);
+    if (visited.contains(targetKey)) {
+      diagnostics.add(BindDiagnostic(
+        code: BindDiagnosticCode.cycleDetected,
+        message:
+            'entryLink cycle truncated: ${linkNode.attributes['targetId']}',
+        sourceFileId: file.fileId,
+        sourceNode: linkNode.ref,
+        targetId: linkNode.attributes['targetId'],
+      ));
+      return null;
+    }
+
+    final targetFile = fileLookup[selectedFileId];
+    if (targetFile == null) {
+      diagnostics.add(BindDiagnostic(
+        code: BindDiagnosticCode.unresolvedEntryLink,
+        message: 'entryLink target file not found: $selectedFileId',
+        sourceFileId: file.fileId,
+        sourceNode: linkNode.ref,
+        targetId: linkNode.attributes['targetId'],
+      ));
+      return null;
+    }
+
+    return _bindEntry(
+      node: selectedNode,
+      file: targetFile,
+      resolvedRefIndex: resolvedRefIndex,
+      nodeLookup: nodeLookup,
+      fileLookup: fileLookup,
+      diagnostics: diagnostics,
+      visited: visited,
     );
   }
 

@@ -51,4 +51,7 @@ abstract class BindDiagnosticCode {
 
   /// cost references unknown costType.
   static const invalidCostType = 'INVALID_COST_TYPE';
+
+  /// entryLink expansion truncated: target is an ancestor in the current path.
+  static const cycleDetected = 'CYCLE_DETECTED';
 }
