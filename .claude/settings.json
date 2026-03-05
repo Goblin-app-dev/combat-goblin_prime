@@ -22,8 +22,6 @@
       "Bash(curl *)",
       "Bash(chmod *)",
       "Bash(jq *)",
-      "Bash(run *)",
-      "Bash(edit *)",
       "Read",
       "Edit",
       "Write",
