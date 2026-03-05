@@ -214,6 +214,42 @@ void main() {
       }
     });
 
+    test('entryLink expansion: resolved children have non-empty content', () async {
+      final bindService = BindService();
+      final boundBundle =
+          await bindService.bindBundle(linkedBundle: linkedBundle);
+
+      // Count entries whose children came from entryLink expansion.
+      // Before the fix, all entryLink-resolved children had empty profiles and
+      // children (shells). After the fix, at least some should carry profiles.
+      int childrenWithProfiles = 0;
+      int childrenWithChildren = 0;
+      int totalChildren = 0;
+
+      for (final entry in boundBundle.entries) {
+        for (final child in entry.children) {
+          totalChildren++;
+          if (child.profiles.isNotEmpty) childrenWithProfiles++;
+          if (child.children.isNotEmpty) childrenWithChildren++;
+        }
+      }
+
+      print('[M5 TEST] entryLink expansion: total children=$totalChildren');
+      print('[M5 TEST]   children with profiles: $childrenWithProfiles');
+      print('[M5 TEST]   children with children: $childrenWithChildren');
+      print('[M5 TEST]   CYCLE_DETECTED: ${boundBundle.cycleDetectedCount}');
+
+      // At least some resolved children must now have content.
+      // An all-zero result means entryLink expansion is still producing shells.
+      expect(
+        childrenWithProfiles + childrenWithChildren > 0,
+        isTrue,
+        reason: 'entryLink-resolved children must carry profiles or sub-entries '
+            'after M5 fix; got $childrenWithProfiles children with profiles and '
+            '$childrenWithChildren with sub-entries out of $totalChildren total',
+      );
+    });
+
     test('characteristics determinism: same order on repeated bind', () async {
       final bindService = BindService();
       final bundle1 = await bindService.bindBundle(linkedBundle: linkedBundle);

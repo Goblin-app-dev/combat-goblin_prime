@@ -128,6 +128,10 @@ class BoundPackBundle {
       .where((d) => d.code == BindDiagnosticCode.shadowedDefinition)
       .length;
 
+  int get cycleDetectedCount => diagnostics
+      .where((d) => d.code == BindDiagnosticCode.cycleDetected)
+      .length;
+
   // --- Index builders (static to avoid capturing 'this') ---
 
   static Map<String, List<BoundEntry>> _buildEntriesByCategoryIndex(
