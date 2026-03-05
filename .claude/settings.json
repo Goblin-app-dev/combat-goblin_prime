@@ -1,4 +1,15 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "Bash(dart *)",
+      "Bash(flutter *)",
+      "Bash(cat *)",
+      "Bash(ls *)",
+      "Bash(find *)",
+      "Bash(grep *)"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {
