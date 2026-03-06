@@ -41,7 +41,7 @@ class IndexService {
   static const _weaponTypePatterns = {'ranged weapons', 'melee weapons'};
 
   /// Profile type names that indicate ability/rule profiles (case-insensitive).
-  static const _abilityTypeNames = {'abilities'};
+  static const _abilityTypeNames = {'abilities', 'ability'};
 
   /// Characteristic names that typically contain rule descriptions.
   static const _descriptionCharNames = {'description', 'effect', 'ability'};
@@ -438,11 +438,9 @@ class IndexService {
               ))
           .toList();
 
-      // Build keyword tokens from categories
+      // Build keyword tokens from categories across full entry subtree
       final keywordTokens = <String>{};
-      for (final category in entry.categories) {
-        keywordTokens.addAll(tokenize(category.name));
-      }
+      _collectCategoryKeywords(entry, keywordTokens);
       final sortedKeywords = keywordTokens.toList()..sort();
 
       // Build category tokens
@@ -474,7 +472,7 @@ class IndexService {
         ..sort((a, b) => a.typeId.compareTo(b.typeId));
 
       // Create UnitDoc
-      unitDocs.add(UnitDoc(
+      final unitDoc = UnitDoc(
         docId: docId,
         canonicalKey: canonicalKey,
         entryId: entry.id,
@@ -487,7 +485,19 @@ class IndexService {
         costs: costs,
         sourceFileId: entry.sourceFileId,
         sourceNode: entry.sourceNode,
-      ));
+      );
+
+      // Step 0 debug probe — remove once counts are verified
+      assert(() {
+        // ignore: avoid_print
+        print('[M9 probe] ${unitDoc.name}: '
+            'rules=${unitDoc.ruleDocRefs.length} '
+            'keywords=${unitDoc.keywordTokens.length} '
+            'weapons=${unitDoc.weaponDocRefs.length}');
+        return true;
+      }());
+
+      unitDocs.add(unitDoc);
     }
 
     return unitDocs;
@@ -591,7 +601,7 @@ class IndexService {
   }
 
   bool _isAbilityProfile(BoundProfile profile) {
-    final typeName = (profile.typeName ?? '').toLowerCase();
+    final typeName = (profile.typeName ?? '').trim().toLowerCase();
     return _abilityTypeNames.contains(typeName);
   }
 
@@ -620,6 +630,23 @@ class IndexService {
   }
 
   // --- Private: Ref Collection ---
+
+  /// Recursively collects keyword tokens from categories across entry subtree.
+  void _collectCategoryKeywords(
+    BoundEntry entry,
+    Set<String> keywords,
+  ) {
+    for (final category in entry.categories) {
+      final name = category.name.trim();
+      if (name.isNotEmpty) {
+        keywords.addAll(tokenize(name));
+      }
+    }
+
+    for (final child in entry.children) {
+      _collectCategoryKeywords(child, keywords);
+    }
+  }
 
   /// Recursively collects weapon refs from entry and children.
   void _collectWeaponRefs(
