@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:combat_goblin_prime/ui/downloads/faction_picker_screen.dart';
+import 'package:combat_goblin_prime/ui/downloads/github_catalog_picker_screen.dart';
 import 'package:combat_goblin_prime/ui/import/import_session_controller.dart';
 import 'package:combat_goblin_prime/ui/import/import_session_provider.dart';
 
@@ -165,6 +166,19 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     );
   }
 
+  /// Opens [GitHubCatalogPickerScreen] and applies the chosen repository URL.
+  Future<void> _openCatalogPicker() async {
+    final url = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => const GitHubCatalogPickerScreen(),
+      ),
+    );
+    if (url == null || !mounted) return;
+    _urlController.text = url;
+    setState(() => _editingUrl = false);
+    await _fetchTree();
+  }
+
   /// Navigates to [FactionPickerScreen] for the given slot.
   Future<void> _openFactionPicker(int slot) async {
     final locator = _buildLocator();
@@ -214,6 +228,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
               error: _treeFetchError,
               editing: _editingUrl,
               onChangeRequested: () => setState(() => _editingUrl = true),
+              onBrowse: _openCatalogPicker,
               onFetch: _fetchTree,
             ),
             const SizedBox(height: 12),
@@ -301,6 +316,9 @@ class _RepoUrlSection extends StatelessWidget {
   final String? error;
   final bool editing;
   final VoidCallback onChangeRequested;
+
+  /// Opens the [GitHubCatalogPickerScreen] to search and pick a repository.
+  final VoidCallback onBrowse;
   final VoidCallback onFetch;
 
   const _RepoUrlSection({
@@ -309,6 +327,7 @@ class _RepoUrlSection extends StatelessWidget {
     this.error,
     required this.editing,
     required this.onChangeRequested,
+    required this.onBrowse,
     required this.onFetch,
   });
 
@@ -384,6 +403,12 @@ class _RepoUrlSection extends StatelessWidget {
               OutlinedButton(
                 onPressed: fetching ? null : onChangeRequested,
                 child: const Text('Change'),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: fetching ? null : onBrowse,
+                icon: const Icon(Icons.search, size: 16),
+                label: const Text('Browse'),
               ),
             ],
           ),

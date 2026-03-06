@@ -29,5 +29,37 @@ void main() {
       expect(builder.build(query),
           'archived:false language:dart topic:flutter "Café \\\"toolkit\\\":flutter"');
     });
+
+    group('bsdataDiscovery mode', () {
+      test('builds canonical BSData query when no text provided', () {
+        const query = RepoSearchQuery(mode: RepoSearchMode.bsdataDiscovery);
+        expect(builder.build(query), 'topic:battlescribe archived:false');
+      });
+
+      test('appends free-text term to BSData qualifiers', () {
+        const query = RepoSearchQuery(
+          text: 'wh40k',
+          mode: RepoSearchMode.bsdataDiscovery,
+        );
+        expect(builder.build(query),
+            'archived:false topic:battlescribe wh40k');
+      });
+
+      test('quotes free-text with spaces in BSData mode', () {
+        const query = RepoSearchQuery(
+          text: 'warhammer 40k',
+          mode: RepoSearchMode.bsdataDiscovery,
+        );
+        expect(builder.build(query),
+            'archived:false topic:battlescribe "warhammer 40k"');
+      });
+
+      test('canonical BSData constant matches build output', () {
+        expect(
+          GitHubQueryBuilder.canonicalBsdataQuery,
+          'topic:battlescribe archived:false',
+        );
+      });
+    });
   });
 }
