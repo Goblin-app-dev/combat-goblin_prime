@@ -2,7 +2,7 @@ enum RepoSearchSort { stars, updated }
 
 enum SortOrder { desc, asc }
 
-enum RepoSearchMode { flutterDiscovery, exactName }
+enum RepoSearchMode { flutterDiscovery, exactName, bsdataDiscovery }
 
 class RepoSearchQuery {
   const RepoSearchQuery({

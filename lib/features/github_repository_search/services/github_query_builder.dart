@@ -6,6 +6,11 @@ class GitHubQueryBuilder {
   static const String canonicalFlutterFallbackQuery =
       'flutter in:name,description,readme language:dart archived:false';
 
+  /// Canonical BSData catalog discovery query — finds BattleScribe game-data
+  /// repositories tagged with the standard BSData topic.
+  static const String canonicalBsdataQuery =
+      'topic:battlescribe archived:false';
+
   String build(RepoSearchQuery query) {
     if (query.mode == RepoSearchMode.flutterDiscovery &&
         (query.text == null || query.text!.trim().isEmpty)) {
@@ -14,9 +19,20 @@ class GitHubQueryBuilder {
           : canonicalFlutterQuery;
     }
 
+    if (query.mode == RepoSearchMode.bsdataDiscovery &&
+        (query.text == null || query.text!.trim().isEmpty)) {
+      return canonicalBsdataQuery;
+    }
+
     final parts = <String>[];
     if (query.mode == RepoSearchMode.flutterDiscovery) {
       parts.addAll(<String>['archived:false', 'language:dart', 'topic:flutter']);
+      final escaped = _escapeFreeText(query.text);
+      if (escaped != null) {
+        parts.add(escaped);
+      }
+    } else if (query.mode == RepoSearchMode.bsdataDiscovery) {
+      parts.addAll(<String>['archived:false', 'topic:battlescribe']);
       final escaped = _escapeFreeText(query.text);
       if (escaped != null) {
         parts.add(escaped);
