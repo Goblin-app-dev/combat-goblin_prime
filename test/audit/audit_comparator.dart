@@ -1,0 +1,605 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'unit_dump_exporter.dart';
+
+// ---------------------------------------------------------------------------
+// Error classes (as specified in audit brief)
+// ---------------------------------------------------------------------------
+
+enum AuditErrorClass {
+  /// A. Unit identity errors
+  unitIdentity,
+
+  /// B. Core stats errors
+  coreStats,
+
+  /// C. Weapon errors
+  weapons,
+
+  /// D. Rules / abilities errors
+  rules,
+
+  /// E. Keyword errors (includes fragmentation bug)
+  keywords,
+
+  /// F. Cost errors
+  costs,
+
+  /// G. Formatting / presentation
+  formatting,
+}
+
+enum AuditErrorSeverity { critical, major, minor, info }
+
+enum AuditPipelineStage {
+  m5Bind,
+  m9Index,
+  qaAssembly,
+  uiPresentation,
+  unknown,
+}
+
+enum AuditMismatchKind {
+  // Identity
+  wrongName,
+  wrongVariantSelected,
+
+  // Stats
+  missingStat,
+  wrongStatValue,
+
+  // Weapons
+  missingWeapon,
+  extraWeapon,
+  wrongWeaponStat,
+  wrongWeaponKeyword,
+
+  // Rules
+  missingRule,
+  extraRule,
+  wrongRuleDescription,
+  truncatedDescription,
+
+  // Keywords
+  missingKeyword,
+  extraKeyword,
+  keywordFragmented, // multi-word phrase split into tokens
+  weaponWordsPollutingKeywords,
+
+  // Costs
+  missingPoints,
+  wrongPoints,
+  extraCostFields,
+
+  // Formatting
+  wrongDisplayOrder,
+  debugJunkVisible,
+}
+
+// ---------------------------------------------------------------------------
+// Ground truth model (loaded from JSON)
+// ---------------------------------------------------------------------------
+
+class WeaponGroundTruth {
+  final String name;
+  final Map<String, String> stats;
+  final List<String> keywords;
+
+  const WeaponGroundTruth({
+    required this.name,
+    required this.stats,
+    required this.keywords,
+  });
+
+  factory WeaponGroundTruth.fromJson(Map<String, dynamic> json) =>
+      WeaponGroundTruth(
+        name: json['name'] as String,
+        stats: Map<String, String>.from(json['stats'] as Map),
+        keywords: List<String>.from(json['keywords'] as List),
+      );
+}
+
+class RuleGroundTruth {
+  final String name;
+  final String? descriptionSubstring; // partial match is OK
+
+  const RuleGroundTruth({required this.name, this.descriptionSubstring});
+
+  factory RuleGroundTruth.fromJson(Map<String, dynamic> json) =>
+      RuleGroundTruth(
+        name: json['name'] as String,
+        descriptionSubstring: json['descriptionSubstring'] as String?,
+      );
+}
+
+class UnitGroundTruth {
+  final String unitName;
+  final String source; // e.g. "Wahapedia 2026-03-08"
+  final Map<String, String> expectedStats;
+  final int? expectedPoints; // null = not checked
+  final List<String> expectedKeywords; // full keyword names, uppercase
+  final List<WeaponGroundTruth> expectedWeapons;
+  final List<RuleGroundTruth> expectedRules;
+  final List<String> notes;
+
+  const UnitGroundTruth({
+    required this.unitName,
+    required this.source,
+    required this.expectedStats,
+    this.expectedPoints,
+    required this.expectedKeywords,
+    required this.expectedWeapons,
+    required this.expectedRules,
+    this.notes = const [],
+  });
+
+  factory UnitGroundTruth.fromJson(Map<String, dynamic> json) =>
+      UnitGroundTruth(
+        unitName: json['unitName'] as String,
+        source: json['source'] as String,
+        expectedStats: Map<String, String>.from(json['expectedStats'] as Map),
+        expectedPoints: json['expectedPoints'] as int?,
+        expectedKeywords: List<String>.from(json['expectedKeywords'] as List),
+        expectedWeapons: (json['expectedWeapons'] as List)
+            .map((e) => WeaponGroundTruth.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        expectedRules: (json['expectedRules'] as List)
+            .map((e) => RuleGroundTruth.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        notes: List<String>.from(json['notes'] as List? ?? []),
+      );
+
+  static UnitGroundTruth? loadFromFile(String path) {
+    final file = File(path);
+    if (!file.existsSync()) return null;
+    final json = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+    return UnitGroundTruth.fromJson(json);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Mismatch record
+// ---------------------------------------------------------------------------
+
+class AuditMismatch {
+  final String unit;
+  final String section;
+  final String expected;
+  final String observed;
+  final AuditErrorClass errorClass;
+  final AuditMismatchKind kind;
+  final AuditErrorSeverity severity;
+  final AuditPipelineStage likelyStage;
+  final String notes;
+
+  const AuditMismatch({
+    required this.unit,
+    required this.section,
+    required this.expected,
+    required this.observed,
+    required this.errorClass,
+    required this.kind,
+    required this.severity,
+    required this.likelyStage,
+    this.notes = '',
+  });
+
+  Map<String, String> toRow() => {
+        'Unit': unit,
+        'Section': section,
+        'Expected': expected,
+        'Observed': observed,
+        'ErrorClass': errorClass.name,
+        'Kind': kind.name,
+        'Severity': severity.name,
+        'LikelyStage': likelyStage.name,
+        'Notes': notes,
+      };
+}
+
+// ---------------------------------------------------------------------------
+// Comparator: diffs dump against ground truth, classifies mismatches
+// ---------------------------------------------------------------------------
+
+class AuditComparator {
+  List<AuditMismatch> compare(
+    UnitAuditDump dump,
+    UnitGroundTruth truth,
+  ) {
+    final mismatches = <AuditMismatch>[];
+
+    _compareStats(dump, truth, mismatches);
+    _compareCosts(dump, truth, mismatches);
+    _compareKeywords(dump, truth, mismatches);
+    _compareWeapons(dump, truth, mismatches);
+    _compareRules(dump, truth, mismatches);
+
+    return mismatches;
+  }
+
+  void _compareStats(
+    UnitAuditDump dump,
+    UnitGroundTruth truth,
+    List<AuditMismatch> out,
+  ) {
+    for (final entry in truth.expectedStats.entries) {
+      final statName = entry.key;
+      final expectedValue = entry.value;
+      final observedValue = dump.characteristics[statName];
+
+      if (observedValue == null) {
+        out.add(AuditMismatch(
+          unit: dump.name,
+          section: 'Stats',
+          expected: '$statName = $expectedValue',
+          observed: 'MISSING',
+          errorClass: AuditErrorClass.coreStats,
+          kind: AuditMismatchKind.missingStat,
+          severity: AuditErrorSeverity.critical,
+          likelyStage: AuditPipelineStage.m9Index,
+        ));
+      } else if (observedValue.trim() != expectedValue.trim()) {
+        out.add(AuditMismatch(
+          unit: dump.name,
+          section: 'Stats',
+          expected: '$statName = $expectedValue',
+          observed: '$statName = $observedValue',
+          errorClass: AuditErrorClass.coreStats,
+          kind: AuditMismatchKind.wrongStatValue,
+          severity: AuditErrorSeverity.major,
+          likelyStage: AuditPipelineStage.m9Index,
+        ));
+      }
+    }
+  }
+
+  void _compareCosts(
+    UnitAuditDump dump,
+    UnitGroundTruth truth,
+    List<AuditMismatch> out,
+  ) {
+    if (truth.expectedPoints == null) return;
+
+    // Find a pts-like cost entry
+    final ptsCost = dump.costs.where((c) {
+      final name = (c['typeName'] as String).toLowerCase();
+      return name.contains('pt') || name.contains('point');
+    }).firstOrNull;
+
+    if (ptsCost == null) {
+      out.add(AuditMismatch(
+        unit: dump.name,
+        section: 'Costs',
+        expected: '${truth.expectedPoints} pts',
+        observed: 'NO PTS COST FOUND (costs: ${dump.costs.map((c) => c['typeName']).join(', ')})',
+        errorClass: AuditErrorClass.costs,
+        kind: AuditMismatchKind.missingPoints,
+        severity: AuditErrorSeverity.critical,
+        likelyStage: AuditPipelineStage.m9Index,
+      ));
+      return;
+    }
+
+    final observedPts = ptsCost['value'];
+    if (observedPts.toString() != truth.expectedPoints.toString()) {
+      out.add(AuditMismatch(
+        unit: dump.name,
+        section: 'Costs',
+        expected: '${truth.expectedPoints}',
+        observed: '$observedPts',
+        errorClass: AuditErrorClass.costs,
+        kind: AuditMismatchKind.wrongPoints,
+        severity: AuditErrorSeverity.major,
+        likelyStage: AuditPipelineStage.m9Index,
+      ));
+    }
+
+    // Flag non-pts cost fields as potential pollution
+    if (dump.costs.length > 1) {
+      final extraFields =
+          dump.costs.where((c) => c != ptsCost).map((c) => c['typeName']).join(', ');
+      out.add(AuditMismatch(
+        unit: dump.name,
+        section: 'Costs',
+        expected: 'only pts cost',
+        observed: 'extra cost fields: $extraFields',
+        errorClass: AuditErrorClass.costs,
+        kind: AuditMismatchKind.extraCostFields,
+        severity: AuditErrorSeverity.minor,
+        likelyStage: AuditPipelineStage.uiPresentation,
+        notes: 'Policy decision: should extra cost fields be shown?',
+      ));
+    }
+  }
+
+  void _compareKeywords(
+    UnitAuditDump dump,
+    UnitGroundTruth truth,
+    List<AuditMismatch> out,
+  ) {
+    // Normalize expected keywords to lowercase for comparison
+    final expectedNormalized =
+        truth.expectedKeywords.map((k) => k.toLowerCase()).toSet();
+    final observedCategoryTokens = dump.categoryTokens.toSet();
+    final observedKeywordTokens = dump.keywordTokens.toSet();
+
+    // Check each expected keyword
+    for (final expected in expectedNormalized) {
+      final normalizedExpected = expected.replaceAll(RegExp(r'[^a-z0-9\s]'), '').trim();
+
+      if (observedCategoryTokens.contains(normalizedExpected)) {
+        // Correct: full phrase preserved in categoryTokens
+        continue;
+      }
+
+      // Check if it appears fragmented in keywordTokens
+      final words = normalizedExpected.split(' ').where((w) => w.isNotEmpty).toList();
+      final allFragmentsPresent = words.every((w) => observedKeywordTokens.contains(w));
+
+      if (allFragmentsPresent && words.length > 1) {
+        // Classic E-class fragmentation bug
+        out.add(AuditMismatch(
+          unit: dump.name,
+          section: 'Keywords',
+          expected: '"${truth.expectedKeywords.firstWhere((k) => k.toLowerCase() == expected)}"',
+          observed:
+              'fragmented as: ${words.map((w) => '"$w"').join(', ')} in keywordTokens; MISSING as phrase in categoryTokens',
+          errorClass: AuditErrorClass.keywords,
+          kind: AuditMismatchKind.keywordFragmented,
+          severity: AuditErrorSeverity.major,
+          likelyStage: AuditPipelineStage.m9Index,
+          notes:
+              'Bug in _collectCategoryKeywords: tokenize(name) splits multi-word categories. '
+                  'Fix: store normalize(name) as the keyword phrase, not tokenize(name).',
+        ));
+      } else if (!allFragmentsPresent) {
+        // Completely missing
+        out.add(AuditMismatch(
+          unit: dump.name,
+          section: 'Keywords',
+          expected: '"${truth.expectedKeywords.firstWhere((k) => k.toLowerCase() == expected)}"',
+          observed: 'MISSING from both categoryTokens and keywordTokens',
+          errorClass: AuditErrorClass.keywords,
+          kind: AuditMismatchKind.missingKeyword,
+          severity: AuditErrorSeverity.major,
+          likelyStage: AuditPipelineStage.m5Bind,
+        ));
+      }
+    }
+
+    // Check for unexpected single-word tokens that are weapon words polluting keywords
+    // (e.g. "ranged", "melee", "weapon", "attacks", "extra")
+    const weaponPollutionWords = {
+      'ranged', 'melee', 'weapon', 'weapons', 'attacks', 'extra',
+      'profile', 'profiles',
+    };
+    final polluters = observedKeywordTokens
+        .intersection(weaponPollutionWords)
+        .where((t) => !expectedNormalized.any((e) => e.contains(t)));
+
+    for (final polluter in polluters.toList()..sort()) {
+      out.add(AuditMismatch(
+        unit: dump.name,
+        section: 'Keywords',
+        expected: 'NOT in keywords',
+        observed: '"$polluter" present in keywordTokens',
+        errorClass: AuditErrorClass.keywords,
+        kind: AuditMismatchKind.weaponWordsPollutingKeywords,
+        severity: AuditErrorSeverity.minor,
+        likelyStage: AuditPipelineStage.m9Index,
+        notes:
+            'Weapon-related words leaking into unit keyword tokens via category tokenization.',
+      ));
+    }
+  }
+
+  void _compareWeapons(
+    UnitAuditDump dump,
+    UnitGroundTruth truth,
+    List<AuditMismatch> out,
+  ) {
+    final observedByName = <String, WeaponStatDump>{};
+    for (final w in dump.weapons) {
+      observedByName[w.name.toLowerCase()] = w;
+    }
+
+    for (final expected in truth.expectedWeapons) {
+      final key = expected.name.toLowerCase();
+      final observed = observedByName[key];
+
+      if (observed == null) {
+        out.add(AuditMismatch(
+          unit: dump.name,
+          section: 'Weapons',
+          expected: expected.name,
+          observed: 'MISSING',
+          errorClass: AuditErrorClass.weapons,
+          kind: AuditMismatchKind.missingWeapon,
+          severity: AuditErrorSeverity.critical,
+          likelyStage: AuditPipelineStage.m9Index,
+        ));
+        continue;
+      }
+
+      // Compare stats
+      for (final statEntry in expected.stats.entries) {
+        final expectedVal = statEntry.value.trim();
+        final observedVal = observed.stats[statEntry.key]?.trim();
+        if (observedVal == null) {
+          out.add(AuditMismatch(
+            unit: dump.name,
+            section: 'Weapons / ${expected.name}',
+            expected: '${statEntry.key} = $expectedVal',
+            observed: 'MISSING',
+            errorClass: AuditErrorClass.weapons,
+            kind: AuditMismatchKind.wrongWeaponStat,
+            severity: AuditErrorSeverity.major,
+            likelyStage: AuditPipelineStage.m9Index,
+          ));
+        } else if (observedVal != expectedVal) {
+          out.add(AuditMismatch(
+            unit: dump.name,
+            section: 'Weapons / ${expected.name}',
+            expected: '${statEntry.key} = $expectedVal',
+            observed: '${statEntry.key} = $observedVal',
+            errorClass: AuditErrorClass.weapons,
+            kind: AuditMismatchKind.wrongWeaponStat,
+            severity: AuditErrorSeverity.major,
+            likelyStage: AuditPipelineStage.m9Index,
+          ));
+        }
+      }
+    }
+
+    // Check for extra weapons not in ground truth
+    final expectedNames =
+        truth.expectedWeapons.map((w) => w.name.toLowerCase()).toSet();
+    for (final observed in dump.weapons) {
+      if (!expectedNames.contains(observed.name.toLowerCase())) {
+        out.add(AuditMismatch(
+          unit: dump.name,
+          section: 'Weapons',
+          expected: 'NOT present',
+          observed: '"${observed.name}" (${observed.docId})',
+          errorClass: AuditErrorClass.weapons,
+          kind: AuditMismatchKind.extraWeapon,
+          severity: AuditErrorSeverity.minor,
+          likelyStage: AuditPipelineStage.m9Index,
+          notes:
+              'May be a valid option weapon or entryLink-expanded item. '
+                  'Policy decision: show all possible vs equipped only.',
+        ));
+      }
+    }
+  }
+
+  void _compareRules(
+    UnitAuditDump dump,
+    UnitGroundTruth truth,
+    List<AuditMismatch> out,
+  ) {
+    final observedByName = <String, RuleDump>{};
+    for (final r in dump.rules) {
+      observedByName[r.name.toLowerCase()] = r;
+    }
+
+    for (final expected in truth.expectedRules) {
+      final key = expected.name.toLowerCase();
+      final observed = observedByName[key];
+
+      if (observed == null) {
+        out.add(AuditMismatch(
+          unit: dump.name,
+          section: 'Rules',
+          expected: expected.name,
+          observed: 'MISSING',
+          errorClass: AuditErrorClass.rules,
+          kind: AuditMismatchKind.missingRule,
+          severity: AuditErrorSeverity.major,
+          likelyStage: AuditPipelineStage.m9Index,
+        ));
+        continue;
+      }
+
+      // Check description substring if provided
+      final subst = expected.descriptionSubstring;
+      if (subst != null &&
+          !observed.description.toLowerCase().contains(subst.toLowerCase())) {
+        out.add(AuditMismatch(
+          unit: dump.name,
+          section: 'Rules / ${expected.name}',
+          expected: 'description contains "$subst"',
+          observed: observed.description.length > 100
+              ? '${observed.description.substring(0, 100)}...'
+              : observed.description,
+          errorClass: AuditErrorClass.rules,
+          kind: AuditMismatchKind.wrongRuleDescription,
+          severity: AuditErrorSeverity.major,
+          likelyStage: AuditPipelineStage.m9Index,
+        ));
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Report formatting
+  // ---------------------------------------------------------------------------
+
+  /// Renders the mismatch list as a human-readable comparison table.
+  String renderTable(List<AuditMismatch> mismatches) {
+    if (mismatches.isEmpty) {
+      return '✓ No mismatches detected against ground truth.\n';
+    }
+
+    final buf = StringBuffer();
+    buf.writeln('AUDIT COMPARISON TABLE');
+    buf.writeln('=' * 120);
+
+    // Group by error class
+    final byClass = <AuditErrorClass, List<AuditMismatch>>{};
+    for (final m in mismatches) {
+      byClass.putIfAbsent(m.errorClass, () => []).add(m);
+    }
+
+    for (final cls in AuditErrorClass.values) {
+      final group = byClass[cls];
+      if (group == null || group.isEmpty) continue;
+
+      buf.writeln();
+      buf.writeln('--- ${cls.name.toUpperCase()} (${group.length} issues) ---');
+
+      for (final m in group) {
+        buf.writeln('  [${m.severity.name.toUpperCase()}] ${m.kind.name}');
+        buf.writeln('    Unit    : ${m.unit}');
+        buf.writeln('    Section : ${m.section}');
+        buf.writeln('    Expected: ${m.expected}');
+        buf.writeln('    Observed: ${m.observed}');
+        buf.writeln('    Stage   : ${m.likelyStage.name}');
+        if (m.notes.isNotEmpty) {
+          buf.writeln('    Notes   : ${m.notes}');
+        }
+        buf.writeln();
+      }
+    }
+
+    buf.writeln('=' * 120);
+    buf.writeln('SUMMARY: ${mismatches.length} total mismatches');
+
+    final bySeverity = <AuditErrorSeverity, int>{};
+    for (final m in mismatches) {
+      bySeverity[m.severity] = (bySeverity[m.severity] ?? 0) + 1;
+    }
+    for (final sev in AuditErrorSeverity.values) {
+      final count = bySeverity[sev] ?? 0;
+      if (count > 0) buf.writeln('  ${sev.name}: $count');
+    }
+
+    return buf.toString();
+  }
+
+  /// Renders a pattern summary (group mismatches by kind across all units).
+  String renderPatternSummary(List<AuditMismatch> mismatches) {
+    final byKind = <AuditMismatchKind, List<AuditMismatch>>{};
+    for (final m in mismatches) {
+      byKind.putIfAbsent(m.kind, () => []).add(m);
+    }
+
+    final buf = StringBuffer();
+    buf.writeln('SYSTEMIC PATTERN SUMMARY');
+    buf.writeln('=' * 80);
+    buf.writeln('(Sorted by frequency — fix highest-count patterns first)');
+    buf.writeln();
+
+    final sorted = byKind.entries.toList()
+      ..sort((a, b) => b.value.length.compareTo(a.value.length));
+
+    for (final entry in sorted) {
+      buf.writeln('  ${entry.key.name}: ${entry.value.length} instance(s)');
+      final units = entry.value.map((m) => m.unit).toSet().join(', ');
+      buf.writeln('    Units affected: $units');
+    }
+
+    return buf.toString();
+  }
+}
