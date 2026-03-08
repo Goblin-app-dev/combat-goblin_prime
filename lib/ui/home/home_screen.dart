@@ -61,12 +61,24 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Phase 12D: structured plan from the voice coordinator.
   SpokenResponsePlan? _voicePlan;
 
-  List<String> _suggestions = [];
-  bool _showSuggestions = false;
+  // Typeahead suggestion state — rendered via ValueListenableBuilder to avoid
+  // full-screen rebuilds on every keystroke.
+  late final ValueNotifier<({List<String> items, bool show})> _suggestionsNotifier;
+
+  // 300 ms debounce timer for typeahead computation.
+  Timer? _debounceTimer;
+
+  // Suggestion cache: normalized_query|sorted_packIds -> suggestions.
+  final Map<String, List<String>> _suggestionCache = {};
+
+  // Stale-result guard: tracks the cache key for the most recent in-flight query.
+  // Before publishing, the timer callback checks that its key still matches.
+  String _latestQueryKey = '';
 
   @override
   void initState() {
     super.initState();
+    _suggestionsNotifier = ValueNotifier((items: const [], show: false));
     _coordinator = VoiceAssistantCoordinator(searchFacade: _facade);
     // Synchronous bootstrap with fakes so the widget is immediately usable.
     _voiceController = VoiceRuntimeController(
@@ -133,8 +145,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     _voiceEventSub?.cancel();
     _searchController.dispose();
+    _suggestionsNotifier.dispose();
     _voiceController.dispose();
     _spokenPlanPlayer.dispose();
     super.dispose();
@@ -155,10 +169,10 @@ class _HomeScreenState extends State<HomeScreen> {
       contextHints: _buildContextHints(sessionController),
     );
     if (!mounted) return;
+    _suggestionsNotifier.value = (items: const [], show: false);
     setState(() {
       _voicePlan = plan;
       _voiceResult = null;
-      _showSuggestions = false;
       _searchController.text = candidate.text;
     });
     // Speak the plan. play() handles its own concurrency: any previous
@@ -240,30 +254,61 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _onChanged(String query) {
+    _debounceTimer?.cancel();
+
+    final normalized = query.trim().toLowerCase();
     final controller = ImportSessionProvider.of(context);
     final bundles = _activeBundles(controller);
-    if (query.isEmpty || bundles.isEmpty) {
-      setState(() {
-        _suggestions = [];
-        _showSuggestions = false;
-      });
+
+    // Clear immediately for short/empty queries — no need to debounce.
+    if (normalized.length < 2 || bundles.isEmpty) {
+      _latestQueryKey = '';
+      _suggestionsNotifier.value = (items: const [], show: false);
       return;
     }
-    final suggestions = _facade.suggest(bundles, query, limit: 8);
-    setState(() {
-      _suggestions = suggestions;
-      _showSuggestions = suggestions.isNotEmpty;
+
+    // Build a deterministic cache key: normalized query + stable-sorted packIds.
+    final bundleKey = (bundles.keys.toList()..sort()).join(',');
+    final cacheKey = '$normalized|$bundleKey';
+    _latestQueryKey = cacheKey;
+
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      // Stale-result guard: discard if a newer query has taken over.
+      if (_latestQueryKey != cacheKey) return;
+
+      if (!_suggestionCache.containsKey(cacheKey)) {
+        // Re-read bundles at callback time; they may have changed (e.g. a new
+        // catalog finished loading). The cache key already encodes the pack set
+        // that was current when the user typed, so a mismatch just means we
+        // compute fresh without poisoning the cache for the new pack set.
+        final freshController = ImportSessionProvider.of(context);
+        final freshBundles = _activeBundles(freshController);
+        _suggestionCache[cacheKey] = _facade.suggest(freshBundles, normalized, limit: 8);
+      }
+
+      // Stale guard is still valid: suggest() is synchronous so _latestQueryKey
+      // cannot have changed, but being explicit is correct discipline.
+      if (_latestQueryKey != cacheKey) return;
+
+      final suggestions = _suggestionCache[cacheKey]!;
+      _suggestionsNotifier.value = (items: suggestions, show: suggestions.isNotEmpty);
     });
   }
 
   void _search(String query) {
+    // Cancel any pending debounce so a typeahead result cannot arrive after
+    // the explicit submission and overwrite the cleared suggestion list.
+    _debounceTimer?.cancel();
+    _latestQueryKey = '';
+    _suggestionsNotifier.value = (items: const [], show: false);
+
     final controller = ImportSessionProvider.of(context);
     final bundles = _activeBundles(controller);
     if (query.isEmpty || bundles.isEmpty) {
       setState(() {
         _voiceResult = null;
         _voicePlan = null;
-        _showSuggestions = false;
       });
       return;
     }
@@ -280,7 +325,6 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _voicePlan = plan;
         _voiceResult = null;
-        _showSuggestions = false;
       });
     }());
   }
@@ -650,23 +694,32 @@ class _HomeScreenState extends State<HomeScreen> {
                     onSubmitted: _search,
                     textInputAction: TextInputAction.search,
                   ),
-                  if (_showSuggestions && _suggestions.isNotEmpty)
-                    Material(
-                      elevation: 4,
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: _suggestions.length,
-                        itemBuilder: (context, index) {
-                          return ListTile(
-                            leading: const Icon(Icons.history, size: 18),
-                            title: Text(_suggestions[index]),
-                            dense: true,
-                            onTap: () =>
-                                _selectSuggestion(_suggestions[index]),
-                          );
-                        },
-                      ),
-                    ),
+                  // ValueListenableBuilder keeps suggestion updates isolated:
+                  // only this subtree rebuilds on each typeahead change.
+                  ValueListenableBuilder<({List<String> items, bool show})>(
+                    valueListenable: _suggestionsNotifier,
+                    builder: (context, suggestions, _) {
+                      if (!suggestions.show || suggestions.items.isEmpty) {
+                        return const SizedBox.shrink();
+                      }
+                      return Material(
+                        elevation: 4,
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: suggestions.items.length,
+                          itemBuilder: (context, index) {
+                            return ListTile(
+                              leading: const Icon(Icons.history, size: 18),
+                              title: Text(suggestions.items[index]),
+                              dense: true,
+                              onTap: () =>
+                                  _selectSuggestion(suggestions.items[index]),
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  ),
                 ],
               ),
             ),
