@@ -68,7 +68,7 @@
       "tyrannic war veteran",
       "warlord"
     ],
-    "note": "categoryTokens = preserved full names; keywordTokens = fragmented (inverted-index tokens). Multi-word category names that appear fragmented in keywordTokens indicate the E-class keyword fragmentation bug."
+    "note": "categoryTokens = preserved full names; keywordTokens = inverted-index tokens (normalized phrases since E-class bug fix). If multi-word category names appear fragmented in keywordTokens, this is a regression of the E-class bug."
   },
   "weapons": [
     {
