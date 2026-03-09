@@ -9,7 +9,8 @@
     "Carries Fly keyword and 12\" move; cannot join bodyguard units.",
     "Points cost subject to Balance Dataslate updates — verify on Wahapedia for current value.",
     "FIXTURE REQUIREMENT: Needs 'Xenos - Tyranids.cat' loaded to test against live data.",
-    "To add the fixture: download from https://github.com/BSData/wh40k-10e and place in test/"
+    "To add the fixture: download from https://github.com/BSData/wh40k-10e and place in test/",
+    "KNOWN DISCREPANCY (source-catalog defect or version drift): The local test fixture 'Library - Tyranids.cat' records LD as 7+ for this unit. Wahapedia (10th ed, verified 2026-03-09) records LD as 6+. The fixture has been left unmodified (raw-source audit policy). This discrepancy should be classified as a source-catalog defect or version drift and reported by the audit, not silenced by patching the fixture."
   ],
   "expectedStats": {
     "M": "12\"",
