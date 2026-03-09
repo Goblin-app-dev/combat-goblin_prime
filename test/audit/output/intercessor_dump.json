@@ -17,11 +17,10 @@
   "keywords": {
     "categoryTokens": [],
     "keywordTokens": [
-      "bolt",
-      "melee",
-      "pistol",
-      "ranged",
-      "weapon"
+      "bolt weapon",
+      "melee weapon",
+      "pistol weapon",
+      "ranged weapon"
     ],
     "note": "categoryTokens = preserved full names; keywordTokens = fragmented (inverted-index tokens). Multi-word category names that appear fragmented in keywordTokens indicate the E-class keyword fragmentation bug."
   },
@@ -83,7 +82,7 @@
   "diagnostics": {
     "weaponDocRefCount": 3,
     "ruleDocRefCount": 0,
-    "keywordTokenCount": 5,
+    "keywordTokenCount": 4,
     "categoryTokenCount": 0
   }
 }

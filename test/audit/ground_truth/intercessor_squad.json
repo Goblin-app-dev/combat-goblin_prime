@@ -1,6 +1,7 @@
 {
   "unitName": "Intercessor",
   "source": "Wahapedia – Warhammer 40,000 10th Edition (verified 2026-03-08)",
+  "comparisonTargetType": "modelEntry",
   "notes": [
     "IMPORTANT: BattleScribe stores individual model entries (Intercessor, Intercessor Sergeant), NOT squad entries.",
     "Wahapedia shows the full datasheet (squad). This is a structural unit-identity difference.",

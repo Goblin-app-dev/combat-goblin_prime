@@ -28,6 +28,16 @@ enum AuditErrorClass {
 
   /// G. Formatting / presentation
   formatting,
+
+  /// H. Structural source-model mismatch.
+  ///
+  /// Not a bug, not a pass — a fundamental difference in how the source
+  /// (BattleScribe) and the reference (Wahapedia) organise data.
+  /// Examples:
+  ///   - BattleScribe stores individual model entries; Wahapedia shows squads.
+  ///   - BattleScribe splits weapons by profile; Wahapedia groups them.
+  /// Requires a mapping policy decision, not a pipeline fix.
+  structural,
 }
 
 enum AuditErrorSeverity { critical, major, minor, info }
@@ -75,6 +85,49 @@ enum AuditMismatchKind {
   // Formatting
   wrongDisplayOrder,
   debugJunkVisible,
+
+  // Structural (H-class)
+  /// Source uses model-entry granularity; reference uses datasheet granularity.
+  /// Not a pipeline bug — requires a mapping policy.
+  datasheetVsModelEntryGranularity,
+
+  /// Source and reference disagree on how weapons are grouped/profiled.
+  weaponProfileGranularity,
+}
+
+// ---------------------------------------------------------------------------
+// Comparison target type
+// ---------------------------------------------------------------------------
+
+/// Declares the granularity level at which the comparison is being made.
+///
+/// This is a first-class audit field because BattleScribe and Wahapedia can
+/// organise the same game data at different levels.  Marking the comparison
+/// target explicitly prevents structural differences from masquerading as
+/// extraction bugs.
+///
+/// Values:
+///   - [datasheet]   — comparing against a full Wahapedia datasheet (squad)
+///   - [modelEntry]  — comparing against a single model entry in BattleScribe
+///   - [weapon]      — weapon-level comparison
+///   - [rule]        — rule/ability-level comparison
+enum AuditComparisonTargetType {
+  /// Full squad/unit datasheet as shown on Wahapedia.
+  datasheet,
+
+  /// Individual model entry as stored in BattleScribe (sub-squad granularity).
+  ///
+  /// When this value is set, mismatches that arise purely because BattleScribe
+  /// stores one model while Wahapedia shows the whole squad should be classified
+  /// as [AuditMismatchKind.datasheetVsModelEntryGranularity] (H-class) rather
+  /// than as data extraction errors.
+  modelEntry,
+
+  /// Single weapon profile comparison.
+  weapon,
+
+  /// Single rule or ability comparison.
+  rule,
 }
 
 // ---------------------------------------------------------------------------
@@ -116,6 +169,16 @@ class RuleGroundTruth {
 class UnitGroundTruth {
   final String unitName;
   final String source; // e.g. "Wahapedia 2026-03-08"
+
+  /// Declares the granularity level of this comparison.
+  ///
+  /// When [comparisonTargetType] is [AuditComparisonTargetType.modelEntry],
+  /// the comparator knows that mismatches arising purely from BattleScribe's
+  /// model-entry vs Wahapedia's squad-datasheet structure should be classified
+  /// as H-class [AuditMismatchKind.datasheetVsModelEntryGranularity] rather
+  /// than as extraction bugs.
+  final AuditComparisonTargetType comparisonTargetType;
+
   final Map<String, String> expectedStats;
   final int? expectedPoints; // null = not checked
   final List<String> expectedKeywords; // full keyword names, uppercase
@@ -126,6 +189,7 @@ class UnitGroundTruth {
   const UnitGroundTruth({
     required this.unitName,
     required this.source,
+    this.comparisonTargetType = AuditComparisonTargetType.datasheet,
     required this.expectedStats,
     this.expectedPoints,
     required this.expectedKeywords,
@@ -134,21 +198,28 @@ class UnitGroundTruth {
     this.notes = const [],
   });
 
-  factory UnitGroundTruth.fromJson(Map<String, dynamic> json) =>
-      UnitGroundTruth(
-        unitName: json['unitName'] as String,
-        source: json['source'] as String,
-        expectedStats: Map<String, String>.from(json['expectedStats'] as Map),
-        expectedPoints: json['expectedPoints'] as int?,
-        expectedKeywords: List<String>.from(json['expectedKeywords'] as List),
-        expectedWeapons: (json['expectedWeapons'] as List)
-            .map((e) => WeaponGroundTruth.fromJson(e as Map<String, dynamic>))
-            .toList(),
-        expectedRules: (json['expectedRules'] as List)
-            .map((e) => RuleGroundTruth.fromJson(e as Map<String, dynamic>))
-            .toList(),
-        notes: List<String>.from(json['notes'] as List? ?? []),
-      );
+  factory UnitGroundTruth.fromJson(Map<String, dynamic> json) {
+    final targetTypeStr = json['comparisonTargetType'] as String? ?? 'datasheet';
+    final targetType = AuditComparisonTargetType.values.firstWhere(
+      (v) => v.name == targetTypeStr,
+      orElse: () => AuditComparisonTargetType.datasheet,
+    );
+    return UnitGroundTruth(
+      unitName: json['unitName'] as String,
+      source: json['source'] as String,
+      comparisonTargetType: targetType,
+      expectedStats: Map<String, String>.from(json['expectedStats'] as Map),
+      expectedPoints: json['expectedPoints'] as int?,
+      expectedKeywords: List<String>.from(json['expectedKeywords'] as List),
+      expectedWeapons: (json['expectedWeapons'] as List)
+          .map((e) => WeaponGroundTruth.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      expectedRules: (json['expectedRules'] as List)
+          .map((e) => RuleGroundTruth.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      notes: List<String>.from(json['notes'] as List? ?? []),
+    );
+  }
 
   static UnitGroundTruth? loadFromFile(String path) {
     final file = File(path);
@@ -564,10 +635,22 @@ class AuditComparator {
     }
 
     buf.writeln('=' * 120);
-    buf.writeln('SUMMARY: ${mismatches.length} total mismatches');
+
+    // Separate structural (H-class) from actionable mismatches in summary
+    final structural = mismatches
+        .where((m) => m.errorClass == AuditErrorClass.structural)
+        .toList();
+    final actionable = mismatches
+        .where((m) => m.errorClass != AuditErrorClass.structural)
+        .toList();
+
+    buf.writeln(
+        'SUMMARY: ${mismatches.length} total mismatches '
+        '(${actionable.length} actionable, ${structural.length} structural)');
+    buf.writeln('  Structural (H-class): not bugs — require mapping policy decisions.');
 
     final bySeverity = <AuditErrorSeverity, int>{};
-    for (final m in mismatches) {
+    for (final m in actionable) {
       bySeverity[m.severity] = (bySeverity[m.severity] ?? 0) + 1;
     }
     for (final sev in AuditErrorSeverity.values) {

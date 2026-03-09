@@ -294,32 +294,74 @@ void main() {
     });
   });
 
-  // ── Tyranids fixture (requires manual catalog download) ──────────────────
+  // ── Tyranids fixture ──────────────────────────────────────────────────────
+  //
+  // Catalog:  test/Xenos - Tyranids.cat        (id: b984-7317-81cc-20f)
+  // Deps:
+  //   581a-46b9-5b86-44b7  Unaligned Forces.cat
+  //   374d-45f0-5832-001e  Library - Tyranids.cat
+  //
+  // If the catalog files are absent the group is skipped cleanly.
 
-  group('Audit: Xenos - Tyranids [NEEDS FIXTURE]', () {
+  group('Audit: Xenos - Tyranids', () {
     const tyranidCatalogPath = 'test/Xenos - Tyranids.cat';
+    const libTyranidPath = 'test/Library - Tyranids.cat';
+    const unalignedPath = 'test/Unaligned Forces.cat';
 
-    test('Hive Tyrant — monster/character benchmark', () {
-      final catalogFile = File(tyranidCatalogPath);
-      if (!catalogFile.existsSync()) {
-        print('\n[AUDIT] SKIPPED: Tyranid catalog fixture not present.');
-        print('[AUDIT] To enable this audit:');
-        print('[AUDIT]   1. Download "Xenos - Tyranids.cat" from:');
-        print('[AUDIT]      https://github.com/BSData/wh40k-10e');
-        print('[AUDIT]   2. Place it in test/');
-        print('[AUDIT]   3. Re-run this test');
-        print('[AUDIT]');
-        print('[AUDIT] Ground truth for comparison is already prepared:');
-        print('[AUDIT]   test/audit/ground_truth/hive_tyrant.json');
-        // Not a failure — fixture simply isn't present.
+    late IndexBundle tyranidIndex;
+    bool _fixturePresent = false;
+
+    setUpAll(() async {
+      _fixturePresent = File(tyranidCatalogPath).existsSync() &&
+          File(libTyranidPath).existsSync() &&
+          File(unalignedPath).existsSync();
+
+      if (!_fixturePresent) {
+        print('\n[AUDIT] SKIPPED: Tyranid catalog fixture(s) not present.');
+        print('[AUDIT]   Missing one or more of:');
+        print('[AUDIT]     $tyranidCatalogPath');
+        print('[AUDIT]     $libTyranidPath');
+        print('[AUDIT]     $unalignedPath');
+        print('[AUDIT]   Download from https://github.com/BSData/wh40k-10e');
         return;
       }
 
-      // When the fixture IS present, build the index and run the full audit.
-      // This is async but flutter_test requires synchronous test bodies for
-      // setUpAll; restructure to a real async test when adding the fixture.
-      // TODO: Convert to async test with proper setUpAll when fixture is added.
-      print('[AUDIT] Tyranid catalog found — running Hive Tyrant audit.');
+      tyranidIndex = await _buildIndex(
+        gameSystemPath: 'test/Warhammer 40,000.gst',
+        primaryCatalogPath: tyranidCatalogPath,
+        dependencyPaths: {
+          '581a-46b9-5b86-44b7': unalignedPath,
+          '374d-45f0-5832-001e': libTyranidPath,
+        },
+      );
+      print('[AUDIT] Tyranid index built: '
+          '${tyranidIndex.units.length} units, '
+          '${tyranidIndex.weapons.length} weapons, '
+          '${tyranidIndex.rules.length} rules');
+    });
+
+    tearDownAll(() async {
+      final dir = Directory('appDataRoot');
+      if (await dir.exists()) await dir.delete(recursive: true);
+    });
+
+    test('index health: non-empty, low duplicate count', () {
+      if (!_fixturePresent) return; // skip
+      expect(tyranidIndex.units, isNotEmpty,
+          reason: 'Tyranid index must contain units');
+      expect(tyranidIndex.weapons, isNotEmpty,
+          reason: 'Tyranid index must contain weapons');
+      expect(tyranidIndex.duplicateDocIdCount, 0,
+          reason: 'No duplicate docIds expected');
+    });
+
+    test('audit: Hive Tyrant — monster/character benchmark', () {
+      if (!_fixturePresent) return; // skip
+      _runAudit(
+        index: tyranidIndex,
+        unitName: 'Hive Tyrant',
+        groundTruthPath: 'test/audit/ground_truth/hive_tyrant.json',
+      );
     });
   });
 }
