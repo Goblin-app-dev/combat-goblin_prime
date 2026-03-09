@@ -1,0 +1,68 @@
+{
+  "unitName": "Intercessor",
+  "source": "Wahapedia – Warhammer 40,000 10th Edition (verified 2026-03-08)",
+  "comparisonTargetType": "modelEntry",
+  "notes": [
+    "IMPORTANT: BattleScribe stores individual model entries (Intercessor, Intercessor Sergeant), NOT squad entries.",
+    "Wahapedia shows the full datasheet (squad). This is a structural unit-identity difference.",
+    "This ground truth covers the basic Intercessor trooper model only.",
+    "Squad-level presentation (combining models into a squad entry) is a UI/presentation policy decision.",
+    "Points: BattleScribe may store points at squad level, not per-model. Expect missingPoints or wrongPoints.",
+    "Used to validate basic stat/keyword/weapon pipeline on the Space Marines catalog fixture.",
+    "This catalog IS loaded in the test fixture, so this comparison runs in CI."
+  ],
+  "expectedStats": {
+    "M": "6\"",
+    "T": "4",
+    "SV": "3+",
+    "W": "2",
+    "LD": "6+",
+    "OC": "2"
+  },
+  "expectedPoints": null,
+  "expectedKeywords": [
+    "ADEPTUS ASTARTES",
+    "BATTLELINE",
+    "INFANTRY",
+    "INTERCESSOR SQUAD"
+  ],
+  "expectedWeapons": [
+    {
+      "name": "Bolt rifle",
+      "stats": {
+        "Range": "24\"",
+        "A": "2",
+        "BS": "3+",
+        "S": "4",
+        "AP": "-1",
+        "D": "1"
+      },
+      "keywords": []
+    },
+    {
+      "name": "Bolt pistol",
+      "stats": {
+        "Range": "12\"",
+        "A": "1",
+        "BS": "3+",
+        "S": "4",
+        "AP": "0",
+        "D": "1"
+      },
+      "keywords": []
+    },
+    {
+      "name": "Close combat weapon",
+      "stats": {
+        "Range": "Melee",
+        "A": "3",
+        "WS": "3+",
+        "S": "4",
+        "AP": "0",
+        "D": "1"
+      },
+      "keywords": []
+    }
+  ],
+  "expectedRules": []
+}

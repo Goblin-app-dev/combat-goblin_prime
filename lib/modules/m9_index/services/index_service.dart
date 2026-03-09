@@ -631,7 +631,20 @@ class IndexService {
 
   // --- Private: Ref Collection ---
 
-  /// Recursively collects keyword tokens from categories across entry subtree.
+  /// Recursively collects keyword phrases from categories across entry subtree.
+  ///
+  /// Each category name is stored as a single normalized phrase (e.g.
+  /// "adeptus astartes"), NOT split into word tokens.  This preserves
+  /// multi-word keywords for display and reference comparison.
+  ///
+  /// Search tokenization is intentionally separate: the M9 keyword index
+  /// inverts these phrase tokens at query time so that callers can search
+  /// by full phrase.  Word-level tokenization is available via [tokenize]
+  /// and is used for other search surfaces (autocomplete, characteristic
+  /// index) — it must not bleed into the displayed keyword surface here.
+  ///
+  /// Previously this called [tokenize], which split multi-word category names
+  /// into individual word fragments (E-class keyword fragmentation bug).
   void _collectCategoryKeywords(
     BoundEntry entry,
     Set<String> keywords,
@@ -639,7 +652,8 @@ class IndexService {
     for (final category in entry.categories) {
       final name = category.name.trim();
       if (name.isNotEmpty) {
-        keywords.addAll(tokenize(name));
+        final phrase = normalize(name);
+        if (phrase.isNotEmpty) keywords.add(phrase);
       }
     }
 

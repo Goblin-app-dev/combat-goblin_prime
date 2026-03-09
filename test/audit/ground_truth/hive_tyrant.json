@@ -1,0 +1,126 @@
+{
+  "unitName": "Hive Tyrant",
+  "source": "Wahapedia – Warhammer 40,000 10th Edition (verified 2026-03-08)",
+  "comparisonTargetType": "datasheet",
+  "notes": [
+    "Stats and rules verified against Wahapedia datasheet.",
+    "Weapon list includes all options from the datasheet; the app may show only equipped weapons (policy question).",
+    "Points cost is the base Hive Tyrant cost before any weapon upgrades.",
+    "Keywords are the canonical 40k game keywords (all-caps on the datasheet).",
+    "FIXTURE REQUIREMENT: Needs 'Xenos - Tyranids.cat' loaded to test against live data.",
+    "To add the fixture: download from https://github.com/BSData/wh40k-10e and place in test/"
+  ],
+  "expectedStats": {
+    "M": "10\"",
+    "T": "10",
+    "SV": "2+",
+    "W": "14",
+    "LD": "6+",
+    "OC": "3"
+  },
+  "expectedPoints": 210,
+  "expectedKeywords": [
+    "TYRANIDS",
+    "MONSTER",
+    "CHARACTER",
+    "SYNAPSE",
+    "PSYKER",
+    "HIVE TYRANT"
+  ],
+  "expectedWeapons": [
+    {
+      "name": "Monstrous Bonesword and Lash Whip",
+      "stats": {
+        "Range": "Melee",
+        "A": "6",
+        "WS": "2+",
+        "S": "12",
+        "AP": "-2",
+        "D": "3"
+      },
+      "keywords": ["PRECISION"]
+    },
+    {
+      "name": "Tyrant Talons",
+      "stats": {
+        "Range": "Melee",
+        "A": "6",
+        "WS": "2+",
+        "S": "9",
+        "AP": "-2",
+        "D": "2"
+      },
+      "keywords": []
+    },
+    {
+      "name": "Heavy Venom Cannon",
+      "stats": {
+        "Range": "36\"",
+        "A": "3",
+        "BS": "4+",
+        "S": "10",
+        "AP": "-2",
+        "D": "D6+1"
+      },
+      "keywords": ["BLAST", "HEAVY"]
+    },
+    {
+      "name": "Monstrous Bio-Cannon",
+      "stats": {
+        "Range": "24\"",
+        "A": "D6+3",
+        "BS": "4+",
+        "S": "8",
+        "AP": "-1",
+        "D": "2"
+      },
+      "keywords": ["BLAST", "HEAVY"]
+    },
+    {
+      "name": "Monstrous Rending Claws",
+      "stats": {
+        "Range": "Melee",
+        "A": "3",
+        "WS": "2+",
+        "S": "10",
+        "AP": "-3",
+        "D": "D3+3"
+      },
+      "keywords": ["PRECISION"]
+    },
+    {
+      "name": "Psychic Scream",
+      "stats": {
+        "Range": "Melee",
+        "A": "6",
+        "WS": "2+",
+        "S": "6",
+        "AP": "0",
+        "D": "1"
+      },
+      "keywords": ["PSYCHIC"]
+    }
+  ],
+  "expectedRules": [
+    {
+      "name": "Onslaught",
+      "descriptionSubstring": "charge"
+    },
+    {
+      "name": "Shadow in the Warp",
+      "descriptionSubstring": "Battleshock"
+    },
+    {
+      "name": "Synaptic Imperative",
+      "descriptionSubstring": null
+    },
+    {
+      "name": "Warlord",
+      "descriptionSubstring": null
+    },
+    {
+      "name": "Leader",
+      "descriptionSubstring": null
+    }
+  ]
+}
