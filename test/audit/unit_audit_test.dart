@@ -209,20 +209,21 @@ void main() {
       // Once the dump is verified correct, add explicit pin assertions below.
     });
 
-    test('keyword fragmentation: detect multi-word categories split into tokens', () {
-      // This test explicitly documents and detects the E-class keyword bug.
+    test('keyword fragmentation regression: multi-word categories must not fragment into tokens', () {
+      // Regression test for the E-class keyword fragmentation bug (now fixed).
       //
-      // Root cause (index_service.dart:640):
-      //   _collectCategoryKeywords calls tokenize(category.name)
-      //   tokenize() splits on spaces → multi-word names become fragments.
+      // Previously, _collectCategoryKeywords called tokenize(category.name),
+      // which split multi-word names into individual word fragments:
       //   e.g. "Adeptus Astartes" → ["adeptus", "astartes"] in keywordTokens
       //        "Hive Tyrant"      → ["hive", "tyrant"]
       //
-      // categoryTokens is NOT affected (uses normalize() which preserves phrases).
+      // Fix applied in index_service.dart _collectCategoryKeywords:
+      //   Now calls normalize(name), preserving multi-word names as phrases.
       //
-      // Fix (do NOT implement here — this test just documents and detects):
-      //   _collectCategoryKeywords should store normalize(name) as a single token
-      //   (or a dedicated "phrase token"), not tokenize(name) word fragments.
+      // categoryTokens was always unaffected (used normalize() throughout).
+      //
+      // This test enforces the fix. A failure here means the fragmentation
+      // bug has regressed in _collectCategoryKeywords.
 
       final fragmentedUnits = <String>[];
       final exampleFragments = <String, List<String>>{};
@@ -262,24 +263,14 @@ void main() {
         print('  ... and ${fragmentedUnits.length - 10} more');
       }
       print('');
-      print('[KEYWORD FRAGMENTATION] Fix location: index_service.dart:640');
-      print('[KEYWORD FRAGMENTATION] _collectCategoryKeywords calls tokenize(name)');
-      print('[KEYWORD FRAGMENTATION] Should instead store normalize(name) as phrase.');
-
-      // This assertion documents the expected fix behavior:
-      // After the fix, no multi-word category phrase should be split into
-      // individual word tokens in keywordTokens.
-      //
-      // Currently this assertion will FAIL if the bug exists — that is intentional.
-      // Uncomment to enforce (will fail until the bug is fixed):
-      //
-      // expect(fragmentedUnits, isEmpty,
-      //     reason: 'No multi-word category name should be fragmented '
-      //         'into individual word tokens in keywordTokens. '
-      //         'Fix _collectCategoryKeywords to use normalize(name) not tokenize(name).');
-
-      // For now: just report the count (informational).
+      print('[KEYWORD FRAGMENTATION] Regression check (bug is fixed — count should be 0).');
       print('[KEYWORD FRAGMENTATION] ${fragmentedUnits.length} units affected.');
+
+      // Bug is fixed: enforce that no fragmentation occurs.
+      expect(fragmentedUnits, isEmpty,
+          reason: 'No multi-word category name should be fragmented '
+              'into individual word tokens in keywordTokens. '
+              '_collectCategoryKeywords in index_service.dart must use normalize(name).');
     });
 
     test('audit: sample bulk dump — first 5 units', () {

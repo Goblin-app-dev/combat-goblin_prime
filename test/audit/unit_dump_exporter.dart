@@ -63,9 +63,11 @@ class UnitAuditDump {
   /// e.g. ["hive tyrant", "infantry", "monster", "psyker", "synapse", "tyranids"]
   final List<String> categoryTokens;
 
-  /// Fragmented keyword tokens (how M9 currently builds the inverted index).
-  /// e.g. ["hive", "tyrant", "monster", ...] — fragments instead of phrases.
-  /// This is the bug vector: multi-word categories get split.
+  /// Inverted-index keyword tokens built by M9.
+  ///
+  /// Since the E-class fragmentation fix, _collectCategoryKeywords uses
+  /// normalize(name), so multi-word category names are stored as phrases
+  /// (e.g. "adeptus astartes"), not split into individual word fragments.
   final List<String> keywordTokens;
 
   // --- Weapons ---
@@ -110,8 +112,8 @@ class UnitAuditDump {
           'categoryTokens': categoryTokens,
           'keywordTokens': keywordTokens,
           'note':
-              'categoryTokens = preserved full names; keywordTokens = fragmented (inverted-index tokens). '
-                  'Multi-word category names that appear fragmented in keywordTokens indicate the E-class keyword fragmentation bug.',
+              'categoryTokens = preserved full names; keywordTokens = inverted-index tokens (normalized phrases since E-class bug fix). '
+                  'If multi-word category names appear fragmented in keywordTokens, this is a regression of the E-class bug.',
         },
         'weapons': weapons.map((w) => w.toJson()).toList(),
         'rules': rules.map((r) => r.toJson()).toList(),
