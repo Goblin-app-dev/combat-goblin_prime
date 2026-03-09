@@ -409,7 +409,8 @@ class AuditComparator {
       final allFragmentsPresent = words.every((w) => observedKeywordTokens.contains(w));
 
       if (allFragmentsPresent && words.length > 1) {
-        // Classic E-class fragmentation bug
+        // Regression of the E-class fragmentation bug (should be fixed in
+        // index_service.dart _collectCategoryKeywords via normalize(name)).
         out.add(AuditMismatch(
           unit: dump.name,
           section: 'Keywords',
@@ -421,21 +422,41 @@ class AuditComparator {
           severity: AuditErrorSeverity.major,
           likelyStage: AuditPipelineStage.m9Index,
           notes:
-              'Bug in _collectCategoryKeywords: tokenize(name) splits multi-word categories. '
-                  'Fix: store normalize(name) as the keyword phrase, not tokenize(name).',
+              'Regression: _collectCategoryKeywords must use normalize(name), not tokenize(name). '
+                  'Check index_service.dart _collectCategoryKeywords.',
         ));
       } else if (!allFragmentsPresent) {
-        // Completely missing
-        out.add(AuditMismatch(
-          unit: dump.name,
-          section: 'Keywords',
-          expected: '"${truth.expectedKeywords.firstWhere((k) => k.toLowerCase() == expected)}"',
-          observed: 'MISSING from both categoryTokens and keywordTokens',
-          errorClass: AuditErrorClass.keywords,
-          kind: AuditMismatchKind.missingKeyword,
-          severity: AuditErrorSeverity.major,
-          likelyStage: AuditPipelineStage.m5Bind,
-        ));
+        // Completely missing — classify based on comparison target type.
+        if (truth.comparisonTargetType == AuditComparisonTargetType.modelEntry) {
+          // Keyword may live on a parent squad/datasheet node rather than the
+          // individual model entry being audited. This is a structural
+          // source-model difference, not an extraction bug.
+          out.add(AuditMismatch(
+            unit: dump.name,
+            section: 'Keywords',
+            expected: '"${truth.expectedKeywords.firstWhere((k) => k.toLowerCase() == expected)}"',
+            observed: 'MISSING from both categoryTokens and keywordTokens',
+            errorClass: AuditErrorClass.structural,
+            kind: AuditMismatchKind.datasheetVsModelEntryGranularity,
+            severity: AuditErrorSeverity.info,
+            likelyStage: AuditPipelineStage.unknown,
+            notes:
+                'modelEntry comparison: keyword may live on parent squad/datasheet node. '
+                    'Verify whether the expected keyword is assigned at squad level in BattleScribe '
+                    'before treating this as a pipeline bug. Keyword inheritance is a product policy decision.',
+          ));
+        } else {
+          out.add(AuditMismatch(
+            unit: dump.name,
+            section: 'Keywords',
+            expected: '"${truth.expectedKeywords.firstWhere((k) => k.toLowerCase() == expected)}"',
+            observed: 'MISSING from both categoryTokens and keywordTokens',
+            errorClass: AuditErrorClass.keywords,
+            kind: AuditMismatchKind.missingKeyword,
+            severity: AuditErrorSeverity.major,
+            likelyStage: AuditPipelineStage.m5Bind,
+          ));
+        }
       }
     }
 
