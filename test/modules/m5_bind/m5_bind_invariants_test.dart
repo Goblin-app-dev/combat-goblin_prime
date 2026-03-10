@@ -131,14 +131,20 @@ void main() {
       final bindService = BindService();
       final result = await bindService.bindBundle(linkedBundle: linkedBundle);
 
+      // 'profile' is the primary source tag.
+      // 'rule' is also eligible: direct <infoLink type="rule"> targets are
+      // materialised as synthetic ability BoundProfiles by M5 so that M9 can
+      // index them as RuleDocs without changes to M9's classification logic.
+      const eligibleProfileSourceTags = {'profile', 'rule'};
+
       for (final profile in result.profiles) {
         final sourceFile = _findFile(profile.sourceFileId, wrappedBundle);
         expect(sourceFile, isNotNull);
 
         final sourceNode = sourceFile!.nodes[profile.sourceNode.nodeIndex];
         expect(
-          sourceNode.tagName,
-          'profile',
+          eligibleProfileSourceTags.contains(sourceNode.tagName),
+          isTrue,
           reason:
               'Profile ${profile.id} bound from ineligible tag: ${sourceNode.tagName}',
         );

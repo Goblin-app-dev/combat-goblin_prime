@@ -27,6 +27,9 @@ class BindService {
   /// Eligible tagNames for BoundProfile.
   static const _profileTags = {'profile'};
 
+  /// Eligible tagNames for rule nodes materialized as synthetic ability profiles.
+  static const _ruleTags = {'rule'};
+
   /// Eligible tagNames for BoundCategory.
   static const _categoryTags = {'categoryEntry'};
 
@@ -560,7 +563,8 @@ class BindService {
       final targetNode = nodeLookup[(target.fileId, target.nodeRef.nodeIndex)];
       if (targetNode == null) continue;
 
-      if (_profileTags.contains(targetNode.tagName)) {
+      if (_profileTags.contains(targetNode.tagName) ||
+          _ruleTags.contains(targetNode.tagName)) {
         if (selectedNode == null) {
           selectedNode = targetNode;
           selectedFileId = target.fileId;
@@ -575,7 +579,7 @@ class BindService {
     if (selectedNode == null) {
       diagnostics.add(BindDiagnostic(
         code: BindDiagnosticCode.unresolvedInfoLink,
-        message: 'infoLink resolved but no eligible profile target',
+        message: 'infoLink resolved but no eligible profile or rule target',
         sourceFileId: file.fileId,
         sourceNode: linkNode.ref,
         targetId: linkNode.attributes['targetId'],
@@ -606,6 +610,9 @@ class BindService {
       return null;
     }
 
+    if (_ruleTags.contains(selectedNode.tagName)) {
+      return _bindRuleNodeAsProfile(selectedNode, targetFile);
+    }
     return _bindProfileFromNode(selectedNode, targetFile);
   }
 
@@ -680,6 +687,40 @@ class BindService {
       isPrimary: isPrimary,
       sourceFileId: selectedFileId!,
       sourceNode: selectedNode.ref,
+    );
+  }
+
+  /// Materialises a `<rule>` node as a synthetic ability BoundProfile.
+  ///
+  /// `<rule>` nodes carry name + description text but have no profileType.
+  /// Assigning typeName='ability' lets M9 index them as RuleDocs without
+  /// any change to M9's profile classification logic.
+  ///
+  /// Structure: `<rule id="..." name="..."><description>text</description></rule>`
+  BoundProfile _bindRuleNodeAsProfile(WrappedNode node, WrappedFile file) {
+    final id = node.attributes['id'] ?? '';
+    final name = node.attributes['name'] ?? '';
+
+    // Extract description from the <description> child element.
+    String description = '';
+    for (final childRef in node.children) {
+      final childNode = file.nodeAt(childRef);
+      if (childNode.tagName == 'description') {
+        description = childNode.textContent ?? '';
+        break;
+      }
+    }
+
+    return BoundProfile(
+      id: id,
+      name: name,
+      typeId: null,
+      typeName: 'ability',
+      characteristics: [
+        if (description.isNotEmpty) (name: 'description', value: description),
+      ],
+      sourceFileId: file.fileId,
+      sourceNode: node.ref,
     );
   }
 

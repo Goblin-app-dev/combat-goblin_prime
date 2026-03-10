@@ -170,9 +170,24 @@
       "docId": "rule:13-98c1-d481-eb95"
     },
     {
+      "name": "Shadow in the Warp",
+      "description": "If your Army Faction is **^^Tyranids^^**, once per battle, inÂ either playerâs Command phase, if one or more unitsÂ from your army with this ability are on the battlefield,Â you can unleash the Shadow in the Warp. When youÂ do, each enemy unit on the battlefield must take aÂ Battle-shock test. Each time an enemy unit takesÂ such a Battle-shock test, if it is within 6\" of one orÂ more Synapse units from your army, subtract 1 fromÂ that test.",
+      "docId": "rule:395b-a159-b293-27aa"
+    },
+    {
+      "name": "Synapse",
+      "description": "If your Army Faction is **^^Tyranids^^**, while a **^^Tyranids^^** unit from your army is within 6\" of one or moreÂ friendly **^^Synapse^^** models, that **^^Tyranids^^** unit is saidÂ to be within Synapse Range of that model and of yourÂ army. While a **^^Tyranids^^** unit fromÂ your army is withinÂ Synapse Range of your army:\n\nâ  Each time that unit takes a Battle-shock test, takeÂ that test on 3D6 instead of 2D6.\nâ  Each time a model in that unit makes a meleeÂ attack, add 1 to the Strength characteristic ofÂ that attack.",
+      "docId": "rule:86aa-437f-260b-5cad"
+    },
+    {
       "name": "Invulnerable Save (4+)",
       "description": "This model has a 4+ invulnerable save.",
       "docId": "rule:a2fa-ebfd-7b32-9a75"
+    },
+    {
+      "name": "Deadly Demise",
+      "description": "Some models have 'Deadly Demise x' listed in their abilities. When such a model is destroyed, roll one D6 before removing it from play (if such a model is a TRANSPORT, roll before any embarked models disembark). On a 6, each unit within 6\" of that model suffers a number of mortal wounds denoted by 'x' (if this is a random number, roll separately for each unit within 6\").",
+      "docId": "rule:b68a-5ded-65ac-98c"
     },
     {
       "name": "Onslaught (Aura, Psychic)",
@@ -182,7 +197,7 @@
   ],
   "diagnostics": {
     "weaponDocRefCount": 5,
-    "ruleDocRefCount": 3,
+    "ruleDocRefCount": 6,
     "keywordTokenCount": 16,
     "categoryTokenCount": 7
   }

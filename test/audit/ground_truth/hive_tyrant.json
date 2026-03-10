@@ -113,12 +113,6 @@
       "ruleName": "Warlord",
       "classification": "source-structure-not-a-rule",
       "note": "Warlord is a keyword / category tag in the BSData catalog, not a <rule> or <profile type='ability'> node. It is not expected to surface in the rules pipeline output. Removed from expectedRules."
-    },
-    {
-      "field": "expectedRules",
-      "ruleName": "Shadow in the Warp",
-      "classification": "pipeline-gap-tracked",
-      "note": "Shadow in the Warp is present on the base unit as a direct <infoLink type='rule'> but _resolveInfoLink currently only materialises links whose target is a <profile> node. Direct rule infoLinks are therefore dropped. Kept in expectedRules so the audit failure remains visible. Fix tracked as: M5 bind enhancement for direct infoLink type='rule' targets."
     }
   ],
   "expectedRules": [
@@ -128,7 +122,7 @@
     },
     {
       "name": "Shadow in the Warp",
-      "descriptionSubstring": "Battleshock"
+      "descriptionSubstring": "Battle-shock"
     },
     {
       "name": "Leader",
