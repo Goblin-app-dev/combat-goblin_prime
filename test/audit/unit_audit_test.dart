@@ -354,5 +354,24 @@ void main() {
         groundTruthPath: 'test/audit/ground_truth/hive_tyrant.json',
       );
     });
+
+    test('audit: The Swarmlord — epic hero/named character benchmark', () {
+      // Cross-faction sweep: third benchmark unit.
+      //
+      // The Swarmlord is a named unique character (EPIC HERO) in the Tyranids
+      // faction. It has several unit-specific abilities (Hive Commander, Malign
+      // Presence, Domination of the Hive Mind) plus shared rule infoLinks
+      // (Shadow in the Warp, Synapse, Leader, Deadly Demise). This exercises:
+      //   - EPIC HERO keyword extraction from the category graph
+      //   - HIVE TYRANT keyword carried by a non-Hive-Tyrant entry
+      //   - Direct rule infoLink binding for multiple shared Tyranid rules
+      //   - Inline ability profiles that are NOT expected in the rules list
+      if (!_fixturePresent) return; // skip
+      _runAudit(
+        index: tyranidIndex,
+        unitName: 'The Swarmlord',
+        groundTruthPath: 'test/audit/ground_truth/the_swarmlord.json',
+      );
+    });
   });
 }

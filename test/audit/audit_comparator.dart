@@ -353,7 +353,10 @@ class AuditComparator {
     }
 
     final observedPts = ptsCost['value'];
-    if (observedPts.toString() != truth.expectedPoints.toString()) {
+    // Compare numerically to avoid int/double string mismatch (220 vs 220.0)
+    final observedNum = num.tryParse(observedPts.toString());
+    final expectedNum = truth.expectedPoints!.toDouble();
+    if (observedNum == null || observedNum != expectedNum) {
       out.add(AuditMismatch(
         unit: dump.name,
         section: 'Costs',
