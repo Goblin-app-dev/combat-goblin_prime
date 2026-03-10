@@ -1,0 +1,232 @@
+{
+  "identity": {
+    "name": "Winged Hive Tyrant",
+    "docId": "unit:fa68-fcb9-38c-cd0f",
+    "entryId": "fa68-fcb9-38c-cd0f",
+    "sourceFileId": "0dc6b1bb86b7df66ec945cfb981758bbe33b4db1d048532b04756436672d4555"
+  },
+  "characteristics": {
+    "M": "12\"",
+    "T": "9",
+    "SV": "2+",
+    "W": "10",
+    "LD": "7+",
+    "OC": "3"
+  },
+  "costs": [
+    {
+      "typeId": "51b2-306e-1021-d207",
+      "typeName": "pts",
+      "value": 170.0
+    },
+    {
+      "typeId": "716d-91b7-d55a-1022",
+      "typeName": "Crusade: Weapon Modifications",
+      "value": 0.0
+    },
+    {
+      "typeId": "75bb-ded1-c86d-bdf0",
+      "typeName": "Crusade: Battle Honours",
+      "value": 0.0
+    },
+    {
+      "typeId": "a623-fe74-1d33-cddf",
+      "typeName": "Crusade: Experience",
+      "value": 0.0
+    },
+    {
+      "typeId": "b03b-c239-15a5-da55",
+      "typeName": "Crusade Points",
+      "value": 0.0
+    }
+  ],
+  "keywords": {
+    "categoryTokens": [
+      "character",
+      "faction tyranids",
+      "fly",
+      "great devourer",
+      "hive tyrant",
+      "monster",
+      "psyker",
+      "synapse",
+      "vanguard invader",
+      "winged hive tyrant"
+    ],
+    "keywordTokens": [
+      "attacks dx weapon",
+      "character",
+      "extra attacks weapon",
+      "faction tyranids",
+      "fly",
+      "great devourer",
+      "grenades",
+      "hive tyrant",
+      "melee weapon",
+      "monster",
+      "monster hunters",
+      "psyker",
+      "ranged weapon",
+      "striding behemoths",
+      "synapse",
+      "tyrannic war veteran",
+      "vanguard invader",
+      "warlord",
+      "winged hive tyrant"
+    ],
+    "note": "categoryTokens = preserved full names; keywordTokens = inverted-index tokens (normalized phrases since E-class bug fix). If multi-word category names appear fragmented in keywordTokens, this is a regression of the E-class bug."
+  },
+  "weapons": [
+    {
+      "name": "Stranglethorn cannon",
+      "stats": {
+        "Range": "36\"",
+        "A": "D6+1",
+        "BS": "2+",
+        "S": "7",
+        "AP": "-1",
+        "D": "2",
+        "Keywords": "Blast"
+      },
+      "keywords": [
+        "cannon",
+        "stranglethorn"
+      ],
+      "docId": "weapon:3803-1fe1-edde-12e1"
+    },
+    {
+      "name": "Monstrous scything talons",
+      "stats": {
+        "Range": "Melee",
+        "A": "4",
+        "WS": "2+",
+        "S": "7",
+        "AP": "-2",
+        "D": "2",
+        "Keywords": "Extra Attacks"
+      },
+      "keywords": [
+        "monstrous",
+        "scything",
+        "talons"
+      ],
+      "docId": "weapon:54a6-4f13-d99b-583c"
+    },
+    {
+      "name": "Tyrant talons",
+      "stats": {
+        "Range": "Melee",
+        "A": "5",
+        "WS": "2+",
+        "S": "7",
+        "AP": "-2",
+        "D": "2",
+        "Keywords": "-"
+      },
+      "keywords": [
+        "talons",
+        "tyrant"
+      ],
+      "docId": "weapon:84d0-f0bf-85c5-2266"
+    },
+    {
+      "name": "Monstrous bonesword and lash whip",
+      "stats": {
+        "Range": "Melee",
+        "A": "6",
+        "WS": "2+",
+        "S": "9",
+        "AP": "-2",
+        "D": "3",
+        "Keywords": "Twin-linked"
+      },
+      "keywords": [
+        "and",
+        "bonesword",
+        "lash",
+        "monstrous",
+        "whip"
+      ],
+      "docId": "weapon:8ad2-55e5-a52f-2ca0"
+    },
+    {
+      "name": "Heavy venom cannon",
+      "stats": {
+        "Range": "36\"",
+        "A": "D3",
+        "BS": "2+",
+        "S": "9",
+        "AP": "-2",
+        "D": "3",
+        "Keywords": "Blast"
+      },
+      "keywords": [
+        "cannon",
+        "heavy",
+        "venom"
+      ],
+      "docId": "weapon:953d-482e-624b-2465"
+    },
+    {
+      "name": "Vertebrax of Vodun",
+      "stats": {
+        "Range": "6\"",
+        "A": "1",
+        "BS": "2+",
+        "S": "*",
+        "AP": "*",
+        "D": "*",
+        "Keywords": "Assault"
+      },
+      "keywords": [
+        "of",
+        "vertebrax",
+        "vodun"
+      ],
+      "docId": "weapon:afcc-75f3-b4df-3302"
+    }
+  ],
+  "rules": [
+    {
+      "name": "Will of the Hive Mind",
+      "description": "Once per battle round, oneÂ model from your army with this ability can use itÂ when a friendly **^^Tyranids^^** unit within 12\" of thatÂ model is targeted with a Stratagem. If it does, reduceÂ the CP cost of that usage of that Stratagem by 1CP.",
+      "docId": "rule:13-98c1-d481-eb95"
+    },
+    {
+      "name": "Shadow in the Warp",
+      "description": "If your Army Faction is **^^Tyranids^^**, once per battle, inÂ either playerâs Command phase, if one or more unitsÂ from your army with this ability are on the battlefield,Â you can unleash the Shadow in the Warp. When youÂ do, each enemy unit on the battlefield must take aÂ Battle-shock test. Each time an enemy unit takesÂ such a Battle-shock test, if it is within 6\" of one orÂ more Synapse units from your army, subtract 1 fromÂ that test.",
+      "docId": "rule:395b-a159-b293-27aa"
+    },
+    {
+      "name": "Deep Strike",
+      "description": "During the Declare Battle Formations step, if every model in a unit has this ability, you can set it up in Reserves instead of setting it up on the battlefield. If you do, in the Reinforcements step of one of your Movement phases you can set up this unit anywhere on the battlefield that is more than 9\" horizontally away from all enemy models.\n\nIf a unit with the Deep Strike ability arrives from Strategic Reserves, the controlling player can choose for that unit to be set up either using the rules for Strategic Reserves or using the Deep Strike ability.",
+      "docId": "rule:7cb5-dd6b-dd87-ad3b"
+    },
+    {
+      "name": "Synapse",
+      "description": "If your Army Faction is **^^Tyranids^^**, while a **^^Tyranids^^** unit from your army is within 6\" of one or moreÂ friendly **^^Synapse^^** models, that **^^Tyranids^^** unit is saidÂ to be within Synapse Range of that model and of yourÂ army. While a **^^Tyranids^^** unit fromÂ your army is withinÂ Synapse Range of your army:\n\nâ  Each time that unit takes a Battle-shock test, takeÂ that test on 3D6 instead of 2D6.\nâ  Each time a model in that unit makes a meleeÂ attack, add 1 to the Strength characteristic ofÂ that attack.",
+      "docId": "rule:86aa-437f-260b-5cad"
+    },
+    {
+      "name": "Invulnerable Save (4+)",
+      "description": "This model has a 4+ invulnerable save.",
+      "docId": "rule:a2fa-ebfd-7b32-9a75"
+    },
+    {
+      "name": "Deadly Demise",
+      "description": "Some models have 'Deadly Demise x' listed in their abilities. When such a model is destroyed, roll one D6 before removing it from play (if such a model is a TRANSPORT, roll before any embarked models disembark). On a 6, each unit within 6\" of that model suffers a number of mortal wounds denoted by 'x' (if this is a random number, roll separately for each unit within 6\").",
+      "docId": "rule:b68a-5ded-65ac-98c"
+    },
+    {
+      "name": "Paroxysm (Psychic)",
+      "description": "At the start of the Fight phase, you can select one enemy unit within 12\" of and visible to this model and roll one D6: on a 1, this Psyker suffers D3 mortal wounds; on a 2+, until the end of the phase, subtract 1 from the Attacks characteristic of weapons equipped by models in that unit.",
+      "docId": "rule:fee7-90a8-24a2-79ef"
+    }
+  ],
+  "diagnostics": {
+    "weaponDocRefCount": 6,
+    "ruleDocRefCount": 7,
+    "keywordTokenCount": 19,
+    "categoryTokenCount": 10
+  }
+}

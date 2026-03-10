@@ -1,0 +1,68 @@
+{
+  "unitName": "Carnifex",
+  "source": "BSData wh40k-10e catalog (cross-referenced against Wahapedia keyword list, verified 2026-03-10)",
+  "comparisonTargetType": "datasheet",
+  "notes": [
+    "The Carnifex model entry is a standalone unit datasheet in both BSData and Wahapedia.",
+    "pts=90 is on both the model entry and the parent Carnifexes unit entry.",
+    "TYRANIDS keyword comes from 'Faction: Tyranids' category — known systemic gap.",
+    "Rules (Deadly Demise, Synapse) are infoLinks on the Carnifexes *unit* entry, not the Carnifex model entry.",
+    "Blistering Assault is an inline ability profile on the unit entry — not expected as a rule.",
+    "Carnifex has many optional weapons; only default-equipped weapons are listed here.",
+    "Optional weapons (Heavy Venom Cannon, Stranglethorn Cannon, Carnifex crushing claws, etc.)",
+    "will appear as 'extra weapons' — this is correct pipeline behaviour for options-expansion."
+  ],
+  "expectedStats": {
+    "M": "8\"",
+    "T": "9",
+    "SV": "2+",
+    "W": "8",
+    "LD": "8+",
+    "OC": "3"
+  },
+  "expectedPoints": 90,
+  "expectedKeywords": [
+    "TYRANIDS",
+    "MONSTER",
+    "GREAT DEVOURER",
+    "CARNIFEXES"
+  ],
+  "expectedWeapons": [
+    {
+      "name": "Chitinous claws and teeth",
+      "stats": {
+        "Range": "Melee",
+        "A": "4",
+        "WS": "4+",
+        "S": "6",
+        "AP": "0",
+        "D": "1"
+      },
+      "keywords": []
+    },
+    {
+      "name": "Carnifex scything talons",
+      "stats": {
+        "Range": "Melee",
+        "A": "6",
+        "WS": "4+",
+        "S": "9",
+        "AP": "-2",
+        "D": "3"
+      },
+      "keywords": []
+    }
+  ],
+  "knownDiscrepancies": [
+    {
+      "field": "expectedKeywords",
+      "classification": "model-entry-no-category-inheritance",
+      "note": "ALL keywords (TYRANIDS, MONSTER, GREAT DEVOURER, CARNIFEXES) are missing. Unlike the Hive Tyrant (a standalone model entry with its own categoryLinks), the Carnifex model entry is nested inside the 'Carnifexes' unit entry. The Carnifex model entry itself has no categoryLinks — they all live on the parent unit entry. The pipeline does not currently propagate parent unit categoryLinks down to nested model entries. This is a distinct pipeline gap from the TYRANIDS faction-keyword issue: here ALL keywords are absent, not just the faction keyword."
+    },
+    {
+      "field": "expectedRules",
+      "note": "Deadly Demise and Synapse are infoLinks on the parent Carnifexes unit entry, not the Carnifex model entry. Same inheritance gap as keywords — expected to not surface for the model entry via current pipeline."
+    }
+  ],
+  "expectedRules": []
+}

@@ -1,0 +1,50 @@
+{
+  "identity": {
+    "name": "Genestealer",
+    "docId": "unit:714f-4383-3e36-f861",
+    "entryId": "714f-4383-3e36-f861",
+    "sourceFileId": "b8b51e7d528897c107a905ac8b03633dd76c1085d04c93b206aa3ae68e42e552"
+  },
+  "characteristics": {
+    "M": "8\"",
+    "T": "4",
+    "SV": "5+",
+    "W": "2",
+    "LD": "7+",
+    "OC": "1"
+  },
+  "costs": [],
+  "keywords": {
+    "categoryTokens": [],
+    "keywordTokens": [],
+    "note": "categoryTokens = preserved full names; keywordTokens = inverted-index tokens (normalized phrases since E-class bug fix). If multi-word category names appear fragmented in keywordTokens, this is a regression of the E-class bug."
+  },
+  "weapons": [
+    {
+      "name": "Genestealers claws and talons",
+      "stats": {
+        "Range": "Melee",
+        "A": "4",
+        "WS": "2+",
+        "S": "4",
+        "AP": "-2",
+        "D": "1",
+        "Keywords": "-"
+      },
+      "keywords": [
+        "and",
+        "claws",
+        "genestealers",
+        "talons"
+      ],
+      "docId": "weapon:53b5-899c-4c1e-53a3"
+    }
+  ],
+  "rules": [],
+  "diagnostics": {
+    "weaponDocRefCount": 1,
+    "ruleDocRefCount": 0,
+    "keywordTokenCount": 0,
+    "categoryTokenCount": 0
+  }
+}

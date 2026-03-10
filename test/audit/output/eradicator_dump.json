@@ -1,0 +1,88 @@
+{
+  "identity": {
+    "name": "Eradicator",
+    "docId": "unit:ab61-e814-8c4d-1cb",
+    "entryId": "ab61-e814-8c4d-1cb",
+    "sourceFileId": "e3a0111f5ccbcd8fd7d2d935dd40d823d3d52c49fe2f8a8941a2c0d489a94b9d"
+  },
+  "characteristics": {
+    "M": "5\"",
+    "T": "6",
+    "SV": "3+",
+    "W": "3",
+    "LD": "6+",
+    "OC": "1"
+  },
+  "costs": [],
+  "keywords": {
+    "categoryTokens": [],
+    "keywordTokens": [
+      "bolt weapon",
+      "melee weapon",
+      "pistol weapon",
+      "ranged weapon"
+    ],
+    "note": "categoryTokens = preserved full names; keywordTokens = inverted-index tokens (normalized phrases since E-class bug fix). If multi-word category names appear fragmented in keywordTokens, this is a regression of the E-class bug."
+  },
+  "weapons": [
+    {
+      "name": "Close combat weapon",
+      "stats": {
+        "Range": "Melee",
+        "A": "3",
+        "WS": "3+",
+        "S": "4",
+        "AP": "0",
+        "D": "1",
+        "Keywords": "-"
+      },
+      "keywords": [
+        "close",
+        "combat",
+        "weapon"
+      ],
+      "docId": "weapon:5047-1299-63ca-db8a"
+    },
+    {
+      "name": "Melta rifle",
+      "stats": {
+        "Range": "18\"",
+        "A": "1",
+        "BS": "3+",
+        "S": "9",
+        "AP": "-4",
+        "D": "D6",
+        "Keywords": "Heavy, Melta 2"
+      },
+      "keywords": [
+        "melta",
+        "rifle"
+      ],
+      "docId": "weapon:98e7-e26d-8e58-51e5"
+    },
+    {
+      "name": "Bolt pistol",
+      "stats": {
+        "Range": "12\"",
+        "A": "1",
+        "BS": "3+",
+        "S": "4",
+        "AP": "0",
+        "D": "1",
+        "Keywords": "Pistol"
+      },
+      "keywords": [
+        "bolt",
+        "pistol"
+      ],
+      "docId": "weapon:d093-797a-4c76-eea3"
+    }
+  ],
+  "rules": [],
+  "diagnostics": {
+    "weaponDocRefCount": 3,
+    "ruleDocRefCount": 0,
+    "keywordTokenCount": 4,
+    "categoryTokenCount": 0
+  }
+}

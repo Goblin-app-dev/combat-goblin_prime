@@ -209,6 +209,43 @@ void main() {
       // Once the dump is verified correct, add explicit pin assertions below.
     });
 
+    test('audit: Captain — character with direct rule infoLinks', () {
+      // Exercises: character stat line (W5), multiple weapon loadouts,
+      // direct rule infoLinks on the model entry (Leader, Oath of Moment,
+      // Templar Vows), and profile-type infoLinks (Finest Hour, Rites of
+      // Battle, Invulnerable Save) that are NOT expected as rules.
+      // Also validates cross-faction faction-keyword gap: ADEPTUS ASTARTES
+      // should be present but comes from 'Faction: Adeptus Astartes' category.
+      _runAudit(
+        index: smIndex,
+        unitName: 'Captain',
+        groundTruthPath: 'test/audit/ground_truth/captain.json',
+      );
+    });
+
+    test('audit: Eradicator — gravis infantry with melta weapons', () {
+      // Exercises: Gravis armour stat line (T6, W3), melta weapon profile
+      // (Heavy, Melta 2 keywords), model entry nested inside Eradicator Squad
+      // unit entry. Rules (Oath of Moment, Templar Vows) are on the unit entry
+      // not the model entry — confirms whether unit-level rule inheritance works.
+      _runAudit(
+        index: smIndex,
+        unitName: 'Eradicator',
+        groundTruthPath: 'test/audit/ground_truth/eradicator.json',
+      );
+    });
+
+    test('audit: Bladeguard Veterans — elite infantry with invuln save', () {
+      // Exercises: elite melee infantry, Master-crafted Power Weapon profile,
+      // Heavy Bolt Pistol, invulnerable save (profile-type infoLink, not rule),
+      // TACTICUS keyword extraction, and model entry vs unit entry granularity.
+      _runAudit(
+        index: smIndex,
+        unitName: 'Bladeguard Veterans',
+        groundTruthPath: 'test/audit/ground_truth/bladeguard_veterans.json',
+      );
+    });
+
     test('keyword fragmentation regression: multi-word categories must not fragment into tokens', () {
       // Regression test for the E-class keyword fragmentation bug (now fixed).
       //
@@ -352,6 +389,45 @@ void main() {
         index: tyranidIndex,
         unitName: 'Hive Tyrant',
         groundTruthPath: 'test/audit/ground_truth/hive_tyrant.json',
+      );
+    });
+
+    test('audit: Winged Hive Tyrant — flying monster with FLY keyword', () {
+      // Exercises: FLY keyword extraction, VANGUARD INVADER keyword,
+      // GREAT DEVOURER keyword, different stat line from walking Hive Tyrant
+      // (M12", T9, W10 vs T10, W14), and Deep Strike rule via infoLink.
+      // Known BSData discrepancy: LD 7+ in fixture vs 6+ on Wahapedia.
+      if (!_fixturePresent) return; // skip
+      _runAudit(
+        index: tyranidIndex,
+        unitName: 'Winged Hive Tyrant',
+        groundTruthPath: 'test/audit/ground_truth/winged_hive_tyrant.json',
+      );
+    });
+
+    test('audit: Genestealer — infantry model entry with vanguard ability', () {
+      // Exercises: infantry stat line (T4, W2), basic melee weapon,
+      // GENESTEALERS and VANGUARD INVADER keywords, and model entry nested
+      // inside Genestealers unit entry. Rules (Scouts, Synapse) are at unit
+      // level — confirms model-entry rule inheritance behaviour.
+      if (!_fixturePresent) return; // skip
+      _runAudit(
+        index: tyranidIndex,
+        unitName: 'Genestealer',
+        groundTruthPath: 'test/audit/ground_truth/genestealer.json',
+      );
+    });
+
+    test('audit: Carnifex — monster without synapse/character keywords', () {
+      // Exercises: basic monster stat line (T9, W8, LD 8+), multiple default
+      // melee weapons, optional ranged/melee weapons that should appear as
+      // extras. Unlike Hive Tyrant and Swarmlord, Carnifex has no CHARACTER or
+      // SYNAPSE keywords — exercises the minimal-keyword monster path.
+      if (!_fixturePresent) return; // skip
+      _runAudit(
+        index: tyranidIndex,
+        unitName: 'Carnifex',
+        groundTruthPath: 'test/audit/ground_truth/carnifex.json',
       );
     });
 
