@@ -13,6 +13,18 @@
   ],
   "knownDiscrepancies": [
     {
+      "field": "expectedRules",
+      "ruleName": "Synaptic Imperative",
+      "classification": "source-structure-not-a-rule",
+      "note": "Synaptic Imperative is not a standalone <rule> node in the BSData catalog; it appears as a named ability group / profile category header. The pipeline surfaces only materialised rule nodes, so this name is never emitted. Removed from expectedRules; absence is correct pipeline behaviour for this fixture version."
+    },
+    {
+      "field": "expectedRules",
+      "ruleName": "Shadow in the Warp",
+      "classification": "pipeline-gap-tracked",
+      "note": "Shadow in the Warp is present on the base unit as a direct <infoLink type='rule'> but _resolveInfoLink currently only materialises links whose target is a <profile> node. Direct rule infoLinks are therefore dropped. Kept in expectedRules so the audit failure remains visible. Fix tracked as: M5 bind enhancement for direct infoLink type='rule' targets."
+    },
+    {
       "field": "LD",
       "fixtureValue": "7+",
       "groundTruthValue": "6+",
@@ -101,10 +113,6 @@
     {
       "name": "Shadow in the Warp",
       "descriptionSubstring": "Battleshock"
-    },
-    {
-      "name": "Synaptic Imperative",
-      "descriptionSubstring": null
     },
     {
       "name": "Will of the Hive Mind",
