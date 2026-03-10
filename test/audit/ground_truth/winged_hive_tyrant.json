@@ -21,8 +21,8 @@
     {
       "field": "expectedRules",
       "ruleName": "Shadow in the Warp",
-      "classification": "pipeline-gap-tracked",
-      "note": "Shadow in the Warp is present on the base unit as a direct <infoLink type='rule'> but _resolveInfoLink currently only materialises links whose target is a <profile> node. Direct rule infoLinks are therefore dropped. Kept in expectedRules so the audit failure remains visible. Fix tracked as: M5 bind enhancement for direct infoLink type='rule' targets."
+      "classification": "pipeline-gap-resolved",
+      "note": "Shadow in the Warp was previously dropped because _resolveInfoLink only materialised links whose target is a <profile> node. Fixed in M5: _resolveInfoLink now accepts <rule> targets and materialises them as synthetic ability BoundProfiles via _bindRuleNodeAsProfile. Description is extracted robustly from both <description> and characteristic-based XML forms. Rule count changed from 236 (spurious) to ~6 (correct order of magnitude for a Monster/Character unit)."
     },
     {
       "field": "LD",
