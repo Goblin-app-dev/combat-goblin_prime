@@ -683,7 +683,13 @@ class IndexService {
     }
   }
 
-  /// Recursively collects rule refs from entry and children.
+  /// Collects rule refs from the entry's direct profiles only.
+  ///
+  /// Rule collection is intentionally scoped to [entry.profiles] and does NOT
+  /// recurse into [entry.children]. Children represent equipment option groups
+  /// (weapon upgrades, Crusade options, etc.) that contain shared catalog
+  /// ability profiles not belonging to this unit's own rule surface.
+  /// Recursing would pull in hundreds of unrelated rules from the full subtree.
   void _collectRuleRefs(
     BoundEntry entry,
     Map<String, RuleDoc> ruleByProfileId,
@@ -696,11 +702,6 @@ class IndexService {
           ruleDocRefs.add(rule.docId);
         }
       }
-    }
-
-    // Recurse into children
-    for (final child in entry.children) {
-      _collectRuleRefs(child, ruleByProfileId, ruleDocRefs);
     }
   }
 }
