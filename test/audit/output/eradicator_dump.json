@@ -15,9 +15,22 @@
   },
   "costs": [],
   "keywords": {
-    "categoryTokens": [],
+    "categoryTokens": [
+      "adeptus astartes",
+      "eradicator squad",
+      "gravis",
+      "grenades",
+      "imperium",
+      "infantry"
+    ],
     "keywordTokens": [
+      "adeptus astartes",
       "bolt weapon",
+      "eradicator squad",
+      "gravis",
+      "grenades",
+      "imperium",
+      "infantry",
       "melee weapon",
       "pistol weapon",
       "ranged weapon"
@@ -82,7 +95,7 @@
   "diagnostics": {
     "weaponDocRefCount": 3,
     "ruleDocRefCount": 0,
-    "keywordTokenCount": 4,
-    "categoryTokenCount": 0
+    "keywordTokenCount": 10,
+    "categoryTokenCount": 6
   }
 }

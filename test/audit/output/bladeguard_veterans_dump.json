@@ -15,11 +15,24 @@
   },
   "costs": [],
   "keywords": {
-    "categoryTokens": [],
+    "categoryTokens": [
+      "adeptus astartes",
+      "bladeguard veteran squad",
+      "grenades",
+      "imperium",
+      "infantry",
+      "tacticus"
+    ],
     "keywordTokens": [
+      "adeptus astartes",
+      "bladeguard veteran squad",
+      "grenades",
+      "imperium",
+      "infantry",
       "melee weapon",
       "power weapon",
-      "ranged weapon"
+      "ranged weapon",
+      "tacticus"
     ],
     "note": "categoryTokens = preserved full names; keywordTokens = inverted-index tokens (normalized phrases since E-class bug fix). If multi-word category names appear fragmented in keywordTokens, this is a regression of the E-class bug."
   },
@@ -65,7 +78,7 @@
   "diagnostics": {
     "weaponDocRefCount": 2,
     "ruleDocRefCount": 0,
-    "keywordTokenCount": 3,
-    "categoryTokenCount": 0
+    "keywordTokenCount": 9,
+    "categoryTokenCount": 6
   }
 }

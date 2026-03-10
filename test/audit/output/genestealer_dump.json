@@ -15,8 +15,20 @@
   },
   "costs": [],
   "keywords": {
-    "categoryTokens": [],
-    "keywordTokens": [],
+    "categoryTokens": [
+      "genestealers",
+      "great devourer",
+      "infantry",
+      "tyranids",
+      "vanguard invader"
+    ],
+    "keywordTokens": [
+      "genestealers",
+      "great devourer",
+      "infantry",
+      "tyranids",
+      "vanguard invader"
+    ],
     "note": "categoryTokens = preserved full names; keywordTokens = inverted-index tokens (normalized phrases since E-class bug fix). If multi-word category names appear fragmented in keywordTokens, this is a regression of the E-class bug."
   },
   "weapons": [
@@ -44,7 +56,7 @@
   "diagnostics": {
     "weaponDocRefCount": 1,
     "ruleDocRefCount": 0,
-    "keywordTokenCount": 0,
-    "categoryTokenCount": 0
+    "keywordTokenCount": 5,
+    "categoryTokenCount": 5
   }
 }

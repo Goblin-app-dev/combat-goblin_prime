@@ -153,6 +153,24 @@ class IndexService {
     return tokens.toList()..sort();
   }
 
+  /// Normalizes a category name for the public keyword surface.
+  ///
+  /// Strips the "Faction:" prefix (case-insensitive) before normalizing, so
+  /// that the faction name alone is surfaced without the structural prefix:
+  ///   "Faction: Tyranids"         → "tyranids"
+  ///   "Faction: Adeptus Astartes" → "adeptus astartes"
+  ///   "Infantry"                  → "infantry"
+  ///   "Great Devourer"            → "great devourer"
+  ///
+  /// All other category names are passed through [normalize] unchanged.
+  static String _normalizeCategoryName(String rawName) {
+    final trimmed = rawName.trim();
+    if (trimmed.toLowerCase().startsWith('faction:')) {
+      return normalize(trimmed.substring('faction:'.length));
+    }
+    return normalize(trimmed);
+  }
+
   // --- Private: Build RuleDocs ---
 
   /// Builds RuleDocs from ability-type profiles.
@@ -390,6 +408,17 @@ class IndexService {
     final sortedEntries = boundPack.entries.toList()
       ..sort((a, b) => a.id.compareTo(b.id));
 
+    // Build parent-child index for category keyword inheritance.
+    // Used at the M9 reference-surface layer only — does not mutate M5 data.
+    // Enables nested model entries (e.g. Carnifex inside Carnifexes) to surface
+    // the parent datasheet's category keywords when the model entry has none.
+    final parentByChildId = <String, BoundEntry>{};
+    for (final entry in sortedEntries) {
+      for (final child in entry.children) {
+        parentByChildId[child.id] = entry;
+      }
+    }
+
     for (final entry in sortedEntries) {
       // Skip groups and hidden entries for unit indexing
       if (entry.isGroup) continue;
@@ -438,18 +467,42 @@ class IndexService {
               ))
           .toList();
 
-      // Build keyword tokens from categories across full entry subtree
+      // Build keyword tokens from categories across full entry subtree.
       final keywordTokens = <String>{};
       _collectCategoryKeywords(entry, keywordTokens);
+      // Parent category inheritance for model-entry keyword surface:
+      // Walk up the ancestor chain to find the nearest ancestor with
+      // categories (skipping groups, which are structural containers with
+      // no semantic categories). Merges those categories onto this entry's
+      // keyword surface so that datasheet-level categories (e.g.
+      // "Faction: Adeptus Astartes" on "Eradicator Squad") surface on the
+      // nested model entry ("Eradicator"). Applied at the M9 reference-
+      // surface layer only — does not mutate M5 data.
+      final categoryAncestor = _findCategoryAncestor(entry.id, parentByChildId);
+      if (categoryAncestor != null) {
+        for (final cat in categoryAncestor.categories) {
+          final name = cat.name.trim();
+          if (name.isNotEmpty) {
+            final phrase = _normalizeCategoryName(name);
+            if (phrase.isNotEmpty) keywordTokens.add(phrase);
+          }
+        }
+      }
       final sortedKeywords = keywordTokens.toList()..sort();
 
-      // Build category tokens
-      final categoryTokens = entry.categories
-          .map((c) => normalize(c.name))
+      // Build category tokens with faction-prefix normalization.
+      final catSet = entry.categories
+          .map((c) => _normalizeCategoryName(c.name))
           .where((t) => t.isNotEmpty)
-          .toSet()
-          .toList()
-        ..sort();
+          .toSet();
+      // Ancestor category inheritance for categoryTokens: same rule.
+      if (categoryAncestor != null) {
+        for (final cat in categoryAncestor.categories) {
+          final phrase = _normalizeCategoryName(cat.name);
+          if (phrase.isNotEmpty) catSet.add(phrase);
+        }
+      }
+      final categoryTokens = catSet.toList()..sort();
 
       // Collect weapon refs from nested profiles
       final weaponDocRefs = <String>{};
@@ -652,7 +705,7 @@ class IndexService {
     for (final category in entry.categories) {
       final name = category.name.trim();
       if (name.isNotEmpty) {
-        final phrase = normalize(name);
+        final phrase = _normalizeCategoryName(name);
         if (phrase.isNotEmpty) keywords.add(phrase);
       }
     }
@@ -660,6 +713,25 @@ class IndexService {
     for (final child in entry.children) {
       _collectCategoryKeywords(child, keywords);
     }
+  }
+
+  /// Finds the nearest ancestor of [entryId] that has non-empty categories.
+  ///
+  /// Walks up the parent chain via [parentByChildId], skipping ancestors that
+  /// have no categories (e.g. selectionEntryGroup containers). Returns the
+  /// first ancestor with at least one category, or null if none found.
+  ///
+  /// Used at the M9 reference-surface layer for parent category inheritance.
+  BoundEntry? _findCategoryAncestor(
+    String entryId,
+    Map<String, BoundEntry> parentByChildId,
+  ) {
+    var ancestor = parentByChildId[entryId];
+    while (ancestor != null) {
+      if (ancestor.categories.isNotEmpty) return ancestor;
+      ancestor = parentByChildId[ancestor.id];
+    }
+    return null;
   }
 
   /// Recursively collects weapon refs from entry and children.

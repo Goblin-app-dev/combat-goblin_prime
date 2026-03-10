@@ -46,10 +46,19 @@
     }
   ],
   "keywords": {
-    "categoryTokens": [],
+    "categoryTokens": [
+      "carnifexes",
+      "great devourer",
+      "monster",
+      "tyranids"
+    ],
     "keywordTokens": [
       "attacks dx weapon",
-      "extra attacks weapon"
+      "carnifexes",
+      "extra attacks weapon",
+      "great devourer",
+      "monster",
+      "tyranids"
     ],
     "note": "categoryTokens = preserved full names; keywordTokens = inverted-index tokens (normalized phrases since E-class bug fix). If multi-word category names appear fragmented in keywordTokens, this is a regression of the E-class bug."
   },
@@ -239,7 +248,7 @@
   "diagnostics": {
     "weaponDocRefCount": 10,
     "ruleDocRefCount": 0,
-    "keywordTokenCount": 2,
-    "categoryTokenCount": 0
+    "keywordTokenCount": 6,
+    "categoryTokenCount": 4
   }
 }

@@ -44,24 +44,24 @@
     "categoryTokens": [
       "character",
       "epic hero",
-      "faction tyranids",
-      "great devourer",
-      "hive tyrant",
-      "monster",
-      "psyker",
-      "synapse",
-      "the swarmlord"
-    ],
-    "keywordTokens": [
-      "character",
-      "epic hero",
-      "faction tyranids",
       "great devourer",
       "hive tyrant",
       "monster",
       "psyker",
       "synapse",
       "the swarmlord",
+      "tyranids"
+    ],
+    "keywordTokens": [
+      "character",
+      "epic hero",
+      "great devourer",
+      "hive tyrant",
+      "monster",
+      "psyker",
+      "synapse",
+      "the swarmlord",
+      "tyranids",
       "warlord"
     ],
     "note": "categoryTokens = preserved full names; keywordTokens = inverted-index tokens (normalized phrases since E-class bug fix). If multi-word category names appear fragmented in keywordTokens, this is a regression of the E-class bug."

@@ -15,12 +15,27 @@
   },
   "costs": [],
   "keywords": {
-    "categoryTokens": [],
+    "categoryTokens": [
+      "adeptus astartes",
+      "battleline",
+      "grenades",
+      "imperium",
+      "infantry",
+      "intercessor squad",
+      "tacticus"
+    ],
     "keywordTokens": [
+      "adeptus astartes",
+      "battleline",
       "bolt weapon",
+      "grenades",
+      "imperium",
+      "infantry",
+      "intercessor squad",
       "melee weapon",
       "pistol weapon",
-      "ranged weapon"
+      "ranged weapon",
+      "tacticus"
     ],
     "note": "categoryTokens = preserved full names; keywordTokens = inverted-index tokens (normalized phrases since E-class bug fix). If multi-word category names appear fragmented in keywordTokens, this is a regression of the E-class bug."
   },
@@ -82,7 +97,7 @@
   "diagnostics": {
     "weaponDocRefCount": 3,
     "ruleDocRefCount": 0,
-    "keywordTokenCount": 4,
-    "categoryTokenCount": 0
+    "keywordTokenCount": 11,
+    "categoryTokenCount": 7
   }
 }

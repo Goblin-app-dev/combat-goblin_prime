@@ -43,13 +43,13 @@
   "keywords": {
     "categoryTokens": [
       "character",
-      "faction tyranids",
       "fly",
       "great devourer",
       "hive tyrant",
       "monster",
       "psyker",
       "synapse",
+      "tyranids",
       "vanguard invader",
       "winged hive tyrant"
     ],
@@ -57,7 +57,6 @@
       "attacks dx weapon",
       "character",
       "extra attacks weapon",
-      "faction tyranids",
       "fly",
       "great devourer",
       "grenades",
@@ -69,6 +68,7 @@
       "ranged weapon",
       "striding behemoths",
       "synapse",
+      "tyranids",
       "tyrannic war veteran",
       "vanguard invader",
       "warlord",
