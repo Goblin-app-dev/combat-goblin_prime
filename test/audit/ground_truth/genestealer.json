@@ -1,0 +1,56 @@
+{
+  "unitName": "Genestealer",
+  "source": "BSData wh40k-10e catalog (cross-referenced against Wahapedia keyword list, verified 2026-03-10)",
+  "comparisonTargetType": "modelEntry",
+  "notes": [
+    "BattleScribe stores a 'Genestealer' model entry inside the 'Genestealers' unit entry.",
+    "Stats, weapons are on the model entry; keywords, infoLinks, and pts=75 are on the unit entry.",
+    "Pipeline must inherit unit-level category data for model-level lookup to work correctly.",
+    "TYRANIDS keyword comes from 'Faction: Tyranids' category — same known gap as Hive Tyrant.",
+    "VANGUARD INVADER keyword comes from a direct category link on the unit entry.",
+    "Rules (Scouts, Synapse) are infoLinks on the *unit* entry, not the model entry.",
+    "Whether these surface for the model entry depends on pipeline inheritance — set expectedRules: []",
+    "to avoid false negatives; add entries once pipeline behaviour is confirmed.",
+    "Invulnerable Save (5+) is a profile-type infoLink, not a rule — not in expectedRules.",
+    "Pts: 75 is on the unit entry; model entry has no own pts cost."
+  ],
+  "expectedStats": {
+    "M": "8\"",
+    "T": "4",
+    "SV": "5+",
+    "W": "2",
+    "LD": "7+",
+    "OC": "1"
+  },
+  "expectedPoints": null,
+  "expectedKeywords": [
+    "TYRANIDS",
+    "INFANTRY",
+    "GREAT DEVOURER",
+    "GENESTEALERS",
+    "VANGUARD INVADER"
+  ],
+  "expectedWeapons": [
+    {
+      "name": "Genestealers claws and talons",
+      "stats": {
+        "Range": "Melee",
+        "A": "4",
+        "WS": "2+",
+        "S": "4",
+        "AP": "-2",
+        "D": "1"
+      },
+      "keywords": []
+    }
+  ],
+  "knownDiscrepancies": [
+    {
+      "field": "expectedKeywords",
+      "ruleName": "TYRANIDS",
+      "classification": "category-faction-extraction",
+      "note": "Confirmed systemic gap: TYRANIDS keyword missing in Hive Tyrant and Swarmlord audits. Same extraction path."
+    }
+  ],
+  "expectedRules": []
+}

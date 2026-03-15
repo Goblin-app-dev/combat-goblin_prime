@@ -1,0 +1,71 @@
+{
+  "unitName": "Bladeguard Veterans",
+  "source": "BSData wh40k-10e catalog (cross-referenced against Wahapedia keyword list, verified 2026-03-10)",
+  "comparisonTargetType": "modelEntry",
+  "notes": [
+    "BattleScribe stores a 'Bladeguard Veterans' model entry inside the 'Bladeguard Veteran Squad' unit entry.",
+    "Stats and weapons are on the model entry; keywords, infoLinks, and pts=80 are on the unit entry.",
+    "ADEPTUS ASTARTES keyword comes from 'Faction: Adeptus Astartes' category — same known gap.",
+    "Rules (Oath of Moment, Templar Vows) are infoLinks on the *unit* entry, not the model entry.",
+    "Invulnerable Save (4+) is a profile-type infoLink on the unit entry — not a rule node.",
+    "Bladeguard (Swords/Shields of the Imperium) is an inline ability profile — not expected as a rule.",
+    "A sibling 'Bladeguard Veteran Sergeant' model entry exists with an optional Plasma Pistol and",
+    "Neo-volkite Pistol; sergeant's weapons may appear as extra weapons via options-expansion.",
+    "pts=80 is on the Bladeguard Veteran Squad unit entry; model entry has no own pts cost."
+  ],
+  "expectedStats": {
+    "M": "6\"",
+    "T": "4",
+    "SV": "3+",
+    "W": "3",
+    "LD": "6+",
+    "OC": "1"
+  },
+  "expectedPoints": null,
+  "expectedKeywords": [
+    "ADEPTUS ASTARTES",
+    "INFANTRY",
+    "IMPERIUM",
+    "TACTICUS",
+    "BLADEGUARD VETERAN SQUAD"
+  ],
+  "expectedWeapons": [
+    {
+      "name": "Heavy Bolt Pistol",
+      "stats": {
+        "Range": "18\"",
+        "A": "1",
+        "BS": "3+",
+        "S": "4",
+        "AP": "-1",
+        "D": "1"
+      },
+      "keywords": ["PISTOL"]
+    },
+    {
+      "name": "Master-crafted Power Weapon",
+      "stats": {
+        "Range": "Melee",
+        "A": "4",
+        "WS": "3+",
+        "S": "5",
+        "AP": "-2",
+        "D": "2"
+      },
+      "keywords": []
+    }
+  ],
+  "knownDiscrepancies": [
+    {
+      "field": "expectedKeywords",
+      "ruleName": "ADEPTUS ASTARTES",
+      "classification": "category-faction-extraction",
+      "note": "Cross-faction confirmation of the TYRANIDS keyword gap."
+    },
+    {
+      "field": "expectedRules",
+      "note": "Oath of Moment and Templar Vows are infoLinks on the Bladeguard Veteran Squad unit entry. Expected to not surface for the model entry via current pipeline."
+    }
+  ],
+  "expectedRules": []
+}

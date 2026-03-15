@@ -1,0 +1,254 @@
+{
+  "identity": {
+    "name": "Carnifex",
+    "docId": "unit:92a2-7511-1173-a696",
+    "entryId": "92a2-7511-1173-a696",
+    "sourceFileId": "b8b51e7d528897c107a905ac8b03633dd76c1085d04c93b206aa3ae68e42e552"
+  },
+  "characteristics": {
+    "M": "8\"",
+    "T": "9",
+    "SV": "2+",
+    "W": "8",
+    "LD": "8+",
+    "OC": "3"
+  },
+  "costs": [
+    {
+      "typeId": "51b2-306e-1021-d207",
+      "typeName": "pts",
+      "value": 90.0
+    },
+    {
+      "typeId": "716d-91b7-d55a-1022",
+      "typeName": "Crusade: Weapon Modifications",
+      "value": 0.0
+    },
+    {
+      "typeId": "75bb-ded1-c86d-bdf0",
+      "typeName": "Crusade: Battle Honours",
+      "value": 0.0
+    },
+    {
+      "typeId": "a623-fe74-1d33-cddf",
+      "typeName": "Crusade: Experience",
+      "value": 0.0
+    },
+    {
+      "typeId": "ac6b-ced3-9b5e-9a6e",
+      "typeName": "Blackstone Fragments",
+      "value": 0.0
+    },
+    {
+      "typeId": "b03b-c239-15a5-da55",
+      "typeName": "Crusade Points",
+      "value": 0.0
+    }
+  ],
+  "keywords": {
+    "categoryTokens": [
+      "carnifexes",
+      "great devourer",
+      "monster",
+      "tyranids"
+    ],
+    "keywordTokens": [
+      "attacks dx weapon",
+      "carnifexes",
+      "extra attacks weapon",
+      "great devourer",
+      "monster",
+      "tyranids"
+    ],
+    "note": "categoryTokens = preserved full names; keywordTokens = inverted-index tokens (normalized phrases since E-class bug fix). If multi-word category names appear fragmented in keywordTokens, this is a regression of the E-class bug."
+  },
+  "weapons": [
+    {
+      "name": "Carnifex scything talons",
+      "stats": {
+        "Range": "Melee",
+        "A": "6",
+        "WS": "4+",
+        "S": "9",
+        "AP": "-2",
+        "D": "3",
+        "Keywords": "-"
+      },
+      "keywords": [
+        "carnifex",
+        "scything",
+        "talons"
+      ],
+      "docId": "weapon:153c-e819-feba-3d6c"
+    },
+    {
+      "name": "Stranglethorn cannon",
+      "stats": {
+        "Range": "36\"",
+        "A": "D6+1",
+        "BS": "4+",
+        "S": "7",
+        "AP": "-1",
+        "D": "2",
+        "Keywords": "Blast"
+      },
+      "keywords": [
+        "cannon",
+        "stranglethorn"
+      ],
+      "docId": "weapon:1692-c1a8-692a-7ca"
+    },
+    {
+      "name": "Deathspitters with slimer maggots",
+      "stats": {
+        "Range": "24\"",
+        "A": "6",
+        "BS": "4+",
+        "S": "7",
+        "AP": "-2",
+        "D": "1",
+        "Keywords": "-"
+      },
+      "keywords": [
+        "deathspitters",
+        "maggots",
+        "slimer",
+        "with"
+      ],
+      "docId": "weapon:1e1a-897b-784c-f8bd"
+    },
+    {
+      "name": "Chitinous claws and teeth",
+      "stats": {
+        "Range": "Melee",
+        "A": "4",
+        "WS": "4+",
+        "S": "6",
+        "AP": "0",
+        "D": "1",
+        "Keywords": "-"
+      },
+      "keywords": [
+        "and",
+        "chitinous",
+        "claws",
+        "teeth"
+      ],
+      "docId": "weapon:5ec-2d5f-be85-c1d4"
+    },
+    {
+      "name": "Carnifex extra scything talons",
+      "stats": {
+        "Range": "Melee",
+        "A": "2",
+        "WS": "4+",
+        "S": "9",
+        "AP": "-2",
+        "D": "3",
+        "Keywords": "Extra Attacks"
+      },
+      "keywords": [
+        "carnifex",
+        "extra",
+        "scything",
+        "talons"
+      ],
+      "docId": "weapon:7bf9-656d-88b2-653d"
+    },
+    {
+      "name": "Spine banks",
+      "stats": {
+        "Range": "6\"",
+        "A": "5",
+        "BS": "4+",
+        "S": "5",
+        "AP": "0",
+        "D": "1",
+        "Keywords": "Assault"
+      },
+      "keywords": [
+        "banks",
+        "spine"
+      ],
+      "docId": "weapon:7ed1-7546-77ee-12e7"
+    },
+    {
+      "name": "Devourers with brainleech worms",
+      "stats": {
+        "Range": "18\"",
+        "A": "12",
+        "BS": "4+",
+        "S": "6",
+        "AP": "0",
+        "D": "1",
+        "Keywords": "-"
+      },
+      "keywords": [
+        "brainleech",
+        "devourers",
+        "with",
+        "worms"
+      ],
+      "docId": "weapon:8214-cd27-3a49-6e07"
+    },
+    {
+      "name": "Heavy venom cannon",
+      "stats": {
+        "Range": "36",
+        "A": "D3",
+        "BS": "4+",
+        "S": "9",
+        "AP": "-2",
+        "D": "3",
+        "Keywords": "Blast"
+      },
+      "keywords": [
+        "cannon",
+        "heavy",
+        "venom"
+      ],
+      "docId": "weapon:8b57-47e1-431c-548"
+    },
+    {
+      "name": "Carnifex crushing claws",
+      "stats": {
+        "Range": "Melee",
+        "A": "4",
+        "WS": "4+",
+        "S": "12",
+        "AP": "-3",
+        "D": "D6+1",
+        "Keywords": "-"
+      },
+      "keywords": [
+        "carnifex",
+        "claws",
+        "crushing"
+      ],
+      "docId": "weapon:927d-e79a-7046-5acf"
+    },
+    {
+      "name": "Bio-plasma",
+      "stats": {
+        "Range": "12\"",
+        "A": "D3",
+        "BS": "4+",
+        "S": "7",
+        "AP": "-2",
+        "D": "1",
+        "Keywords": "Assault, Blast"
+      },
+      "keywords": [
+        "bioplasma"
+      ],
+      "docId": "weapon:c935-c179-a028-dbb7"
+    }
+  ],
+  "rules": [],
+  "diagnostics": {
+    "weaponDocRefCount": 10,
+    "ruleDocRefCount": 0,
+    "keywordTokenCount": 6,
+    "categoryTokenCount": 4
+  }
+}

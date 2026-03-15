@@ -1,0 +1,96 @@
+{
+  "unitName": "Captain",
+  "source": "BSData wh40k-10e catalog (cross-referenced against Wahapedia keyword list, verified 2026-03-10)",
+  "comparisonTargetType": "datasheet",
+  "notes": [
+    "The Captain is a standalone character datasheet (model entry type=model in BSData).",
+    "Rule infoLinks (Leader, Oath of Moment, Templar Vows) are directly on the Captain model entry.",
+    "Profile infoLinks (Finest Hour, Rites of Battle, Invulnerable Save 4+) are type=profile — not in expectedRules.",
+    "ADEPTUS ASTARTES keyword comes from 'Faction: Adeptus Astartes' category — same extraction gap as TYRANIDS.",
+    "The Captain has three distinct weapon loadouts; default loadout (Bolt pistol + Master-crafted Bolter",
+    "+ melee option) is used here. Extra loadout weapons will appear as 'extra weapons' — expected.",
+    "BS 2+ stat line reflects the character's 2+ Ballistic Skill.",
+    "pts=80 is on the Captain model entry directly."
+  ],
+  "expectedStats": {
+    "M": "6\"",
+    "T": "4",
+    "SV": "3+",
+    "W": "5",
+    "LD": "6+",
+    "OC": "1"
+  },
+  "expectedPoints": 80,
+  "expectedKeywords": [
+    "ADEPTUS ASTARTES",
+    "CHARACTER",
+    "INFANTRY",
+    "CAPTAIN",
+    "IMPERIUM",
+    "TACTICUS"
+  ],
+  "expectedWeapons": [
+    {
+      "name": "Bolt pistol",
+      "stats": {
+        "Range": "12\"",
+        "A": "1",
+        "BS": "2+",
+        "S": "4",
+        "AP": "0",
+        "D": "1"
+      },
+      "keywords": ["PISTOL"]
+    },
+    {
+      "name": "Master-crafted Bolter",
+      "stats": {
+        "Range": "24\"",
+        "A": "2",
+        "BS": "2+",
+        "S": "4",
+        "AP": "-1",
+        "D": "2"
+      },
+      "keywords": []
+    },
+    {
+      "name": "Close combat weapon",
+      "stats": {
+        "Range": "Melee",
+        "A": "6",
+        "WS": "2+",
+        "S": "4",
+        "AP": "0",
+        "D": "1"
+      },
+      "keywords": []
+    }
+  ],
+  "knownDiscrepancies": [
+    {
+      "field": "expectedKeywords",
+      "ruleName": "ADEPTUS ASTARTES",
+      "classification": "category-faction-extraction",
+      "note": "Same systemic gap as TYRANIDS for Tyranid units: faction keyword derives from 'Faction: Adeptus Astartes' category. Confirms the gap is cross-faction."
+    },
+    {
+      "field": "expectedWeapons",
+      "note": "Captain has multiple loadout options. Weapons from loadouts 2 and 3 (Heavy Bolt Pistol, Power Fist, Master-crafted Power Weapon, Plasma Pistol, Neo-volkite Pistol) will appear as extra weapons. This is expected pipeline behaviour for options-expansion."
+    }
+  ],
+  "expectedRules": [
+    {
+      "name": "Leader",
+      "descriptionSubstring": null
+    },
+    {
+      "name": "Oath of Moment",
+      "descriptionSubstring": "Command phase"
+    },
+    {
+      "name": "Templar Vows",
+      "descriptionSubstring": null
+    }
+  ]
+}

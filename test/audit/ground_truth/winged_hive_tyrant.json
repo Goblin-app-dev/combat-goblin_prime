@@ -1,0 +1,126 @@
+{
+  "unitName": "Winged Hive Tyrant",
+  "source": "Wahapedia – Warhammer 40,000 10th Edition (verified 2026-03-09)",
+  "comparisonTargetType": "datasheet",
+  "notes": [
+    "Stats and rules verified against Wahapedia datasheet.",
+    "Winged Hive Tyrant is a separate datasheet from the walking Hive Tyrant.",
+    "T9 W10 (lower than the walking variant T10 W14) with 2+/4++ save.",
+    "Carries Fly keyword and 12\" move; cannot join bodyguard units.",
+    "Points cost subject to Balance Dataslate updates — verify on Wahapedia for current value.",
+    "FIXTURE REQUIREMENT: Needs 'Xenos - Tyranids.cat' loaded to test against live data.",
+    "To add the fixture: download from https://github.com/BSData/wh40k-10e and place in test/"
+  ],
+  "knownDiscrepancies": [
+    {
+      "field": "expectedRules",
+      "ruleName": "Synaptic Imperative",
+      "classification": "source-structure-not-a-rule",
+      "note": "Synaptic Imperative is not a standalone <rule> node in the BSData catalog; it appears as a named ability group / profile category header. The pipeline surfaces only materialised rule nodes, so this name is never emitted. Removed from expectedRules; absence is correct pipeline behaviour for this fixture version."
+    },
+    {
+      "field": "expectedRules",
+      "ruleName": "Shadow in the Warp",
+      "classification": "pipeline-gap-resolved",
+      "note": "Shadow in the Warp was previously dropped because _resolveInfoLink only materialised links whose target is a <profile> node. Fixed in M5: _resolveInfoLink now accepts <rule> targets and materialises them as synthetic ability BoundProfiles via _bindRuleNodeAsProfile. Description is extracted robustly from both <description> and characteristic-based XML forms. Rule count changed from 236 (spurious) to ~6 (correct order of magnitude for a Monster/Character unit)."
+    },
+    {
+      "field": "LD",
+      "fixtureValue": "7+",
+      "groundTruthValue": "6+",
+      "fixture": "test/Library - Tyranids.cat",
+      "classification": "source-catalog-defect-or-version-drift",
+      "verifiedAgainst": "Wahapedia 10th ed, verified 2026-03-09",
+      "policy": "raw-fixture-preserved",
+      "note": "Fixture left unmodified per raw-source audit policy. Audit should surface this discrepancy, not silence it."
+    }
+  ],
+  "expectedStats": {
+    "M": "12\"",
+    "T": "9",
+    "SV": "2+",
+    "W": "10",
+    "LD": "6+",
+    "OC": "3"
+  },
+  "expectedKeywords": [
+    "TYRANIDS",
+    "MONSTER",
+    "CHARACTER",
+    "FLY",
+    "SYNAPSE",
+    "PSYKER",
+    "GREAT DEVOURER",
+    "VANGUARD INVADER",
+    "HIVE TYRANT",
+    "WINGED HIVE TYRANT"
+  ],
+  "expectedWeapons": [
+    {
+      "name": "Monstrous Bonesword and Lash Whip",
+      "stats": {
+        "Range": "Melee",
+        "A": "6",
+        "WS": "2+",
+        "S": "9",
+        "AP": "-2",
+        "D": "3"
+      },
+      "keywords": ["TWIN-LINKED"]
+    },
+    {
+      "name": "Monstrous Scything Talons",
+      "stats": {
+        "Range": "Melee",
+        "A": "4",
+        "WS": "2+",
+        "S": "7",
+        "AP": "-2",
+        "D": "2"
+      },
+      "keywords": ["EXTRA ATTACKS"]
+    },
+    {
+      "name": "Heavy Venom Cannon",
+      "stats": {
+        "Range": "36\"",
+        "A": "3",
+        "BS": "4+",
+        "S": "10",
+        "AP": "-2",
+        "D": "D6+1"
+      },
+      "keywords": ["BLAST", "HEAVY"]
+    },
+    {
+      "name": "Stranglethorn Cannon",
+      "stats": {
+        "Range": "36\"",
+        "A": "D6+3",
+        "BS": "4+",
+        "S": "8",
+        "AP": "-1",
+        "D": "2"
+      },
+      "keywords": ["BLAST", "HEAVY"]
+    }
+  ],
+  "expectedRules": [
+    {
+      "name": "Paroxysm",
+      "descriptionSubstring": "Fight phase"
+    },
+    {
+      "name": "Shadow in the Warp",
+      "descriptionSubstring": "Battleshock"
+    },
+    {
+      "name": "Will of the Hive Mind",
+      "descriptionSubstring": "Stratagem"
+    },
+    {
+      "name": "Deep Strike",
+      "descriptionSubstring": null
+    }
+  ]
+}

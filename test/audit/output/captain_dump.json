@@ -1,0 +1,276 @@
+{
+  "identity": {
+    "name": "Captain",
+    "docId": "unit:6c10-5b51-5bc0-8d2c",
+    "entryId": "6c10-5b51-5bc0-8d2c",
+    "sourceFileId": "e3a0111f5ccbcd8fd7d2d935dd40d823d3d52c49fe2f8a8941a2c0d489a94b9d"
+  },
+  "characteristics": {
+    "M": "6\"",
+    "T": "4",
+    "SV": "3+",
+    "W": "5",
+    "LD": "6+",
+    "OC": "1"
+  },
+  "costs": [
+    {
+      "typeId": "51b2-306e-1021-d207",
+      "typeName": "pts",
+      "value": 80.0
+    }
+  ],
+  "keywords": {
+    "categoryTokens": [
+      "adeptus astartes",
+      "captain",
+      "character",
+      "grenades",
+      "imperium",
+      "infantry",
+      "tacticus"
+    ],
+    "keywordTokens": [
+      "adeptus astartes",
+      "bolt weapon",
+      "captain",
+      "character",
+      "grenades",
+      "imperium",
+      "infantry",
+      "lone wolf",
+      "melee weapon",
+      "monster hunters",
+      "pistol weapon",
+      "power weapon",
+      "ranged weapon",
+      "relic bearer",
+      "striding behemoths",
+      "tacticus",
+      "tyrannic war veteran",
+      "warlord"
+    ],
+    "note": "categoryTokens = preserved full names; keywordTokens = inverted-index tokens (normalized phrases since E-class bug fix). If multi-word category names appear fragmented in keywordTokens, this is a regression of the E-class bug."
+  },
+  "weapons": [
+    {
+      "name": "Power Fist",
+      "stats": {
+        "Range": "Melee",
+        "A": "5",
+        "WS": "2+",
+        "S": "8",
+        "AP": "-2",
+        "D": "2",
+        "Keywords": "-"
+      },
+      "keywords": [
+        "fist",
+        "power"
+      ],
+      "docId": "weapon:0f7e-39a9-fc61-122a"
+    },
+    {
+      "name": "Heavy Bolt Pistol",
+      "stats": {
+        "Range": "18\"",
+        "A": "1",
+        "BS": "2+",
+        "S": "4",
+        "AP": "-1",
+        "D": "1",
+        "Keywords": "Pistol"
+      },
+      "keywords": [
+        "bolt",
+        "heavy",
+        "pistol"
+      ],
+      "docId": "weapon:2cbe-10b2-3653-4b55"
+    },
+    {
+      "name": "Bolt pistol",
+      "stats": {
+        "Range": "12\"",
+        "A": "1",
+        "BS": "2+",
+        "S": "4",
+        "AP": "0",
+        "D": "1",
+        "Keywords": "Pistol"
+      },
+      "keywords": [
+        "bolt",
+        "pistol"
+      ],
+      "docId": "weapon:3104-8d29-e431-05d7"
+    },
+    {
+      "name": "â¤ Plasma Pistol - Supercharge",
+      "stats": {
+        "Range": "12\"",
+        "A": "1",
+        "BS": "3+",
+        "S": "8",
+        "AP": "-3",
+        "D": "2",
+        "Keywords": "Hazardous, Pistol"
+      },
+      "keywords": [
+        "pistol",
+        "plasma",
+        "supercharge"
+      ],
+      "docId": "weapon:4a80-2594-8839-c0bf"
+    },
+    {
+      "name": "â¤ Plasma Pistol - Standard",
+      "stats": {
+        "Range": "12\"",
+        "A": "1",
+        "BS": "3+",
+        "S": "7",
+        "AP": "-2",
+        "D": "1",
+        "Keywords": "Pistol"
+      },
+      "keywords": [
+        "pistol",
+        "plasma",
+        "standard"
+      ],
+      "docId": "weapon:5edb-fb23-55e8-8415"
+    },
+    {
+      "name": "Master-crafted Power Weapon",
+      "stats": {
+        "Range": "Melee",
+        "A": "5",
+        "WS": "2+",
+        "S": "5",
+        "AP": "-2",
+        "D": "2",
+        "Keywords": "-"
+      },
+      "keywords": [
+        "mastercrafted",
+        "power",
+        "weapon"
+      ],
+      "docId": "weapon:7bf3-e01c-dce7-60fd"
+    },
+    {
+      "name": "Vertebrax of Vodun",
+      "stats": {
+        "Range": "6\"",
+        "A": "1",
+        "BS": "2+",
+        "S": "*",
+        "AP": "*",
+        "D": "*",
+        "Keywords": "Assault"
+      },
+      "keywords": [
+        "of",
+        "vertebrax",
+        "vodun"
+      ],
+      "docId": "weapon:afcc-75f3-b4df-3302"
+    },
+    {
+      "name": "Neo-volkite Pistol",
+      "stats": {
+        "Range": "12\"",
+        "A": "1",
+        "BS": "2+",
+        "S": "5",
+        "AP": "0",
+        "D": "2",
+        "Keywords": "Devastating Wounds, Pistol"
+      },
+      "keywords": [
+        "neovolkite",
+        "pistol"
+      ],
+      "docId": "weapon:d16c-ac3c-f951-2bd3"
+    },
+    {
+      "name": "Master-crafted Bolter",
+      "stats": {
+        "Range": "24\"",
+        "A": "2",
+        "BS": "2+",
+        "S": "4",
+        "AP": "-1",
+        "D": "2",
+        "Keywords": "-"
+      },
+      "keywords": [
+        "bolter",
+        "mastercrafted"
+      ],
+      "docId": "weapon:eff9-b1b3-de43-fb11"
+    },
+    {
+      "name": "Close combat weapon",
+      "stats": {
+        "Range": "Melee",
+        "A": "6",
+        "WS": "2+",
+        "S": "4",
+        "AP": "0",
+        "D": "1",
+        "Keywords": "-"
+      },
+      "keywords": [
+        "close",
+        "combat",
+        "weapon"
+      ],
+      "docId": "weapon:f4f9-d665-21c1-2727"
+    }
+  ],
+  "rules": [
+    {
+      "name": "Oath of Moment",
+      "description": "If your Army Faction is **^^Adeptus Astartes^^**, at theÂ start of your Command phase, select one unit fromÂ your opponentâs army. Until the start of your nextÂ Command phase, that enemy unit is your OathÂ of Moment target. Each time a model with thisÂ ability makes an attack that targets your Oath ofÂ Moment target:\nâ  You can reroll the Hit roll\nâ  If you are using a Codex: Space Marines Detachment and your army does not include one or more unitsÂ with the **^^Black Templars^^**, **^^Blood Angels^^**, **^^Dark Angels^^**, **^^Deathwatch^^** or **^^Space Wolves^^** keywords, add 1 to the Wound roll as well.",
+      "docId": "rule:3b76-4053-ece9-6e7d"
+    },
+    {
+      "name": "Leader",
+      "description": "This model can be attached to the following units:\n\nâ  Assault Intercessor Squad\nâ  Bladeguard Veteran Squad*\nâ  Hellblaster Squad*\nâ  Infernus Squad\nâ  Intercessor Squad\nâ  Sternguard Veteran Squad\nâ  Company Heroes\nâ  Tactical Squad\n\n* This model cannot be attached to a Bladeguard Veteran Squad unless it is equipped with a relic shield, and cannot be attached to a Hellblaster Squad unless it is equipped with a plasma pistol.",
+      "docId": "rule:6e66-2c98-4726-d12d"
+    },
+    {
+      "name": "Rites of Battle",
+      "description": "Once per battle round, one unit from your army with this ability can use it when its unit is targeted with a Stratagem. If it does, reduce the CP cost of that use of that Stratagem by 1CP.",
+      "docId": "rule:90c7-c55c-21e2-2232"
+    },
+    {
+      "name": "Leader",
+      "description": "While a Bodyguard unit contains a Leader, it is known as an Attached unit and, with the exception of rules that are triggered when units are destroyed (pg 12), it is treated as a single unit for all rules purposes. Each time an attack targets an Attached unit, until the attacking unit has resolved all of its attacks, you must use the Toughness characteristic of the Bodyguard models in that unit, even if a Leader in that unit has a different Toughness characteristic. Each time an attack successfully wounds an Attached unit, that attack cannot be allocated to a Character model in that unit, even if that Character model has lost one or more wounds or has already had attacks allocated to it this phase. As soon as the last Bodyguard model in an Attached unit has been destroyed, any attacks made against that unit that have yet to be allocated can then be allocated to Character models in that unit.\n\nEach time the last model in a Bodyguard unit is destroyed, each CHARACTER unit that is part of that Attached unit becomes a separate unit, with its original Starting Strength. If this happens as the result of an attack, they become separate units after the attacking unit has resolved all of its attacks.Â \n\nEach time the last model in a CHARACTER unit that is attached to a Bodyguard unit is destroyed and there is not another CHARACTER unit attached, that Attached unitâs Bodyguard unit becomes a separate unit, with its original Starting Strength. If this happens as the result of an attack, they become separate units after the attacking unit has resolved all of its attacks.Â \n\nEach time a unit that is part of an Attached unit is destroyed, it does not have the keywords of any other units that make up that Attached unit (unless it has those keywords on its own datasheet) for the purposes of any rules that would be triggered when that unit is destroyed.",
+      "docId": "rule:b4dd-3e1f-41cb-218f"
+    },
+    {
+      "name": "Invulnerable Save",
+      "description": "4+",
+      "docId": "rule:db19-dee7-9530-ef0e"
+    },
+    {
+      "name": "Templar Vows",
+      "description": "If your Army Faction is **^^Adeptus Astartes^^**, at the start of the first battle round, select one of the following Vows to be active for **^^Adeptus Astartes^^** units from your army. While a Vow is active for your army, that unit has the associated ability below.Â \n\n**Abhor the Witch, Destroy the Witch**\nâ  Each time this unit declares a charge, if one or more targets of that charge have the **^^Psyker^^** keyword, you can re-roll the Charge roll. Melee weapons equipped by models in this unit have the **[PRECISION]** ability while targeting **^^Psyker^^** units.Â \n\n**Accept Any Challenge, No Matter the Odds**\nâ  Each time a model in this unit makes a melee attack, if the Strength characteristic of that attack is less than or equal to the Toughness characteristic of the target, add 1 to the wound roll\n\n**Suffer Not the Unclean to Live**\nâ  This unit is eligible to declare a charge in a turn in which it Fell Back, and each time a model in this unit makes a Pile-in or Consolidation move, it does not need to end that move closer to the closest enemy model, provided it ends that move as close as possible to the nearest enemy unit.Â \n\n**Uphold the Honour of the Emperor**\nIf this unit has the **^^Infantry^^** keyword:\nâ  At the end of your Command phase, if this unit is within range of an objective marker you control, that objective marker remains under your control until your opponent's level of control over that objective marker is greater than yours at the end of the phase.Â \nâ  If the mission you are playing features Actions, this unit is eligible to start to perform an Action in a turn in which it Advanced.",
+      "docId": "rule:f26c-4b28-aaea-40cf"
+    },
+    {
+      "name": "Finest Hour",
+      "description": "Once per battle, at the start of the Fight phase, this model can use this ability. If it does, until the end of the phase, add 3 to the Attacks characteristic of melee weapons equipped by this model and those weapons have the [DEVASTATING WOUNDS] ability.",
+      "docId": "rule:fdf1-64a5-906c-3474"
+    }
+  ],
+  "diagnostics": {
+    "weaponDocRefCount": 10,
+    "ruleDocRefCount": 7,
+    "keywordTokenCount": 18,
+    "categoryTokenCount": 7
+  }
+}

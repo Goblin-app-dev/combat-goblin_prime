@@ -1,13 +1,13 @@
 {
   "identity": {
-    "name": "Hive Tyrant",
-    "docId": "unit:3e96-8098-3401-77af",
-    "entryId": "3e96-8098-3401-77af",
-    "sourceFileId": "b8b51e7d528897c107a905ac8b03633dd76c1085d04c93b206aa3ae68e42e552"
+    "name": "Winged Hive Tyrant",
+    "docId": "unit:fa68-fcb9-38c-cd0f",
+    "entryId": "fa68-fcb9-38c-cd0f",
+    "sourceFileId": "0dc6b1bb86b7df66ec945cfb981758bbe33b4db1d048532b04756436672d4555"
   },
   "characteristics": {
-    "M": "8\"",
-    "T": "10",
+    "M": "12\"",
+    "T": "9",
     "SV": "2+",
     "W": "10",
     "LD": "7+",
@@ -17,7 +17,7 @@
     {
       "typeId": "51b2-306e-1021-d207",
       "typeName": "pts",
-      "value": 195.0
+      "value": 170.0
     },
     {
       "typeId": "716d-91b7-d55a-1022",
@@ -43,17 +43,21 @@
   "keywords": {
     "categoryTokens": [
       "character",
+      "fly",
       "great devourer",
       "hive tyrant",
       "monster",
       "psyker",
       "synapse",
-      "tyranids"
+      "tyranids",
+      "vanguard invader",
+      "winged hive tyrant"
     ],
     "keywordTokens": [
       "attacks dx weapon",
       "character",
       "extra attacks weapon",
+      "fly",
       "great devourer",
       "grenades",
       "hive tyrant",
@@ -66,7 +70,9 @@
       "synapse",
       "tyranids",
       "tyrannic war veteran",
-      "warlord"
+      "vanguard invader",
+      "warlord",
+      "winged hive tyrant"
     ],
     "note": "categoryTokens = preserved full names; keywordTokens = inverted-index tokens (normalized phrases since E-class bug fix). If multi-word category names appear fragmented in keywordTokens, this is a regression of the E-class bug."
   },
@@ -105,6 +111,23 @@
         "talons"
       ],
       "docId": "weapon:54a6-4f13-d99b-583c"
+    },
+    {
+      "name": "Tyrant talons",
+      "stats": {
+        "Range": "Melee",
+        "A": "5",
+        "WS": "2+",
+        "S": "7",
+        "AP": "-2",
+        "D": "2",
+        "Keywords": "-"
+      },
+      "keywords": [
+        "talons",
+        "tyrant"
+      ],
+      "docId": "weapon:84d0-f0bf-85c5-2266"
     },
     {
       "name": "Monstrous bonesword and lash whip",
@@ -175,6 +198,11 @@
       "docId": "rule:395b-a159-b293-27aa"
     },
     {
+      "name": "Deep Strike",
+      "description": "During the Declare Battle Formations step, if every model in a unit has this ability, you can set it up in Reserves instead of setting it up on the battlefield. If you do, in the Reinforcements step of one of your Movement phases you can set up this unit anywhere on the battlefield that is more than 9\" horizontally away from all enemy models.\n\nIf a unit with the Deep Strike ability arrives from Strategic Reserves, the controlling player can choose for that unit to be set up either using the rules for Strategic Reserves or using the Deep Strike ability.",
+      "docId": "rule:7cb5-dd6b-dd87-ad3b"
+    },
+    {
       "name": "Synapse",
       "description": "If your Army Faction is **^^Tyranids^^**, while a **^^Tyranids^^** unit from your army is within 6\" of one or moreÂ friendly **^^Synapse^^** models, that **^^Tyranids^^** unit is saidÂ to be within Synapse Range of that model and of yourÂ army. While a **^^Tyranids^^** unit fromÂ your army is withinÂ Synapse Range of your army:\n\nâ  Each time that unit takes a Battle-shock test, takeÂ that test on 3D6 instead of 2D6.\nâ  Each time a model in that unit makes a meleeÂ attack, add 1 to the Strength characteristic ofÂ that attack.",
       "docId": "rule:86aa-437f-260b-5cad"
@@ -190,15 +218,15 @@
       "docId": "rule:b68a-5ded-65ac-98c"
     },
     {
-      "name": "Onslaught (Aura, Psychic)",
-      "description": "While a friendly TYRANIDS unit isÂ within 6\" of this model, ranged weapons equipped by modelsÂ in that unit have the [ASSAULT] and [LETHAL HITS] abilities.",
-      "docId": "rule:d038-2f3d-1c4a-a15"
+      "name": "Paroxysm (Psychic)",
+      "description": "At the start of the Fight phase, you can select one enemy unit within 12\" of and visible to this model and roll one D6: on a 1, this Psyker suffers D3 mortal wounds; on a 2+, until the end of the phase, subtract 1 from the Attacks characteristic of weapons equipped by models in that unit.",
+      "docId": "rule:fee7-90a8-24a2-79ef"
     }
   ],
   "diagnostics": {
-    "weaponDocRefCount": 5,
-    "ruleDocRefCount": 6,
-    "keywordTokenCount": 16,
-    "categoryTokenCount": 7
+    "weaponDocRefCount": 6,
+    "ruleDocRefCount": 7,
+    "keywordTokenCount": 19,
+    "categoryTokenCount": 10
   }
 }

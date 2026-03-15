@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
 import 'package:combat_goblin_prime/modules/m3_wrap/m3_wrap.dart';
 import 'package:combat_goblin_prime/modules/m4_link/m4_link.dart';
 
@@ -26,6 +28,9 @@ class BindService {
 
   /// Eligible tagNames for BoundProfile.
   static const _profileTags = {'profile'};
+
+  /// Eligible tagNames for rule nodes materialized as synthetic ability profiles.
+  static const _ruleTags = {'rule'};
 
   /// Eligible tagNames for BoundCategory.
   static const _categoryTags = {'categoryEntry'};
@@ -560,7 +565,8 @@ class BindService {
       final targetNode = nodeLookup[(target.fileId, target.nodeRef.nodeIndex)];
       if (targetNode == null) continue;
 
-      if (_profileTags.contains(targetNode.tagName)) {
+      if (_profileTags.contains(targetNode.tagName) ||
+          _ruleTags.contains(targetNode.tagName)) {
         if (selectedNode == null) {
           selectedNode = targetNode;
           selectedFileId = target.fileId;
@@ -575,7 +581,7 @@ class BindService {
     if (selectedNode == null) {
       diagnostics.add(BindDiagnostic(
         code: BindDiagnosticCode.unresolvedInfoLink,
-        message: 'infoLink resolved but no eligible profile target',
+        message: 'infoLink resolved but no eligible profile or rule target',
         sourceFileId: file.fileId,
         sourceNode: linkNode.ref,
         targetId: linkNode.attributes['targetId'],
@@ -606,6 +612,9 @@ class BindService {
       return null;
     }
 
+    if (_ruleTags.contains(selectedNode.tagName)) {
+      return _bindRuleNodeAsProfile(selectedNode, targetFile);
+    }
     return _bindProfileFromNode(selectedNode, targetFile);
   }
 
@@ -681,6 +690,70 @@ class BindService {
       sourceFileId: selectedFileId!,
       sourceNode: selectedNode.ref,
     );
+  }
+
+  /// Materialises a `<rule>` node as a synthetic ability BoundProfile.
+  ///
+  /// `<rule>` nodes carry name + description text but have no profileType.
+  /// Assigning typeName='ability' lets M9 index them as RuleDocs without
+  /// any change to M9's profile classification logic.
+  ///
+  /// Invariants:
+  ///   * typeName is always 'ability'
+  ///   * Only id, name, description, typeName are materialised
+  ///   * Children, nested links, and sub-entries are intentionally NOT bound
+  ///     (rule nodes are leaf metadata nodes, not structural containers)
+  BoundProfile _bindRuleNodeAsProfile(WrappedNode node, WrappedFile file) {
+    final id = node.attributes['id'] ?? '';
+    final name = node.attributes['name'] ?? '';
+    final description = _extractRuleDescriptionText(node, file);
+
+    return BoundProfile(
+      id: id,
+      name: name,
+      typeId: null,
+      typeName: 'ability',
+      characteristics: [
+        if (description.isNotEmpty) (name: 'description', value: description),
+      ],
+      sourceFileId: file.fileId,
+      sourceNode: node.ref,
+    );
+  }
+
+  /// Extracts rule description text from a `<rule>` node.
+  ///
+  /// BSData catalogs use two XML shapes for rule descriptions:
+  ///   1. `<rule><description>text</description></rule>`
+  ///   2. `<rule><characteristics><characteristic name="Description">text</characteristic></characteristics></rule>`
+  ///
+  /// Both are checked in priority order; the first match wins.
+  /// Returns empty string when no description text is present.
+  String _extractRuleDescriptionText(WrappedNode node, WrappedFile file) {
+    // Pass 1: explicit <description> child element.
+    for (final childRef in node.children) {
+      final child = file.nodeAt(childRef);
+      if (child.tagName == 'description') {
+        return child.textContent ?? '';
+      }
+    }
+
+    // Pass 2: characteristic named "Description" inside a <characteristics> container.
+    for (final childRef in node.children) {
+      final child = file.nodeAt(childRef);
+      if (child.tagName == 'characteristics') {
+        for (final charRef in child.children) {
+          final charNode = file.nodeAt(charRef);
+          if (charNode.tagName == 'characteristic' &&
+              (charNode.attributes['name'] ?? '').trim().toLowerCase() ==
+                  'description') {
+            return charNode.textContent ?? '';
+          }
+        }
+      }
+    }
+
+    return '';
   }
 
   /// Binds a profile node.
@@ -793,6 +866,15 @@ class BindService {
       sourceNode: node.ref,
     );
   }
+
+  /// Test accessor: materialises a rule node as a synthetic BoundProfile.
+  ///
+  /// Provided so invariant tests can create synthetic WrappedFile/WrappedNode
+  /// objects and verify the normalisation contract without going through the
+  /// full M1–M4 pipeline.  Not part of the production API.
+  @visibleForTesting
+  BoundProfile normalizeRuleNodeForTest(WrappedNode node, WrappedFile file) =>
+      _bindRuleNodeAsProfile(node, file);
 
   /// Collects nested entities from a bound entry into flat lists.
   void _collectNestedEntities(

@@ -1,8 +1,8 @@
 {
   "identity": {
-    "name": "Hive Tyrant",
-    "docId": "unit:3e96-8098-3401-77af",
-    "entryId": "3e96-8098-3401-77af",
+    "name": "The Swarmlord",
+    "docId": "unit:13f7-1a3-eff-7393",
+    "entryId": "13f7-1a3-eff-7393",
     "sourceFileId": "b8b51e7d528897c107a905ac8b03633dd76c1085d04c93b206aa3ae68e42e552"
   },
   "characteristics": {
@@ -17,7 +17,7 @@
     {
       "typeId": "51b2-306e-1021-d207",
       "typeName": "pts",
-      "value": 195.0
+      "value": 220.0
     },
     {
       "typeId": "716d-91b7-d55a-1022",
@@ -43,74 +43,52 @@
   "keywords": {
     "categoryTokens": [
       "character",
+      "epic hero",
       "great devourer",
       "hive tyrant",
       "monster",
       "psyker",
       "synapse",
+      "the swarmlord",
       "tyranids"
     ],
     "keywordTokens": [
-      "attacks dx weapon",
       "character",
-      "extra attacks weapon",
+      "epic hero",
       "great devourer",
-      "grenades",
       "hive tyrant",
-      "melee weapon",
       "monster",
-      "monster hunters",
       "psyker",
-      "ranged weapon",
-      "striding behemoths",
       "synapse",
+      "the swarmlord",
       "tyranids",
-      "tyrannic war veteran",
       "warlord"
     ],
     "note": "categoryTokens = preserved full names; keywordTokens = inverted-index tokens (normalized phrases since E-class bug fix). If multi-word category names appear fragmented in keywordTokens, this is a regression of the E-class bug."
   },
   "weapons": [
     {
-      "name": "Stranglethorn cannon",
+      "name": "Synaptic Pulse",
       "stats": {
-        "Range": "36\"",
-        "A": "D6+1",
-        "BS": "2+",
-        "S": "7",
+        "Range": "18\"",
+        "A": "D6+3",
+        "BS": "N/A",
+        "S": "5",
         "AP": "-1",
         "D": "2",
-        "Keywords": "Blast"
+        "Keywords": "Psychic, Torrent"
       },
       "keywords": [
-        "cannon",
-        "stranglethorn"
+        "pulse",
+        "synaptic"
       ],
-      "docId": "weapon:3803-1fe1-edde-12e1"
+      "docId": "weapon:8053-6497-fe27-f886"
     },
     {
-      "name": "Monstrous scything talons",
+      "name": "Bone Sabres",
       "stats": {
         "Range": "Melee",
-        "A": "4",
-        "WS": "2+",
-        "S": "7",
-        "AP": "-2",
-        "D": "2",
-        "Keywords": "Extra Attacks"
-      },
-      "keywords": [
-        "monstrous",
-        "scything",
-        "talons"
-      ],
-      "docId": "weapon:54a6-4f13-d99b-583c"
-    },
-    {
-      "name": "Monstrous bonesword and lash whip",
-      "stats": {
-        "Range": "Melee",
-        "A": "6",
+        "A": "8",
         "WS": "2+",
         "S": "9",
         "AP": "-2",
@@ -118,61 +96,27 @@
         "Keywords": "Twin-linked"
       },
       "keywords": [
-        "and",
-        "bonesword",
-        "lash",
-        "monstrous",
-        "whip"
+        "bone",
+        "sabres"
       ],
-      "docId": "weapon:8ad2-55e5-a52f-2ca0"
-    },
-    {
-      "name": "Heavy venom cannon",
-      "stats": {
-        "Range": "36\"",
-        "A": "D3",
-        "BS": "2+",
-        "S": "9",
-        "AP": "-2",
-        "D": "3",
-        "Keywords": "Blast"
-      },
-      "keywords": [
-        "cannon",
-        "heavy",
-        "venom"
-      ],
-      "docId": "weapon:953d-482e-624b-2465"
-    },
-    {
-      "name": "Vertebrax of Vodun",
-      "stats": {
-        "Range": "6\"",
-        "A": "1",
-        "BS": "2+",
-        "S": "*",
-        "AP": "*",
-        "D": "*",
-        "Keywords": "Assault"
-      },
-      "keywords": [
-        "of",
-        "vertebrax",
-        "vodun"
-      ],
-      "docId": "weapon:afcc-75f3-b4df-3302"
+      "docId": "weapon:805b-1a65-6cb6-c4ed"
     }
   ],
   "rules": [
     {
-      "name": "Will of the Hive Mind",
-      "description": "Once per battle round, oneÂ model from your army with this ability can use itÂ when a friendly **^^Tyranids^^** unit within 12\" of thatÂ model is targeted with a Stratagem. If it does, reduceÂ the CP cost of that usage of that Stratagem by 1CP.",
-      "docId": "rule:13-98c1-d481-eb95"
-    },
-    {
       "name": "Shadow in the Warp",
       "description": "If your Army Faction is **^^Tyranids^^**, once per battle, inÂ either playerâs Command phase, if one or more unitsÂ from your army with this ability are on the battlefield,Â you can unleash the Shadow in the Warp. When youÂ do, each enemy unit on the battlefield must take aÂ Battle-shock test. Each time an enemy unit takesÂ such a Battle-shock test, if it is within 6\" of one orÂ more Synapse units from your army, subtract 1 fromÂ that test.",
       "docId": "rule:395b-a159-b293-27aa"
+    },
+    {
+      "name": "Malign Presence (Aura)",
+      "description": "If this model is your Warlord, each timeÂ your opponent targets a unit from their army with a Stratagem, if thatÂ unit is within 12\" of this model, increase the cost of that use of thatÂ Stratagem by 1CP.",
+      "docId": "rule:4b18-f7de-620b-3b73"
+    },
+    {
+      "name": "Lord of Deceit (Aura)",
+      "description": "Each time your opponentÂ targets a unit from their army with a Stratagem, if thatÂ unit is within 12\" of this model, increase the cost ofÂ that use of that Stratagem by 1CP.",
+      "docId": "rule:8332-466b-a51f-63ab"
     },
     {
       "name": "Synapse",
@@ -185,20 +129,25 @@
       "docId": "rule:a2fa-ebfd-7b32-9a75"
     },
     {
+      "name": "Domination of the Hive Mind (Aura)",
+      "description": "While a friendly TYRANIDS unit is within 9\" of this model, that unit is within your armyâs Synapse Range.",
+      "docId": "rule:b3b4-4208-4997-9506"
+    },
+    {
       "name": "Deadly Demise",
       "description": "Some models have 'Deadly Demise x' listed in their abilities. When such a model is destroyed, roll one D6 before removing it from play (if such a model is a TRANSPORT, roll before any embarked models disembark). On a 6, each unit within 6\" of that model suffers a number of mortal wounds denoted by 'x' (if this is a random number, roll separately for each unit within 6\").",
       "docId": "rule:b68a-5ded-65ac-98c"
     },
     {
-      "name": "Onslaught (Aura, Psychic)",
-      "description": "While a friendly TYRANIDS unit isÂ within 6\" of this model, ranged weapons equipped by modelsÂ in that unit have the [ASSAULT] and [LETHAL HITS] abilities.",
-      "docId": "rule:d038-2f3d-1c4a-a15"
+      "name": "Hive Commander",
+      "description": "At the start of your Command phase, if this model is on the battlefield, you gain 1CP",
+      "docId": "rule:ba65-9542-51dd-8200"
     }
   ],
   "diagnostics": {
-    "weaponDocRefCount": 5,
-    "ruleDocRefCount": 6,
-    "keywordTokenCount": 16,
-    "categoryTokenCount": 7
+    "weaponDocRefCount": 2,
+    "ruleDocRefCount": 8,
+    "keywordTokenCount": 10,
+    "categoryTokenCount": 9
   }
 }

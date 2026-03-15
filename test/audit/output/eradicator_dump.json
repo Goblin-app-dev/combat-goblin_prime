@@ -1,41 +1,39 @@
 {
   "identity": {
-    "name": "Intercessor",
-    "docId": "unit:420-464f-93cb-e019",
-    "entryId": "420-464f-93cb-e019",
+    "name": "Eradicator",
+    "docId": "unit:ab61-e814-8c4d-1cb",
+    "entryId": "ab61-e814-8c4d-1cb",
     "sourceFileId": "e3a0111f5ccbcd8fd7d2d935dd40d823d3d52c49fe2f8a8941a2c0d489a94b9d"
   },
   "characteristics": {
-    "M": "6\"",
-    "T": "4",
+    "M": "5\"",
+    "T": "6",
     "SV": "3+",
-    "W": "2",
+    "W": "3",
     "LD": "6+",
-    "OC": "2"
+    "OC": "1"
   },
   "costs": [],
   "keywords": {
     "categoryTokens": [
       "adeptus astartes",
-      "battleline",
+      "eradicator squad",
+      "gravis",
       "grenades",
       "imperium",
-      "infantry",
-      "intercessor squad",
-      "tacticus"
+      "infantry"
     ],
     "keywordTokens": [
       "adeptus astartes",
-      "battleline",
       "bolt weapon",
+      "eradicator squad",
+      "gravis",
       "grenades",
       "imperium",
       "infantry",
-      "intercessor squad",
       "melee weapon",
       "pistol weapon",
-      "ranged weapon",
-      "tacticus"
+      "ranged weapon"
     ],
     "note": "categoryTokens = preserved full names; keywordTokens = inverted-index tokens (normalized phrases since E-class bug fix). If multi-word category names appear fragmented in keywordTokens, this is a regression of the E-class bug."
   },
@@ -59,21 +57,21 @@
       "docId": "weapon:5047-1299-63ca-db8a"
     },
     {
-      "name": "Bolt Rifle",
+      "name": "Melta rifle",
       "stats": {
-        "Range": "24\"",
-        "A": "2",
+        "Range": "18\"",
+        "A": "1",
         "BS": "3+",
-        "S": "4",
-        "AP": "-1",
-        "D": "1",
-        "Keywords": "Assault, Heavy"
+        "S": "9",
+        "AP": "-4",
+        "D": "D6",
+        "Keywords": "Heavy, Melta 2"
       },
       "keywords": [
-        "bolt",
+        "melta",
         "rifle"
       ],
-      "docId": "weapon:837b-6918-767-152b"
+      "docId": "weapon:98e7-e26d-8e58-51e5"
     },
     {
       "name": "Bolt pistol",
@@ -97,7 +95,7 @@
   "diagnostics": {
     "weaponDocRefCount": 3,
     "ruleDocRefCount": 0,
-    "keywordTokenCount": 11,
-    "categoryTokenCount": 7
+    "keywordTokenCount": 10,
+    "categoryTokenCount": 6
   }
 }

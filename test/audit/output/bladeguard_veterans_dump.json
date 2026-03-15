@@ -1,39 +1,36 @@
 {
   "identity": {
-    "name": "Intercessor",
-    "docId": "unit:420-464f-93cb-e019",
-    "entryId": "420-464f-93cb-e019",
+    "name": "Bladeguard Veterans",
+    "docId": "unit:48fe-1424-5571-d7ee",
+    "entryId": "48fe-1424-5571-d7ee",
     "sourceFileId": "e3a0111f5ccbcd8fd7d2d935dd40d823d3d52c49fe2f8a8941a2c0d489a94b9d"
   },
   "characteristics": {
     "M": "6\"",
     "T": "4",
     "SV": "3+",
-    "W": "2",
+    "W": "3",
     "LD": "6+",
-    "OC": "2"
+    "OC": "1"
   },
   "costs": [],
   "keywords": {
     "categoryTokens": [
       "adeptus astartes",
-      "battleline",
+      "bladeguard veteran squad",
       "grenades",
       "imperium",
       "infantry",
-      "intercessor squad",
       "tacticus"
     ],
     "keywordTokens": [
       "adeptus astartes",
-      "battleline",
-      "bolt weapon",
+      "bladeguard veteran squad",
       "grenades",
       "imperium",
       "infantry",
-      "intercessor squad",
       "melee weapon",
-      "pistol weapon",
+      "power weapon",
       "ranged weapon",
       "tacticus"
     ],
@@ -41,63 +38,47 @@
   },
   "weapons": [
     {
-      "name": "Close combat weapon",
+      "name": "Master-crafted Power Weapon",
       "stats": {
         "Range": "Melee",
-        "A": "3",
+        "A": "4",
         "WS": "3+",
-        "S": "4",
-        "AP": "0",
-        "D": "1",
+        "S": "5",
+        "AP": "-2",
+        "D": "2",
         "Keywords": "-"
       },
       "keywords": [
-        "close",
-        "combat",
+        "mastercrafted",
+        "power",
         "weapon"
       ],
-      "docId": "weapon:5047-1299-63ca-db8a"
+      "docId": "weapon:5560-a207-ed07-fdb6"
     },
     {
-      "name": "Bolt Rifle",
+      "name": "Heavy Bolt Pistol",
       "stats": {
-        "Range": "24\"",
-        "A": "2",
-        "BS": "3+",
-        "S": "4",
-        "AP": "-1",
-        "D": "1",
-        "Keywords": "Assault, Heavy"
-      },
-      "keywords": [
-        "bolt",
-        "rifle"
-      ],
-      "docId": "weapon:837b-6918-767-152b"
-    },
-    {
-      "name": "Bolt pistol",
-      "stats": {
-        "Range": "12\"",
+        "Range": "18\"",
         "A": "1",
         "BS": "3+",
         "S": "4",
-        "AP": "0",
+        "AP": "-1",
         "D": "1",
         "Keywords": "Pistol"
       },
       "keywords": [
         "bolt",
+        "heavy",
         "pistol"
       ],
-      "docId": "weapon:d093-797a-4c76-eea3"
+      "docId": "weapon:fe04-97bc-6b13-fd1c"
     }
   ],
   "rules": [],
   "diagnostics": {
-    "weaponDocRefCount": 3,
+    "weaponDocRefCount": 2,
     "ruleDocRefCount": 0,
-    "keywordTokenCount": 11,
-    "categoryTokenCount": 7
+    "keywordTokenCount": 9,
+    "categoryTokenCount": 6
   }
 }

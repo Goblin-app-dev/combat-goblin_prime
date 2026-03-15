@@ -101,6 +101,20 @@
       "keywords": ["PSYCHIC"]
     }
   ],
+  "knownDiscrepancies": [
+    {
+      "field": "expectedRules",
+      "ruleName": "Synaptic Imperative",
+      "classification": "source-structure-not-a-rule",
+      "note": "Synaptic Imperative is not a standalone <rule> node in the BSData catalog; it appears as a named ability group / profile category header. The pipeline surfaces only materialised rule nodes, so this name is never emitted. Removed from expectedRules; absence is correct pipeline behaviour for this fixture version."
+    },
+    {
+      "field": "expectedRules",
+      "ruleName": "Warlord",
+      "classification": "source-structure-not-a-rule",
+      "note": "Warlord is a keyword / category tag in the BSData catalog, not a <rule> or <profile type='ability'> node. It is not expected to surface in the rules pipeline output. Removed from expectedRules."
+    }
+  ],
   "expectedRules": [
     {
       "name": "Onslaught",
@@ -108,15 +122,7 @@
     },
     {
       "name": "Shadow in the Warp",
-      "descriptionSubstring": "Battleshock"
-    },
-    {
-      "name": "Synaptic Imperative",
-      "descriptionSubstring": null
-    },
-    {
-      "name": "Warlord",
-      "descriptionSubstring": null
+      "descriptionSubstring": "Battle-shock"
     },
     {
       "name": "Leader",

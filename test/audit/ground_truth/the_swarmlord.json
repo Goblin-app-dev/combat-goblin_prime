@@ -1,0 +1,94 @@
+{
+  "unitName": "The Swarmlord",
+  "source": "BSData wh40k-10e catalog (cross-referenced against Wahapedia keyword list from web, verified 2026-03-10)",
+  "comparisonTargetType": "datasheet",
+  "notes": [
+    "Stats and weapons extracted from BSData 'Xenos - Tyranids.cat' fixture.",
+    "Keywords cross-referenced against Wahapedia search data (EPIC HERO, MONSTER, CHARACTER, etc.).",
+    "Wahapedia direct access unavailable; stats here reflect the BSData fixture under test.",
+    "TYRANIDS keyword comes from 'Faction: Tyranids' category — same extraction path as Hive Tyrant.",
+    "HIVE TYRANT keyword is legitimate: Swarmlord carries the HIVE TYRANT keyword in 10th ed.",
+    "Points: 220pts (from BSData). Wahapedia may show a different value if points were updated.",
+    "Inline ability profiles (Hive Commander, Malign Presence, Domination of the Hive Mind) are not",
+    "expected to surface as rules — they are profile nodes, not rule nodes.",
+    "Lord of Deceit (Aura) is an infoLink type=profile, not type=rule — not expected in rules list.",
+    "Twin-linked and Torrent are weapon-keyword rules, not unit-ability rules — excluded from expectedRules.",
+    "FIXTURE: Catalog files must be present in test/ to run (same deps as Hive Tyrant group)."
+  ],
+  "expectedStats": {
+    "M": "8\"",
+    "T": "10",
+    "SV": "2+",
+    "W": "10",
+    "LD": "7+",
+    "OC": "3"
+  },
+  "expectedPoints": 220,
+  "expectedKeywords": [
+    "TYRANIDS",
+    "MONSTER",
+    "CHARACTER",
+    "EPIC HERO",
+    "SYNAPSE",
+    "PSYKER",
+    "GREAT DEVOURER",
+    "HIVE TYRANT",
+    "THE SWARMLORD"
+  ],
+  "expectedWeapons": [
+    {
+      "name": "Bone Sabres",
+      "stats": {
+        "Range": "Melee",
+        "A": "8",
+        "WS": "2+",
+        "S": "9",
+        "AP": "-2",
+        "D": "3"
+      },
+      "keywords": ["TWIN-LINKED"]
+    },
+    {
+      "name": "Synaptic Pulse",
+      "stats": {
+        "Range": "18\"",
+        "A": "D6+3",
+        "BS": "N/A",
+        "S": "5",
+        "AP": "-1",
+        "D": "2"
+      },
+      "keywords": ["PSYCHIC", "TORRENT"]
+    }
+  ],
+  "knownDiscrepancies": [
+    {
+      "field": "expectedStats",
+      "note": "BSData fixture stats (M 8\", T 10, W 10, LD 7+) may differ from current Wahapedia values if GW issued a points/stat update after the BSData snapshot. Any stat mismatch should be classified as source/version drift."
+    },
+    {
+      "field": "expectedKeywords",
+      "ruleName": "TYRANIDS",
+      "classification": "category-faction-extraction",
+      "note": "TYRANIDS keyword is derived from the 'Faction: Tyranids' category entry. Same extraction path as Hive Tyrant where this keyword was found missing. A mismatch here confirms the same pipeline gap."
+    }
+  ],
+  "expectedRules": [
+    {
+      "name": "Shadow in the Warp",
+      "descriptionSubstring": "Battle-shock"
+    },
+    {
+      "name": "Synapse",
+      "descriptionSubstring": "Synapse Range"
+    },
+    {
+      "name": "Deadly Demise",
+      "descriptionSubstring": "destroyed"
+    },
+    {
+      "name": "Leader",
+      "descriptionSubstring": null
+    }
+  ]
+}
