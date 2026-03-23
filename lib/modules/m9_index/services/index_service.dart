@@ -204,10 +204,16 @@ class IndexService {
         continue;
       }
 
-      // Extract description from characteristics
+      // Extract description from characteristics.
+      // Rule-node-derived profiles (from _bindRuleNodeAsProfile in M5) always
+      // carry a 'description' characteristic, even when the catalog rule has an
+      // empty <description> element. We allow empty descriptions here so that
+      // rules like Leader (whose Tyranid-catalog description is empty) are
+      // indexed and surfaced rather than silently dropped.
+      // Regular ability profiles with no characteristics at all (null return)
+      // are still skipped — they are structural containers, not named rules.
       final description = _extractDescription(profile);
-      if (description == null || description.isEmpty) {
-        // No description = not a meaningful rule, skip
+      if (description == null) {
         continue;
       }
 

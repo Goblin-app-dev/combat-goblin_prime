@@ -113,12 +113,24 @@
       "ruleName": "Warlord",
       "classification": "source-structure-not-a-rule",
       "note": "Warlord is a keyword / category tag in the BSData catalog, not a <rule> or <profile type='ability'> node. It is not expected to surface in the rules pipeline output. Removed from expectedRules."
+    },
+    {
+      "field": "expectedRules",
+      "ruleName": "Onslaught",
+      "classification": "catalog-name-differs-from-wahapedia",
+      "note": "Wahapedia labels this ability 'Onslaught'; the BSData catalog stores the full 10th-ed form 'Onslaught (Aura, Psychic)'. The pipeline emits the catalog name verbatim. expectedRules uses the catalog name. Wahapedia also describes the rule differently ('charge' text); the catalog description references [ASSAULT] and [LETHAL HITS] — both describe the same mechanical effect. descriptionSubstring updated to match the catalog description."
+    },
+    {
+      "field": "expectedRules",
+      "ruleName": "Leader",
+      "classification": "pipeline-gap-under-investigation",
+      "note": "Leader is absent from the Hive Tyrant dump despite the unit carrying the Leader keyword. Root-cause candidates: (a) the unit-specific Leader <rule> node in the Tyranid catalog has an empty <description> element, causing M9 _buildRuleDocs to skip it; (b) the Leader infoLink is on the inner model sub-entry (not the outer container entry selected by the pipeline), so _collectRuleRefs does not see it. Both candidates are part of the same investigation pass (rule-attachment gap + wrong-variant stat cluster). Fix tracked in M5 _bindRuleNodeAsProfile and M9 _buildRuleDocs."
     }
   ],
   "expectedRules": [
     {
-      "name": "Onslaught",
-      "descriptionSubstring": "charge"
+      "name": "Onslaught (Aura, Psychic)",
+      "descriptionSubstring": "LETHAL HITS"
     },
     {
       "name": "Shadow in the Warp",

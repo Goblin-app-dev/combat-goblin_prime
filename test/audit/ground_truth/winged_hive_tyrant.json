@@ -25,6 +25,18 @@
       "note": "Shadow in the Warp was previously dropped because _resolveInfoLink only materialised links whose target is a <profile> node. Fixed in M5: _resolveInfoLink now accepts <rule> targets and materialises them as synthetic ability BoundProfiles via _bindRuleNodeAsProfile. Description is extracted robustly from both <description> and characteristic-based XML forms. Rule count changed from 236 (spurious) to ~6 (correct order of magnitude for a Monster/Character unit)."
     },
     {
+      "field": "expectedRules",
+      "ruleName": "Paroxysm",
+      "classification": "catalog-name-differs-from-wahapedia",
+      "note": "Wahapedia labels this ability 'Paroxysm'; the BSData catalog stores the full 10th-ed form 'Paroxysm (Psychic)'. The pipeline emits the catalog name verbatim. expectedRules updated to 'Paroxysm (Psychic)' to match catalog. descriptionSubstring 'Fight phase' still matches the catalog description."
+    },
+    {
+      "field": "expectedRules",
+      "ruleName": "Shadow in the Warp descriptionSubstring",
+      "classification": "ground-truth-calibration",
+      "note": "Previously descriptionSubstring was 'Battleshock' (no hyphen, Wahapedia spelling). Catalog description uses 'Battle-shock' (hyphenated). Updated to 'Battle-shock' to match the literal catalog text so the substring check passes."
+    },
+    {
       "field": "LD",
       "fixtureValue": "7+",
       "groundTruthValue": "6+",
@@ -107,12 +119,12 @@
   ],
   "expectedRules": [
     {
-      "name": "Paroxysm",
+      "name": "Paroxysm (Psychic)",
       "descriptionSubstring": "Fight phase"
     },
     {
       "name": "Shadow in the Warp",
-      "descriptionSubstring": "Battleshock"
+      "descriptionSubstring": "Battle-shock"
     },
     {
       "name": "Will of the Hive Mind",
