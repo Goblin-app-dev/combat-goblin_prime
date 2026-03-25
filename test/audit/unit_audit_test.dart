@@ -449,5 +449,128 @@ void main() {
         groundTruthPath: 'test/audit/ground_truth/the_swarmlord.json',
       );
     });
+
+    // ── infoGroups regression pins ─────────────────────────────────────────
+    // These tests explicitly assert that the Leader rule is present after the
+    // M5 infoGroups fix. A failure here means 'infoGroups'/'infoGroup' has
+    // been removed from _isContainer or the recursive descent in
+    // _bindContainerChildren has been broken.
+
+    test('pin: Swarmlord has Leader rule (infoGroups regression guard)', () {
+      if (!_fixturePresent) return;
+      final ruleIndex = {for (final r in tyranidIndex.rules) r.docId: r};
+      final swarmlord = tyranidIndex.units
+          .where((u) => u.name == 'The Swarmlord')
+          .firstOrNull;
+      expect(swarmlord, isNotNull, reason: 'Swarmlord must be in the index');
+      final leaderRules = swarmlord!.ruleDocRefs
+          .map((id) => ruleIndex[id])
+          .whereType<RuleDoc>()
+          .where((r) => r.name.toLowerCase() == 'leader')
+          .toList();
+      expect(leaderRules, isNotEmpty,
+          reason: 'Swarmlord must have a Leader rule bound via infoGroups. '
+              'If this fails, infoGroups traversal has regressed in M5.');
+      print('[PIN] Swarmlord Leader rule confirmed: ${leaderRules.first.docId}');
+    });
+
+    test('pin: Hive Tyrant has Leader rule (infoGroups regression guard)', () {
+      if (!_fixturePresent) return;
+      final ruleIndex = {for (final r in tyranidIndex.rules) r.docId: r};
+      final hiveTyrant = tyranidIndex.units
+          .where((u) => u.name == 'Hive Tyrant')
+          .firstOrNull;
+      expect(hiveTyrant, isNotNull, reason: 'Hive Tyrant must be in the index');
+      final leaderRules = hiveTyrant!.ruleDocRefs
+          .map((id) => ruleIndex[id])
+          .whereType<RuleDoc>()
+          .where((r) => r.name.toLowerCase() == 'leader')
+          .toList();
+      expect(leaderRules, isNotEmpty,
+          reason: 'Hive Tyrant must have a Leader rule bound via infoGroups. '
+              'If this fails, infoGroups traversal has regressed in M5.');
+      print('[PIN] Hive Tyrant Leader rule confirmed: ${leaderRules.first.docId}');
+    });
+
+    // ── Additional character audit cases ──────────────────────────────────
+    // These three units exercise different sub-paths of the infoGroups fix:
+    //   Broodlord        — character leading Genestealer packs
+    //   Neurotyrant      — psyker character with Leader
+    //   Winged Tyranid Prime — winged variant character with Leader
+
+    test('audit: Broodlord — character with Leader via infoGroups', () {
+      // Broodlord is a CHARACTER that leads Genestealer units. Its Leader
+      // ability is stored inside an infoGroup. This test verifies that the
+      // infoGroups fix surfaces Leader for non-Hive-Tyrant characters too.
+      if (!_fixturePresent) return;
+      final ruleIndex = {for (final r in tyranidIndex.rules) r.docId: r};
+      final broodlord = tyranidIndex.units
+          .where((u) => u.name == 'Broodlord')
+          .firstOrNull;
+      expect(broodlord, isNotNull, reason: 'Broodlord must be in the index');
+      _runAudit(
+        index: tyranidIndex,
+        unitName: 'Broodlord',
+        groundTruthPath: null, // dump only — no ground truth file yet
+      );
+      final leaderRules = broodlord!.ruleDocRefs
+          .map((id) => ruleIndex[id])
+          .whereType<RuleDoc>()
+          .where((r) => r.name.toLowerCase() == 'leader')
+          .toList();
+      expect(leaderRules, isNotEmpty,
+          reason: 'Broodlord must have a Leader rule from infoGroups');
+      print('[AUDIT] Broodlord Leader confirmed');
+    });
+
+    test('audit: Neurotyrant — psyker character with Leader', () {
+      // Neurotyrant is a PSYKER CHARACTER with Leader. Exercises the
+      // infoGroups path for a psyker-type character distinct from Hive Tyrant.
+      if (!_fixturePresent) return;
+      final ruleIndex = {for (final r in tyranidIndex.rules) r.docId: r};
+      final neurotyrant = tyranidIndex.units
+          .where((u) => u.name == 'Neurotyrant')
+          .firstOrNull;
+      expect(neurotyrant, isNotNull, reason: 'Neurotyrant must be in the index');
+      _runAudit(
+        index: tyranidIndex,
+        unitName: 'Neurotyrant',
+        groundTruthPath: null, // dump only — no ground truth file yet
+      );
+      final leaderRules = neurotyrant!.ruleDocRefs
+          .map((id) => ruleIndex[id])
+          .whereType<RuleDoc>()
+          .where((r) => r.name.toLowerCase() == 'leader')
+          .toList();
+      expect(leaderRules, isNotEmpty,
+          reason: 'Neurotyrant must have a Leader rule from infoGroups');
+      print('[AUDIT] Neurotyrant Leader confirmed');
+    });
+
+    test('audit: Winged Tyranid Prime — winged character with Leader', () {
+      // Winged Tyranid Prime is a CHARACTER with FLY and Leader. Exercises
+      // infoGroups fix for winged variant characters (distinct from the winged
+      // Hive Tyrant variant which uses a different entry structure).
+      if (!_fixturePresent) return;
+      final ruleIndex = {for (final r in tyranidIndex.rules) r.docId: r};
+      final prime = tyranidIndex.units
+          .where((u) => u.name == 'Winged Tyranid Prime')
+          .firstOrNull;
+      expect(prime, isNotNull,
+          reason: 'Winged Tyranid Prime must be in the index');
+      _runAudit(
+        index: tyranidIndex,
+        unitName: 'Winged Tyranid Prime',
+        groundTruthPath: null, // dump only — no ground truth file yet
+      );
+      final leaderRules = prime!.ruleDocRefs
+          .map((id) => ruleIndex[id])
+          .whereType<RuleDoc>()
+          .where((r) => r.name.toLowerCase() == 'leader')
+          .toList();
+      expect(leaderRules, isNotEmpty,
+          reason: 'Winged Tyranid Prime must have a Leader rule from infoGroups');
+      print('[AUDIT] Winged Tyranid Prime Leader confirmed');
+    });
   });
 }

@@ -356,6 +356,11 @@ class BindService {
       'costs',
       'constraints',
       'categories',
+      // BSData infoGroup containers: infoGroups holds one or more infoGroup
+      // elements, each of which is a transparent grouping container that may
+      // carry profiles, infoLinks, and rules (e.g. the Leader ability group).
+      'infoGroups',
+      'infoGroup',
     }.contains(tagName);
   }
 
@@ -430,6 +435,22 @@ class BindService {
       } else if (_constraintTags.contains(childNode.tagName)) {
         final constraint = _bindConstraint(node: childNode, file: file);
         if (constraint != null) constraints.add(constraint);
+      } else if (_isContainer(childNode.tagName)) {
+        // Recurse into nested containers (e.g. infoGroup inside infoGroups).
+        _bindContainerChildren(
+          container: childNode,
+          file: file,
+          resolvedRefIndex: resolvedRefIndex,
+          nodeLookup: nodeLookup,
+          fileLookup: fileLookup,
+          diagnostics: diagnostics,
+          children: children,
+          profiles: profiles,
+          categories: categories,
+          costs: costs,
+          constraints: constraints,
+          visited: visited,
+        );
       }
     }
   }
