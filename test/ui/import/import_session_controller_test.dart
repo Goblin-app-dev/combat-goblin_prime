@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -612,6 +613,7 @@ void registerMultiCatalogTests() {
 
   _loadRepoCatalogTreeTests();
   _importFromGitHubTests();
+  _loadFactionIntoSlotTests();
   _availableFactionsTests();
   _bootRestoringTests();
   _retrySlotTests();
@@ -684,12 +686,24 @@ class _MockGitHubResolverService extends BsdResolverService {
     return bytes;
   }
 
+  /// Catalog bytes to return by targetId. null value → returns null (not found).
+  final Map<String, Uint8List?> _catalogBytes = {};
+
+  /// Record of every targetId requested via fetchCatalogBytes, in call order.
+  final List<String> fetchedCatalogIds = [];
+
+  void setCatalogBytesForId(String targetId, Uint8List bytes) {
+    _catalogBytes[targetId] = bytes;
+  }
+
   @override
   Future<Uint8List?> fetchCatalogBytes({
     required SourceLocator sourceLocator,
     required String targetId,
-  }) async =>
-      null;
+  }) async {
+    fetchedCatalogIds.add(targetId);
+    return _catalogBytes[targetId];
+  }
 
   @override
   Future<RepoIndexResult?> buildRepoIndex(SourceLocator sourceLocator) async {
@@ -1638,6 +1652,191 @@ void _loadSlotMissingDepsTests() {
 
       expect(controller.slotState(0).status, equals(SlotStatus.empty));
       expect(controller.slotState(0).missingTargetIds, isEmpty);
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Helpers for loadFactionIntoSlot tests
+// ---------------------------------------------------------------------------
+
+/// Builds minimal valid .cat XML bytes declaring [depIds] as catalogueLinks.
+Uint8List _catBytes(String id, [List<String> depIds = const []]) {
+  final links = depIds
+      .map((d) =>
+          '    <catalogueLink id="link-$d" targetId="$d" importRootEntries="false"/>')
+      .join('\n');
+  final linksBlock = depIds.isEmpty
+      ? ''
+      : '  <catalogueLinks>\n$links\n  </catalogueLinks>\n';
+  return Uint8List.fromList(utf8.encode(
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+    '<catalogue id="$id" name="Cat $id" revision="1" '
+    'gameSystemId="gs-1" gameSystemRevision="1">\n'
+    '${linksBlock}'
+    '</catalogue>',
+  ));
+}
+
+// --- loadFactionIntoSlot tests ---
+
+void _loadFactionIntoSlotTests() {
+  const locator = _kTestLocator;
+
+  group('ImportSessionController: loadFactionIntoSlot slot transitions', () {
+    test('transitions fetching → ready on success', () async {
+      final mock = _MockGitHubResolverService();
+      mock.setFile('Faction.cat', _catBytes('cat-1'));
+      final controller = ImportSessionController(bsdResolver: mock);
+
+      final statuses = <SlotStatus>[];
+      controller.addListener(() => statuses.add(controller.slotState(0).status));
+
+      await controller.loadFactionIntoSlot(
+        0,
+        const FactionOption(displayName: 'Faction', primaryPath: 'Faction.cat'),
+        locator,
+      );
+
+      expect(statuses.contains(SlotStatus.fetching), isTrue);
+      expect(controller.slotState(0).status, equals(SlotStatus.ready));
+      expect(controller.slotState(0).catalogName, equals('Faction'));
+      expect(controller.slotState(0).fetchedBytes, isNotNull);
+    });
+
+    test('transitions fetching → error when primary download fails', () async {
+      final mock = _MockGitHubResolverService();
+      mock.setFileError(const BsdResolverException(
+        code: BsdResolverErrorCode.networkError,
+        message: 'Network error',
+      ));
+      final controller = ImportSessionController(bsdResolver: mock);
+
+      await controller.loadFactionIntoSlot(
+        0,
+        const FactionOption(displayName: 'Faction', primaryPath: 'Faction.cat'),
+        locator,
+      );
+
+      expect(controller.slotState(0).status, equals(SlotStatus.error));
+      expect(controller.slotState(0).errorMessage, isNotNull);
+    });
+  });
+
+  group('ImportSessionController: loadFactionIntoSlot dependency pre-fetch',
+      () {
+    test('direct dep is fetched and placed in resolvedDependencies', () async {
+      final mock = _MockGitHubResolverService();
+      mock.setFile('Faction.cat', _catBytes('cat-1', ['dep-A']));
+      mock.setCatalogBytesForId('dep-A', _catBytes('dep-A'));
+      final controller = ImportSessionController(bsdResolver: mock);
+
+      await controller.loadFactionIntoSlot(
+        0,
+        const FactionOption(displayName: 'Faction', primaryPath: 'Faction.cat'),
+        locator,
+      );
+
+      expect(controller.resolvedDependencies.containsKey('dep-A'), isTrue);
+    });
+
+    test('dep-of-dep is fetched transitively', () async {
+      // Faction.cat → dep-A → dep-B
+      final mock = _MockGitHubResolverService();
+      mock.setFile('Faction.cat', _catBytes('cat-1', ['dep-A']));
+      mock.setCatalogBytesForId('dep-A', _catBytes('dep-A', ['dep-B']));
+      mock.setCatalogBytesForId('dep-B', _catBytes('dep-B'));
+      final controller = ImportSessionController(bsdResolver: mock);
+
+      await controller.loadFactionIntoSlot(
+        0,
+        const FactionOption(displayName: 'Faction', primaryPath: 'Faction.cat'),
+        locator,
+      );
+
+      expect(controller.resolvedDependencies.containsKey('dep-A'), isTrue);
+      expect(controller.resolvedDependencies.containsKey('dep-B'), isTrue);
+    });
+
+    test('dep declared by two ancestors is fetched exactly once', () async {
+      // Both dep-A and dep-B declare dep-C. dep-C must be fetched once.
+      final mock = _MockGitHubResolverService();
+      mock.setFile('Faction.cat', _catBytes('cat-1', ['dep-A', 'dep-B']));
+      mock.setCatalogBytesForId('dep-A', _catBytes('dep-A', ['dep-C']));
+      mock.setCatalogBytesForId('dep-B', _catBytes('dep-B', ['dep-C']));
+      mock.setCatalogBytesForId('dep-C', _catBytes('dep-C'));
+      final controller = ImportSessionController(bsdResolver: mock);
+
+      await controller.loadFactionIntoSlot(
+        0,
+        const FactionOption(displayName: 'Faction', primaryPath: 'Faction.cat'),
+        locator,
+      );
+
+      final timesDepCFetched =
+          mock.fetchedCatalogIds.where((id) => id == 'dep-C').length;
+      expect(timesDepCFetched, equals(1));
+      expect(controller.resolvedDependencies.containsKey('dep-C'), isTrue);
+    });
+
+    test('cycle in dep graph does not cause infinite loop', () async {
+      // dep-A → dep-B → dep-A (cycle)
+      final mock = _MockGitHubResolverService();
+      mock.setFile('Faction.cat', _catBytes('cat-1', ['dep-A']));
+      mock.setCatalogBytesForId('dep-A', _catBytes('dep-A', ['dep-B']));
+      mock.setCatalogBytesForId('dep-B', _catBytes('dep-B', ['dep-A']));
+      final controller = ImportSessionController(bsdResolver: mock);
+
+      // Must complete without hanging or throwing.
+      await controller.loadFactionIntoSlot(
+        0,
+        const FactionOption(displayName: 'Faction', primaryPath: 'Faction.cat'),
+        locator,
+      );
+
+      expect(controller.slotState(0).status, equals(SlotStatus.ready));
+      expect(controller.resolvedDependencies.containsKey('dep-A'), isTrue);
+      expect(controller.resolvedDependencies.containsKey('dep-B'), isTrue);
+    });
+
+    test('missing dep does not prevent slot from reaching ready', () async {
+      // dep-A is declared but fetchCatalogBytes returns null for it.
+      final mock = _MockGitHubResolverService();
+      mock.setFile('Faction.cat', _catBytes('cat-1', ['dep-A']));
+      // dep-A intentionally not registered → returns null
+      final controller = ImportSessionController(bsdResolver: mock);
+
+      await controller.loadFactionIntoSlot(
+        0,
+        const FactionOption(displayName: 'Faction', primaryPath: 'Faction.cat'),
+        locator,
+      );
+
+      expect(controller.slotState(0).status, equals(SlotStatus.ready));
+      expect(controller.resolvedDependencies.containsKey('dep-A'), isFalse);
+    });
+
+    test('already-resolved dep is not re-fetched but its transitive deps are scanned',
+        () async {
+      // dep-A is pre-populated; it declares dep-B which must still be discovered.
+      final mock = _MockGitHubResolverService();
+      mock.setFile('Faction.cat', _catBytes('cat-1', ['dep-A']));
+      mock.setCatalogBytesForId('dep-B', _catBytes('dep-B'));
+      final controller = ImportSessionController(bsdResolver: mock);
+
+      // Pre-populate dep-A so it is already in resolvedDependencies.
+      controller.provideManualDependency('dep-A', _catBytes('dep-A', ['dep-B']));
+
+      await controller.loadFactionIntoSlot(
+        0,
+        const FactionOption(displayName: 'Faction', primaryPath: 'Faction.cat'),
+        locator,
+      );
+
+      // dep-A must NOT have been re-fetched via fetchCatalogBytes.
+      expect(mock.fetchedCatalogIds.contains('dep-A'), isFalse);
+      // dep-B, declared by dep-A, must have been discovered and fetched.
+      expect(controller.resolvedDependencies.containsKey('dep-B'), isTrue);
     });
   });
 }

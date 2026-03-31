@@ -9,9 +9,11 @@
     "TYRANIDS keyword comes from 'Faction: Tyranids' category — same extraction path as Hive Tyrant.",
     "HIVE TYRANT keyword is legitimate: Swarmlord carries the HIVE TYRANT keyword in 10th ed.",
     "Points: 220pts (from BSData). Wahapedia may show a different value if points were updated.",
-    "Inline ability profiles (Hive Commander, Malign Presence, Domination of the Hive Mind) are not",
-    "expected to surface as rules — they are profile nodes, not rule nodes.",
-    "Lord of Deceit (Aura) is an infoLink type=profile, not type=rule — not expected in rules list.",
+    "Inline ability profiles (Hive Commander, Malign Presence, Domination of the Hive Mind) DO surface",
+    "in the pipeline output as RuleDocs because they are ability-typed profiles on the entry. They are",
+    "present in the dump but not in expectedRules (they are extra rules, not canonical datasheet rules).",
+    "Lord of Deceit (Aura) also surfaces — the earlier note claiming infoLink type=profile wouldn't",
+    "appear was incorrect. _resolveInfoLink materialises both <profile> and <rule> targets as BoundProfiles.",
     "Twin-linked and Torrent are weapon-keyword rules, not unit-ability rules — excluded from expectedRules.",
     "FIXTURE: Catalog files must be present in test/ to run (same deps as Hive Tyrant group)."
   ],
@@ -71,6 +73,12 @@
       "ruleName": "TYRANIDS",
       "classification": "category-faction-extraction",
       "note": "TYRANIDS keyword is derived from the 'Faction: Tyranids' category entry. Same extraction path as Hive Tyrant where this keyword was found missing. A mismatch here confirms the same pipeline gap."
+    },
+    {
+      "field": "expectedRules",
+      "ruleName": "Leader",
+      "classification": "pipeline-gap-under-investigation",
+      "note": "Leader is absent from the Swarmlord dump. The Swarmlord is a top-level entry (not a variant-selection issue), so the root cause is isolated to the description pipeline: the Tyranid catalog's unit-specific Leader <rule> node likely has an empty <description> element, causing M9 _buildRuleDocs to skip it. Fix tracked in M5 _bindRuleNodeAsProfile (always emit description characteristic) and M9 _buildRuleDocs (allow empty descriptions). The Captain (Space Marines) correctly surfaces Leader because its catalog provides a non-empty description."
     }
   ],
   "expectedRules": [

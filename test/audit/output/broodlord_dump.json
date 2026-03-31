@@ -1,105 +1,91 @@
 {
   "identity": {
-    "name": "The Swarmlord",
-    "docId": "unit:13f7-1a3-eff-7393",
-    "entryId": "13f7-1a3-eff-7393",
+    "name": "Broodlord",
+    "docId": "unit:b86a-b38a-380c-483d",
+    "entryId": "b86a-b38a-380c-483d",
     "sourceFileId": "b8b51e7d528897c107a905ac8b03633dd76c1085d04c93b206aa3ae68e42e552"
   },
   "characteristics": {
     "M": "8\"",
-    "T": "10",
-    "SV": "2+",
-    "W": "10",
+    "T": "5",
+    "SV": "4+",
+    "W": "6",
     "LD": "7+",
-    "OC": "3"
+    "OC": "1"
   },
   "costs": [
     {
       "typeId": "51b2-306e-1021-d207",
       "typeName": "pts",
-      "value": 220.0
-    },
-    {
-      "typeId": "716d-91b7-d55a-1022",
-      "typeName": "Crusade: Weapon Modifications",
-      "value": 0.0
-    },
-    {
-      "typeId": "75bb-ded1-c86d-bdf0",
-      "typeName": "Crusade: Battle Honours",
-      "value": 0.0
-    },
-    {
-      "typeId": "a623-fe74-1d33-cddf",
-      "typeName": "Crusade: Experience",
-      "value": 0.0
-    },
-    {
-      "typeId": "b03b-c239-15a5-da55",
-      "typeName": "Crusade Points",
-      "value": 0.0
+      "value": 80.0
     }
   ],
   "keywords": {
     "categoryTokens": [
+      "broodlord",
       "character",
-      "epic hero",
       "great devourer",
-      "hive tyrant",
-      "monster",
+      "infantry",
       "psyker",
       "synapse",
-      "the swarmlord",
-      "tyranids"
+      "tyranids",
+      "vanguard invader"
     ],
     "keywordTokens": [
+      "broodlord",
       "character",
-      "epic hero",
       "great devourer",
-      "hive tyrant",
-      "monster",
+      "grenades",
+      "infantry",
+      "melee weapon",
+      "monster hunters",
       "psyker",
+      "striding behemoths",
       "synapse",
-      "the swarmlord",
       "tyranids",
+      "tyrannic war veteran",
+      "vanguard invader",
       "warlord"
     ],
     "note": "categoryTokens = preserved full names; keywordTokens = inverted-index tokens (normalized phrases since E-class bug fix). If multi-word category names appear fragmented in keywordTokens, this is a regression of the E-class bug."
   },
   "weapons": [
     {
-      "name": "Synaptic Pulse",
-      "stats": {
-        "Range": "18\"",
-        "A": "D6+3",
-        "BS": "N/A",
-        "S": "5",
-        "AP": "-1",
-        "D": "2",
-        "Keywords": "Psychic, Torrent"
-      },
-      "keywords": [
-        "pulse",
-        "synaptic"
-      ],
-      "docId": "weapon:8053-6497-fe27-f886"
-    },
-    {
-      "name": "Bone Sabres",
+      "name": "Broodlord Claws and Talons",
       "stats": {
         "Range": "Melee",
-        "A": "8",
+        "A": "5",
         "WS": "2+",
-        "S": "9",
+        "S": "6",
         "AP": "-2",
-        "D": "3",
-        "Keywords": "Twin-linked"
+        "D": "2",
+        "Keywords": "Devastating Wounds, Twin-linked"
       },
       "keywords": [
-        "bone",
-        "sabres"
+        "and",
+        "broodlord",
+        "claws",
+        "talons"
       ],
-      "docId": "weapon:805b-1a65-6cb6-c4ed"
+      "docId": "weapon:6801-34d9-56f1-c07c"
+    },
+    {
+      "name": "Vertebrax of Vodun",
+      "stats": {
+        "Range": "6\"",
+        "A": "1",
+        "BS": "2+",
+        "S": "*",
+        "AP": "*",
+        "D": "*",
+        "Keywords": "Assault"
+      },
+      "keywords": [
+        "of",
+        "vertebrax",
+        "vodun"
+      ],
+      "docId": "weapon:afcc-75f3-b4df-3302"
     }
   ],
   "rules": [
@@ -109,14 +95,14 @@
       "docId": "rule:395b-a159-b293-27aa"
     },
     {
-      "name": "Malign Presence (Aura)",
-      "description": "If this model is your Warlord, each timeÂ your opponent targets a unit from their army with a Stratagem, if thatÂ unit is within 12\" of this model, increase the cost of that use of thatÂ Stratagem by 1CP.",
-      "docId": "rule:4b18-f7de-620b-3b73"
+      "name": "Hypnotic Gaze (Psychic)",
+      "description": "At the start of the Fight phase,Â select one enemy unit within Engagement Range of thisÂ model. Until the end of the phase, each time a model in thatÂ unit makes an attack, subtract 1 from the Hit roll.",
+      "docId": "rule:75d5-d9e0-5f01-60bf"
     },
     {
-      "name": "Lord of Deceit (Aura)",
-      "description": "Each time your opponentÂ targets a unit from their army with a Stratagem, if thatÂ unit is within 12\" of this model, increase the cost ofÂ that use of that Stratagem by 1CP.",
-      "docId": "rule:8332-466b-a51f-63ab"
+      "name": "Leader",
+      "description": "This model can be attached to the following unit:\n- GENESTEALERS",
+      "docId": "rule:78d5-4fce-3f26-7817"
     },
     {
       "name": "Synapse",
@@ -124,40 +110,30 @@
       "docId": "rule:86aa-437f-260b-5cad"
     },
     {
-      "name": "Leader",
-      "description": "This model can be attached to the following unit:\nâ  TYRANT GUARD",
-      "docId": "rule:99ef-a339-35c2-ec3"
-    },
-    {
       "name": "Invulnerable Save (4+)",
       "description": "This model has a 4+ invulnerable save.",
       "docId": "rule:a2fa-ebfd-7b32-9a75"
     },
     {
-      "name": "Domination of the Hive Mind (Aura)",
-      "description": "While a friendly TYRANIDS unit is within 9\" of this model, that unit is within your armyâs Synapse Range.",
-      "docId": "rule:b3b4-4208-4997-9506"
+      "name": "Vicious Insight",
+      "description": "While this model is leading a unit, weapons equipped by models in that unit have the [DEVASTATING WOUNDS] ability.",
+      "docId": "rule:a5e1-ca7f-aaef-7fda"
+    },
+    {
+      "name": "Scouts",
+      "description": "Some units have âScouts x\"â listed in their abilities. If every model in a unit has this ability, then at the start of the first battle round, before the first turn begins, it can make a Normal move of up to x\", with the exception that, while making that move, the distance moved by each model in that unit can be greater than that model's Move characteristic, as long as it is not greater than x\".Â \n\nDEDICATED TRANSPORT models can make use of any Scouts x\" ability listed in their abilities, or a Scouts x\" ability that a unit that starts the battle embarked within that DEDICATED TRANSPORTÂ  model has (provided only models with this ability are embarked within that Dedicated Transport model), regardless of how that embarked unit gained this ability (e.g. listed in their abilities, conferred by an Enhancement or by an attached Character, etc.).Â \n\nA unit that moves using this ability must end that move more than 9\" horizontally away from all enemy models. If both players have units that can do this, the player who is taking the first turn moves their units first.",
+      "docId": "rule:ada6-bac1-ffe0-d6f7"
     },
     {
       "name": "Leader",
       "description": "While a Bodyguard unit contains a Leader, it is known as an Attached unit and, with the exception of rules that are triggered when units are destroyed (pg 12), it is treated as a single unit for all rules purposes. Each time an attack targets an Attached unit, until the attacking unit has resolved all of its attacks, you must use the Toughness characteristic of the Bodyguard models in that unit, even if a Leader in that unit has a different Toughness characteristic. Each time an attack successfully wounds an Attached unit, that attack cannot be allocated to a Character model in that unit, even if that Character model has lost one or more wounds or has already had attacks allocated to it this phase. As soon as the last Bodyguard model in an Attached unit has been destroyed, any attacks made against that unit that have yet to be allocated can then be allocated to Character models in that unit.\n\nEach time the last model in a Bodyguard unit is destroyed, each CHARACTER unit that is part of that Attached unit becomes a separate unit, with its original Starting Strength. If this happens as the result of an attack, they become separate units after the attacking unit has resolved all of its attacks.Â \n\nEach time the last model in a CHARACTER unit that is attached to a Bodyguard unit is destroyed and there is not another CHARACTER unit attached, that Attached unitâs Bodyguard unit becomes a separate unit, with its original Starting Strength. If this happens as the result of an attack, they become separate units after the attacking unit has resolved all of its attacks.Â \n\nEach time a unit that is part of an Attached unit is destroyed, it does not have the keywords of any other units that make up that Attached unit (unless it has those keywords on its own datasheet) for the purposes of any rules that would be triggered when that unit is destroyed.",
       "docId": "rule:b4dd-3e1f-41cb-218f"
-    },
-    {
-      "name": "Deadly Demise",
-      "description": "Some models have 'Deadly Demise x' listed in their abilities. When such a model is destroyed, roll one D6 before removing it from play (if such a model is a TRANSPORT, roll before any embarked models disembark). On a 6, each unit within 6\" of that model suffers a number of mortal wounds denoted by 'x' (if this is a random number, roll separately for each unit within 6\").",
-      "docId": "rule:b68a-5ded-65ac-98c"
-    },
-    {
-      "name": "Hive Commander",
-      "description": "At the start of your Command phase, if this model is on the battlefield, you gain 1CP",
-      "docId": "rule:ba65-9542-51dd-8200"
     }
   ],
   "diagnostics": {
     "weaponDocRefCount": 2,
-    "ruleDocRefCount": 10,
-    "keywordTokenCount": 10,
-    "categoryTokenCount": 9
+    "ruleDocRefCount": 8,
+    "keywordTokenCount": 14,
+    "categoryTokenCount": 8
   }
 }

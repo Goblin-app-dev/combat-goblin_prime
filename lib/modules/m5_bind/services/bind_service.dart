@@ -356,6 +356,11 @@ class BindService {
       'costs',
       'constraints',
       'categories',
+      // BSData infoGroup containers: infoGroups holds one or more infoGroup
+      // elements, each of which is a transparent grouping container that may
+      // carry profiles, infoLinks, and rules (e.g. the Leader ability group).
+      'infoGroups',
+      'infoGroup',
     }.contains(tagName);
   }
 
@@ -430,6 +435,22 @@ class BindService {
       } else if (_constraintTags.contains(childNode.tagName)) {
         final constraint = _bindConstraint(node: childNode, file: file);
         if (constraint != null) constraints.add(constraint);
+      } else if (_isContainer(childNode.tagName)) {
+        // Recurse into nested containers (e.g. infoGroup inside infoGroups).
+        _bindContainerChildren(
+          container: childNode,
+          file: file,
+          resolvedRefIndex: resolvedRefIndex,
+          nodeLookup: nodeLookup,
+          fileLookup: fileLookup,
+          diagnostics: diagnostics,
+          children: children,
+          profiles: profiles,
+          categories: categories,
+          costs: costs,
+          constraints: constraints,
+          visited: visited,
+        );
       }
     }
   }
@@ -701,6 +722,13 @@ class BindService {
   /// Invariants:
   ///   * typeName is always 'ability'
   ///   * Only id, name, description, typeName are materialised
+  ///   * The description characteristic is always emitted, even when the
+  ///     catalog `<description>` element is empty or absent. This ensures
+  ///     that M9 _buildRuleDocs can see the profile and create a RuleDoc
+  ///     with an empty description rather than silently dropping the rule.
+  ///     Affected case: unit-specific Leader rules in some BSData catalogs
+  ///     (e.g. Tyranids) store the <rule> with an empty <description>,
+  ///     causing M9 to skip them when the characteristic is omitted.
   ///   * Children, nested links, and sub-entries are intentionally NOT bound
   ///     (rule nodes are leaf metadata nodes, not structural containers)
   BoundProfile _bindRuleNodeAsProfile(WrappedNode node, WrappedFile file) {
@@ -713,9 +741,10 @@ class BindService {
       name: name,
       typeId: null,
       typeName: 'ability',
-      characteristics: [
-        if (description.isNotEmpty) (name: 'description', value: description),
-      ],
+      // Always emit the description characteristic, even when empty.
+      // M9 _buildRuleDocs will create a RuleDoc with an empty description
+      // rather than silently dropping the rule entry.
+      characteristics: [(name: 'description', value: description)],
       sourceFileId: file.fileId,
       sourceNode: node.ref,
     );

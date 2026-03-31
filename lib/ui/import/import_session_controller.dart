@@ -1141,23 +1141,45 @@ class ImportSessionController extends ChangeNotifier {
       return;
     }
 
-    // Pre-flight scan for catalogueLink deps (targetId-based).
+    // Pre-flight scan for catalogueLink deps, recursive (BFS, cycle-safe).
+    // Deps-of-deps are also fetched so that slot loading never fails because
+    // a transitive dependency is missing.
     try {
-      final preflight = await PreflightScanService().scanBytes(
+      final visited = <String>{};
+      final primaryPreflight = await PreflightScanService().scanBytes(
         bytes: bytes,
         fileType: SourceFileType.cat,
       );
-      final missingIds = preflight.importDependencies
-          .map((d) => d.targetId)
-          .where((id) => !_resolvedDependencies.containsKey(id))
-          .toList();
-      for (final targetId in missingIds) {
-        final depBytes = await _bsdResolver.fetchCatalogBytes(
-          sourceLocator: locator,
-          targetId: targetId,
-        );
+      final toProcess = <String>[
+        for (final d in primaryPreflight.importDependencies)
+          if (visited.add(d.targetId)) d.targetId,
+      ];
+      while (toProcess.isNotEmpty) {
+        final targetId = toProcess.removeLast();
+        if (!_resolvedDependencies.containsKey(targetId)) {
+          final depBytes = await _bsdResolver.fetchCatalogBytes(
+            sourceLocator: locator,
+            targetId: targetId,
+          );
+          if (depBytes != null) {
+            _resolvedDependencies[targetId] = depBytes;
+          }
+        }
+        final depBytes = _resolvedDependencies[targetId];
         if (depBytes != null) {
-          _resolvedDependencies[targetId] = depBytes;
+          try {
+            final depPreflight = await PreflightScanService().scanBytes(
+              bytes: depBytes,
+              fileType: SourceFileType.cat,
+            );
+            for (final transitive in depPreflight.importDependencies) {
+              if (visited.add(transitive.targetId)) {
+                toProcess.add(transitive.targetId);
+              }
+            }
+          } catch (_) {
+            // Malformed dep: skip transitive scan; dep itself is still cached.
+          }
         }
       }
     } catch (_) {

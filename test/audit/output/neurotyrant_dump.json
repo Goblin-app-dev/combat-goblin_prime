@@ -1,15 +1,15 @@
 {
   "identity": {
-    "name": "Hive Tyrant",
-    "docId": "unit:3e96-8098-3401-77af",
-    "entryId": "3e96-8098-3401-77af",
+    "name": "Neurotyrant",
+    "docId": "unit:1ae1-ed96-5100-eda5",
+    "entryId": "1ae1-ed96-5100-eda5",
     "sourceFileId": "b8b51e7d528897c107a905ac8b03633dd76c1085d04c93b206aa3ae68e42e552"
   },
   "characteristics": {
-    "M": "8\"",
-    "T": "10",
-    "SV": "2+",
-    "W": "10",
+    "M": "6\"",
+    "T": "8",
+    "SV": "4+",
+    "W": "9",
     "LD": "7+",
     "OC": "3"
   },
@@ -17,35 +17,16 @@
     {
       "typeId": "51b2-306e-1021-d207",
       "typeName": "pts",
-      "value": 195.0
-    },
-    {
-      "typeId": "716d-91b7-d55a-1022",
-      "typeName": "Crusade: Weapon Modifications",
-      "value": 0.0
-    },
-    {
-      "typeId": "75bb-ded1-c86d-bdf0",
-      "typeName": "Crusade: Battle Honours",
-      "value": 0.0
-    },
-    {
-      "typeId": "a623-fe74-1d33-cddf",
-      "typeName": "Crusade: Experience",
-      "value": 0.0
-    },
-    {
-      "typeId": "b03b-c239-15a5-da55",
-      "typeName": "Crusade Points",
-      "value": 0.0
+      "value": 105.0
     }
   ],
   "keywords": {
     "categoryTokens": [
       "character",
+      "fly",
       "great devourer",
-      "hive tyrant",
       "monster",
+      "neurotyrant",
       "psyker",
       "synapse",
       "tyranids"
@@ -53,13 +34,14 @@
     "keywordTokens": [
       "attacks dx weapon",
       "character",
-      "extra attacks weapon",
+      "fly",
       "great devourer",
       "grenades",
-      "hive tyrant",
       "melee weapon",
       "monster",
       "monster hunters",
+      "neurotyrant",
+      "psychic weapon",
       "psyker",
       "ranged weapon",
       "striding behemoths",
@@ -72,77 +54,23 @@
   },
   "weapons": [
     {
-      "name": "Stranglethorn cannon",
-      "stats": {
-        "Range": "36\"",
-        "A": "D6+1",
-        "BS": "2+",
-        "S": "7",
-        "AP": "-1",
-        "D": "2",
-        "Keywords": "Blast"
-      },
-      "keywords": [
-        "cannon",
-        "stranglethorn"
-      ],
-      "docId": "weapon:3803-1fe1-edde-12e1"
-    },
-    {
-      "name": "Monstrous scything talons",
-      "stats": {
-        "Range": "Melee",
-        "A": "4",
-        "WS": "2+",
-        "S": "7",
-        "AP": "-2",
-        "D": "2",
-        "Keywords": "Extra Attacks"
-      },
-      "keywords": [
-        "monstrous",
-        "scything",
-        "talons"
-      ],
-      "docId": "weapon:54a6-4f13-d99b-583c"
-    },
-    {
-      "name": "Monstrous bonesword and lash whip",
+      "name": "Neurotyrant claws and lashes",
       "stats": {
         "Range": "Melee",
         "A": "6",
-        "WS": "2+",
-        "S": "9",
-        "AP": "-2",
-        "D": "3",
-        "Keywords": "Twin-linked"
+        "WS": "3+",
+        "S": "5",
+        "AP": "0",
+        "D": "1",
+        "Keywords": "-"
       },
       "keywords": [
         "and",
-        "bonesword",
-        "lash",
-        "monstrous",
-        "whip"
+        "claws",
+        "lashes",
+        "neurotyrant"
       ],
-      "docId": "weapon:8ad2-55e5-a52f-2ca0"
-    },
-    {
-      "name": "Heavy venom cannon",
-      "stats": {
-        "Range": "36\"",
-        "A": "D3",
-        "BS": "2+",
-        "S": "9",
-        "AP": "-2",
-        "D": "3",
-        "Keywords": "Blast"
-      },
-      "keywords": [
-        "cannon",
-        "heavy",
-        "venom"
-      ],
-      "docId": "weapon:953d-482e-624b-2465"
+      "docId": "weapon:6191-9a03-aeb7-85ab"
     },
     {
       "name": "Vertebrax of Vodun",
@@ -161,18 +89,45 @@
         "vodun"
       ],
       "docId": "weapon:afcc-75f3-b4df-3302"
+    },
+    {
+      "name": "Psychic scream",
+      "stats": {
+        "Range": "18\"",
+        "A": "2D6",
+        "BS": "N/A",
+        "S": "5",
+        "AP": "-1",
+        "D": "2",
+        "Keywords": "Ignores Cover, Psychic, Torrent"
+      },
+      "keywords": [
+        "psychic",
+        "scream"
+      ],
+      "docId": "weapon:f1ff-ebef-ac02-b60b"
     }
   ],
   "rules": [
     {
-      "name": "Will of the Hive Mind",
-      "description": "Once per battle round, oneÂ model from your army with this ability can use itÂ when a friendly **^^Tyranids^^** unit within 12\" of thatÂ model is targeted with a Stratagem. If it does, reduceÂ the CP cost of that usage of that Stratagem by 1CP.",
-      "docId": "rule:13-98c1-d481-eb95"
+      "name": "Psychic Terror (Psychic)",
+      "description": "If one or more Neurotyrants from your army are on the battlefield when you unleash the Shadow in the Warp, subtract 1 from the Battle-shock test each enemy unit on the battlefield must take as a result.",
+      "docId": "rule:0f27-7f4d-4bd3-43f1"
+    },
+    {
+      "name": "Node Lash (Psychic)",
+      "description": "While this model is leading a unit, each time a model in that unit makes an attack, add 1 to the Hit roll. If the target is Battle-shocked, add 1 to the Wound roll as well.",
+      "docId": "rule:3431-c2fc-bb66-b5f3"
     },
     {
       "name": "Shadow in the Warp",
       "description": "If your Army Faction is **^^Tyranids^^**, once per battle, inÂ either playerâs Command phase, if one or more unitsÂ from your army with this ability are on the battlefield,Â you can unleash the Shadow in the Warp. When youÂ do, each enemy unit on the battlefield must take aÂ Battle-shock test. Each time an enemy unit takesÂ such a Battle-shock test, if it is within 6\" of one orÂ more Synapse units from your army, subtract 1 fromÂ that test.",
       "docId": "rule:395b-a159-b293-27aa"
+    },
+    {
+      "name": "Synaptic Relays",
+      "description": "In your Command phase, you can select up to two friendly Tyranids units within 18\" of this modelâs unit. Until the start of your next Command phase, the selected units are always considered to be within Synapse Range of your army.",
+      "docId": "rule:808e-ed23-9487-8b66"
     },
     {
       "name": "Synapse",
@@ -190,25 +145,15 @@
       "docId": "rule:b4dd-3e1f-41cb-218f"
     },
     {
-      "name": "Deadly Demise",
-      "description": "Some models have 'Deadly Demise x' listed in their abilities. When such a model is destroyed, roll one D6 before removing it from play (if such a model is a TRANSPORT, roll before any embarked models disembark). On a 6, each unit within 6\" of that model suffers a number of mortal wounds denoted by 'x' (if this is a random number, roll separately for each unit within 6\").",
-      "docId": "rule:b68a-5ded-65ac-98c"
-    },
-    {
       "name": "Leader",
-      "description": "This model can be attached to the following unit:\n- TYRANT GUARD",
-      "docId": "rule:c13f-316a-bbdf-74fd"
-    },
-    {
-      "name": "Onslaught (Aura, Psychic)",
-      "description": "While a friendly TYRANIDS unit isÂ within 6\" of this model, ranged weapons equipped by modelsÂ in that unit have the [ASSAULT] and [LETHAL HITS] abilities.",
-      "docId": "rule:d038-2f3d-1c4a-a15"
+      "description": "This model can be attached to the following units:\n- **^^Neurogaunts^^**\n- **^^Tyrant Guard^^**\n- **^^Zoanthropes^^**",
+      "docId": "rule:f6b2-d409-9b06-a66b"
     }
   ],
   "diagnostics": {
-    "weaponDocRefCount": 5,
+    "weaponDocRefCount": 3,
     "ruleDocRefCount": 8,
-    "keywordTokenCount": 16,
-    "categoryTokenCount": 7
+    "keywordTokenCount": 17,
+    "categoryTokenCount": 8
   }
 }

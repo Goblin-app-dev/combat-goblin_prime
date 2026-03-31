@@ -33,6 +33,18 @@
     ]
   },
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"additionalContext\": \"CODING PRINCIPLE: Tests are diagnostic instruments, not targets. Before making any code change, ask: does this fix the underlying behaviour, or does it just satisfy an assertion? No workarounds, no special-casing to pass tests, no patching symptoms. Only changes that make the code genuinely correct.\"}}'",
+            "statusMessage": "Checking coding principles..."
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [
