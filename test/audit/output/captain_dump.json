@@ -160,24 +160,6 @@
       "docId": "weapon:7bf3-e01c-dce7-60fd"
     },
     {
-      "name": "Vertebrax of Vodun",
-      "stats": {
-        "Range": "6\"",
-        "A": "1",
-        "BS": "2+",
-        "S": "*",
-        "AP": "*",
-        "D": "*",
-        "Keywords": "Assault"
-      },
-      "keywords": [
-        "of",
-        "vertebrax",
-        "vodun"
-      ],
-      "docId": "weapon:afcc-75f3-b4df-3302"
-    },
-    {
       "name": "Neo-volkite Pistol",
       "stats": {
         "Range": "12\"",
@@ -268,7 +250,7 @@
     }
   ],
   "diagnostics": {
-    "weaponDocRefCount": 10,
+    "weaponDocRefCount": 9,
     "ruleDocRefCount": 7,
     "keywordTokenCount": 18,
     "categoryTokenCount": 7

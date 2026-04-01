@@ -73,24 +73,6 @@
       "docId": "weapon:6191-9a03-aeb7-85ab"
     },
     {
-      "name": "Vertebrax of Vodun",
-      "stats": {
-        "Range": "6\"",
-        "A": "1",
-        "BS": "2+",
-        "S": "*",
-        "AP": "*",
-        "D": "*",
-        "Keywords": "Assault"
-      },
-      "keywords": [
-        "of",
-        "vertebrax",
-        "vodun"
-      ],
-      "docId": "weapon:afcc-75f3-b4df-3302"
-    },
-    {
       "name": "Psychic scream",
       "stats": {
         "Range": "18\"",
@@ -151,7 +133,7 @@
     }
   ],
   "diagnostics": {
-    "weaponDocRefCount": 3,
+    "weaponDocRefCount": 2,
     "ruleDocRefCount": 8,
     "keywordTokenCount": 17,
     "categoryTokenCount": 8

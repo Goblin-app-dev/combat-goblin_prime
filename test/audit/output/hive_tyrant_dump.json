@@ -143,24 +143,6 @@
         "venom"
       ],
       "docId": "weapon:953d-482e-624b-2465"
-    },
-    {
-      "name": "Vertebrax of Vodun",
-      "stats": {
-        "Range": "6\"",
-        "A": "1",
-        "BS": "2+",
-        "S": "*",
-        "AP": "*",
-        "D": "*",
-        "Keywords": "Assault"
-      },
-      "keywords": [
-        "of",
-        "vertebrax",
-        "vodun"
-      ],
-      "docId": "weapon:afcc-75f3-b4df-3302"
     }
   ],
   "rules": [
@@ -206,7 +188,7 @@
     }
   ],
   "diagnostics": {
-    "weaponDocRefCount": 5,
+    "weaponDocRefCount": 4,
     "ruleDocRefCount": 8,
     "keywordTokenCount": 16,
     "categoryTokenCount": 7

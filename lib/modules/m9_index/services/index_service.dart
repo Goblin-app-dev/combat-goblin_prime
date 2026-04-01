@@ -414,6 +414,15 @@ class IndexService {
     final sortedEntries = boundPack.entries.toList()
       ..sort((a, b) => a.id.compareTo(b.id));
 
+    // The game system file ID is used by _collectWeaponRefs to stop traversal
+    // at game-system-sourced entries. Game system entries (Crusade Relics,
+    // Legendary Relics, campaign options, etc.) are never unit loadout — they
+    // are game-wide campaign structure. Stopping there prevents spurious
+    // weapons (e.g. Vertebrax of Vodun via the Crusade chain) from entering
+    // a unit's weapon surface.
+    final gameSystemFileId =
+        boundPack.linkedBundle.wrappedBundle.gameSystem.fileId;
+
     // Build parent-child index for category keyword inheritance.
     // Used at the M9 reference-surface layer only — does not mutate M5 data.
     // Enables nested model entries (e.g. Carnifex inside Carnifexes) to surface
@@ -512,7 +521,8 @@ class IndexService {
 
       // Collect weapon refs from nested profiles
       final weaponDocRefs = <String>{};
-      _collectWeaponRefs(entry, weaponByProfileId, weaponDocRefs);
+      _collectWeaponRefs(
+          entry, weaponByProfileId, weaponDocRefs, gameSystemFileId);
       final sortedWeaponRefs = weaponDocRefs.toList()..sort();
 
       // Collect rule refs from nested ability profiles
@@ -741,10 +751,19 @@ class IndexService {
   }
 
   /// Recursively collects weapon refs from entry and children.
+  ///
+  /// Traversal stops at any child whose [BoundEntry.sourceFileId] equals
+  /// [gameSystemFileId]. Game-system entries are campaign/game-wide structure
+  /// (Crusade Relics, Legendary Relics, configuration options, etc.) and are
+  /// never part of a unit's loadout surface. Stopping there prevents spurious
+  /// weapon collection from deep campaign chains (e.g. the Crusade →
+  /// Crusade Relics → Legendary Relics → Vortex Grenade → Vertebrax of Vodun
+  /// path).
   void _collectWeaponRefs(
     BoundEntry entry,
     Map<String, WeaponDoc> weaponByProfileId,
     Set<String> weaponDocRefs,
+    String gameSystemFileId,
   ) {
     for (final profile in entry.profiles) {
       if (_isWeaponProfile(profile)) {
@@ -755,9 +774,12 @@ class IndexService {
       }
     }
 
-    // Recurse into children
     for (final child in entry.children) {
-      _collectWeaponRefs(child, weaponByProfileId, weaponDocRefs);
+      // Game-system entries are never unit loadout. Stop traversal here to
+      // avoid collecting weapons from campaign-structure branches.
+      if (child.sourceFileId == gameSystemFileId) continue;
+      _collectWeaponRefs(
+          child, weaponByProfileId, weaponDocRefs, gameSystemFileId);
     }
   }
 
