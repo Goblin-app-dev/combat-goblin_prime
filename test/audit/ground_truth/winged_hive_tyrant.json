@@ -44,7 +44,35 @@
       "classification": "source-catalog-defect-or-version-drift",
       "verifiedAgainst": "Wahapedia 10th ed, verified 2026-03-09",
       "policy": "raw-fixture-preserved",
-      "note": "Fixture left unmodified per raw-source audit policy. Audit should surface this discrepancy, not silence it."
+      "note": "Fixture left unmodified per raw-source audit policy. Audit should surface this discrepancy, not silence it. Same defect present in the walking Hive Tyrant fixture."
+    },
+    {
+      "field": "expectedWeapons",
+      "weaponName": "Heavy Venom Cannon",
+      "fixtureValue": "A=D3, BS=2+, S=9, D=3",
+      "groundTruthValue": "A=3, BS=4+, S=10, D=D6+1",
+      "fixture": "test/Library - Tyranids.cat",
+      "classification": "source-catalog-defect-or-version-drift",
+      "verifiedAgainst": "Wahapedia 10th ed, verified 2026-03-09",
+      "policy": "raw-fixture-preserved",
+      "note": "Heavy Venom Cannon weapon profile in Library - Tyranids.cat has older stats: A=D3, BS=2+, S=9, D=3. Wahapedia shows A=3, BS=4+, S=10, D=D6+1. Catalog version drift in the shared library weapon profile. Same discrepancy affects the walking Hive Tyrant."
+    },
+    {
+      "field": "expectedWeapons",
+      "weaponName": "Stranglethorn Cannon",
+      "fixtureValue": "A=D6+1, BS=2+, S=7",
+      "groundTruthValue": "A=D6+3, BS=4+, S=8",
+      "fixture": "test/Library - Tyranids.cat",
+      "classification": "source-catalog-defect-or-version-drift",
+      "verifiedAgainst": "Wahapedia 10th ed, verified 2026-03-09",
+      "policy": "raw-fixture-preserved",
+      "note": "Stranglethorn Cannon in Library - Tyranids.cat has A=D6+1, BS=2+, S=7. Wahapedia shows A=D6+3, BS=4+, S=8. D stat is correct (both D=2). Catalog version drift in shared library weapon profile."
+    },
+    {
+      "field": "extraWeapons",
+      "weaponName": "Tyrant talons",
+      "classification": "extra-weapon-policy-question",
+      "note": "Tyrant talons appears in the Winged Hive Tyrant BSData entry but is not listed on the Wahapedia Winged Hive Tyrant datasheet. Likely a weapon option visible in the BattleScribe builder but not part of the standard loadout. Policy decision: show all possible options vs equipped/datasheet-listed only."
     }
   ],
   "expectedStats": {

@@ -123,8 +123,98 @@
     {
       "field": "expectedRules",
       "ruleName": "Leader",
-      "classification": "pipeline-gap-under-investigation",
-      "note": "Leader is absent from the Hive Tyrant dump despite the unit carrying the Leader keyword. Root-cause candidates: (a) the unit-specific Leader <rule> node in the Tyranid catalog has an empty <description> element, causing M9 _buildRuleDocs to skip it; (b) the Leader infoLink is on the inner model sub-entry (not the outer container entry selected by the pipeline), so _collectRuleRefs does not see it. Both candidates are part of the same investigation pass (rule-attachment gap + wrong-variant stat cluster). Fix tracked in M5 _bindRuleNodeAsProfile and M9 _buildRuleDocs."
+      "classification": "pipeline-gap-resolved",
+      "note": "Leader was previously absent from the Hive Tyrant dump. Fixed in M5 infoGroups traversal: _bindContainerChildren now recurses into infoGroup/infoGroups nodes, surfacing the Leader rule that was stored inside an infoGroup element. Confirmed present via regression pin test in unit_audit_test.dart."
+    },
+    {
+      "field": "M",
+      "fixtureValue": "8\"",
+      "groundTruthValue": "10\"",
+      "fixture": "test/Xenos - Tyranids.cat + test/Library - Tyranids.cat",
+      "classification": "source-catalog-defect-or-version-drift",
+      "verifiedAgainst": "Wahapedia 10th ed, verified 2026-03-08",
+      "policy": "raw-fixture-preserved",
+      "note": "BSData fixture reports M=8\". Wahapedia shows M=10\". Inspection test (Task 1) confirmed only one 'Hive Tyrant' UnitDoc exists in the fixture index — this is not a wrong-variant-selected issue. The fixture was captured at an older catalog version. Pipeline correctly reads the fixture data. Audit surfaces the discrepancy; fixture is left unmodified per raw-source audit policy."
+    },
+    {
+      "field": "W",
+      "fixtureValue": "10",
+      "groundTruthValue": "14",
+      "fixture": "test/Xenos - Tyranids.cat + test/Library - Tyranids.cat",
+      "classification": "source-catalog-defect-or-version-drift",
+      "verifiedAgainst": "Wahapedia 10th ed, verified 2026-03-08",
+      "policy": "raw-fixture-preserved",
+      "note": "Fixture reports W=10; Wahapedia shows W=14. Same root cause as M stat: catalog version drift. Single Hive Tyrant entry confirmed by inspection test — not a wrong-variant issue."
+    },
+    {
+      "field": "LD",
+      "fixtureValue": "7+",
+      "groundTruthValue": "6+",
+      "fixture": "test/Xenos - Tyranids.cat + test/Library - Tyranids.cat",
+      "classification": "source-catalog-defect-or-version-drift",
+      "verifiedAgainst": "Wahapedia 10th ed, verified 2026-03-08",
+      "policy": "raw-fixture-preserved",
+      "note": "Fixture reports LD=7+; Wahapedia shows LD=6+. Same defect is present in the Winged Hive Tyrant fixture. Catalog version drift affecting the Tyranid LD characteristic across the faction."
+    },
+    {
+      "field": "expectedPoints",
+      "fixtureValue": 195,
+      "groundTruthValue": 210,
+      "classification": "source-catalog-defect-or-version-drift",
+      "verifiedAgainst": "Wahapedia 10th ed, verified 2026-03-08",
+      "policy": "raw-fixture-preserved",
+      "note": "Fixture pts=195; Wahapedia shows 210. Points costs change with Balance Dataslate updates. Fixture was not updated to a more recent dataslate version."
+    },
+    {
+      "field": "expectedWeapons",
+      "weaponName": "Monstrous Bonesword and Lash Whip / S stat",
+      "fixtureValue": "S=9",
+      "groundTruthValue": "S=12",
+      "classification": "source-catalog-defect-or-version-drift",
+      "note": "Fixture weapon profile has S=9; Wahapedia shows S=12. Catalog version drift in the shared Library - Tyranids.cat weapon profile."
+    },
+    {
+      "field": "expectedWeapons",
+      "weaponName": "Heavy Venom Cannon",
+      "fixtureValue": "A=D3, BS=2+, S=9, D=3",
+      "groundTruthValue": "A=3, BS=4+, S=10, D=D6+1",
+      "classification": "source-catalog-defect-or-version-drift",
+      "note": "Heavy Venom Cannon weapon profile in the fixture (Library - Tyranids.cat) has older stats: A=D3, BS=2+, S=9, D=3. Wahapedia shows A=3, BS=4+, S=10, D=D6+1. Same discrepancy affects Winged Hive Tyrant. Catalog version drift in shared library weapon profile."
+    },
+    {
+      "field": "expectedWeapons",
+      "weaponName": "Tyrant Talons",
+      "classification": "source-catalog-defect-or-version-drift",
+      "note": "Tyrant Talons is listed on the Wahapedia Hive Tyrant datasheet but does not appear in the BSData fixture. The weapon option was either not yet added or is stored differently in the fixture version. Pipeline cannot surface weapons absent from the fixture."
+    },
+    {
+      "field": "expectedWeapons",
+      "weaponName": "Monstrous Bio-Cannon",
+      "classification": "source-catalog-defect-or-version-drift",
+      "note": "Monstrous Bio-Cannon is listed on the Wahapedia Hive Tyrant datasheet but does not appear in the BSData fixture. Catalog version drift — weapon option absent from this fixture version."
+    },
+    {
+      "field": "expectedWeapons",
+      "weaponName": "Monstrous Rending Claws",
+      "classification": "source-catalog-defect-or-version-drift",
+      "note": "Monstrous Rending Claws is listed on the Wahapedia Hive Tyrant datasheet but does not appear in the BSData fixture. Catalog version drift — weapon option absent from this fixture version."
+    },
+    {
+      "field": "expectedWeapons",
+      "weaponName": "Psychic Scream",
+      "classification": "source-catalog-defect-or-version-drift",
+      "note": "Psychic Scream is listed on the Wahapedia Hive Tyrant datasheet but does not appear in the BSData fixture. Catalog version drift — weapon option absent from this fixture version."
+    },
+    {
+      "field": "extraWeapons",
+      "weaponNames": ["Stranglethorn cannon", "Monstrous scything talons"],
+      "classification": "extra-weapon-policy-question",
+      "note": "These weapons appear in the Hive Tyrant BSData entry but are not on the Wahapedia datasheet. They are valid optional weapon loadouts in the BattleScribe catalog. Policy decision: show all possible options vs only default/datasheet-listed weapons."
+    },
+    {
+      "field": "extraCostFields",
+      "classification": "policy-question-crusade-costs",
+      "note": "BSData entries include Crusade: Weapon Modifications, Crusade: Battle Honours, Crusade: Experience, and Crusade Points cost fields (all value 0). These are Crusade campaign cost fields present on all entries in the catalog. Policy decision: should these be shown in the app UI or filtered to pts-only?"
     }
   ],
   "expectedRules": [
