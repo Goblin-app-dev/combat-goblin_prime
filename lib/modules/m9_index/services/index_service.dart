@@ -525,9 +525,11 @@ class IndexService {
           entry, weaponByProfileId, weaponDocRefs, gameSystemFileId);
       final sortedWeaponRefs = weaponDocRefs.toList()..sort();
 
-      // Collect rule refs from nested ability profiles
+      // Collect rule refs from direct ability profiles, with ancestor
+      // inheritance for nested model entries that carry no rules of their own.
       final ruleDocRefs = <String>{};
-      _collectRuleRefs(entry, ruleByProfileId, ruleDocRefs);
+      _collectRuleRefs(
+          entry, ruleByProfileId, ruleDocRefs, parentByChildId, gameSystemFileId);
       final sortedRuleRefs = ruleDocRefs.toList()..sort();
 
       // Build costs (sorted by typeId for determinism)
@@ -750,6 +752,44 @@ class IndexService {
     return null;
   }
 
+  /// Finds the nearest ancestor of [entryId] that has rule (ability) profiles.
+  ///
+  /// Mirrors [_findCategoryAncestor] with two additional stop conditions:
+  ///
+  ///   1. Stops at entries sourced from the game system file — game-system
+  ///      entries are campaign-wide structure and must not contribute rules to
+  ///      a unit's rule surface.
+  ///   2. Stops at entries that have their own unit profile — those are
+  ///      independent indexable units, not structural containers.
+  ///
+  /// Skips structural nodes (ancestors with no ability profiles and no unit
+  /// profile). Returns the nearest ancestor with at least one ability profile,
+  /// or null if none found before a stop condition is reached.
+  ///
+  /// Used at the M9 reference-surface layer for model-entry rule inheritance.
+  /// Does NOT recurse across multiple ancestors — single-hop resolution only.
+  BoundEntry? _findRuleAncestor(
+    String entryId,
+    Map<String, BoundEntry> parentByChildId,
+    String gameSystemFileId,
+  ) {
+    var ancestor = parentByChildId[entryId];
+    while (ancestor != null) {
+      // Stop: do not cross into game system structure.
+      if (ancestor.sourceFileId == gameSystemFileId) return null;
+      // Success: ancestor has rule profiles — return it regardless of whether
+      // it also has a unit profile. The parent datasheet entry is the intended
+      // source (e.g. "Bladeguard Veteran Squad" has both a unit profile and
+      // rule profiles; its nested model should inherit those rules).
+      if (ancestor.profiles.any(_isAbilityProfile)) return ancestor;
+      // Stop: ancestor has a unit profile but no rules — this is a separate
+      // standalone unit, not a structural container. Do not traverse further.
+      if (_findUnitProfile(ancestor) != null) return null;
+      ancestor = parentByChildId[ancestor.id];
+    }
+    return null;
+  }
+
   /// Recursively collects weapon refs from entry and children.
   ///
   /// Traversal stops at any child whose [BoundEntry.sourceFileId] equals
@@ -783,19 +823,35 @@ class IndexService {
     }
   }
 
-  /// Collects rule refs from the entry's direct profiles only.
+  /// Collects rule refs from the entry's direct profiles, with ancestor
+  /// inheritance for nested model entries that carry no rules of their own.
   ///
-  /// Rule collection is intentionally scoped to [entry.profiles] and does NOT
-  /// recurse into [entry.children]. Children represent equipment option groups
-  /// (weapon upgrades, Crusade options, etc.) that contain shared catalog
-  /// ability profiles not belonging to this unit's own rule surface.
-  /// Recursing would pull in hundreds of unrelated rules from the full subtree.
+  /// Rule collection is scoped to [entry.profiles] and does NOT recurse into
+  /// [entry.children]. Children represent equipment option groups (weapon
+  /// upgrades, Crusade options, etc.) whose ability profiles do not belong to
+  /// this unit's own rule surface.
+  ///
+  /// If the entry has no ability profiles, [_findRuleAncestor] is called to
+  /// locate the nearest ancestor that holds the rule profiles (e.g. the parent
+  /// datasheet entry for a nested model such as "Bladeguard Veteran" inside
+  /// "Bladeguard Veteran Squad"). Rules are then collected from that ancestor's
+  /// direct profiles. Only a single ancestor hop is performed — no merging
+  /// across multiple levels.
   void _collectRuleRefs(
     BoundEntry entry,
     Map<String, RuleDoc> ruleByProfileId,
     Set<String> ruleDocRefs,
+    Map<String, BoundEntry> parentByChildId,
+    String gameSystemFileId,
   ) {
-    for (final profile in entry.profiles) {
+    // Determine the source of rule profiles: entry itself, or nearest ancestor.
+    final source = entry.profiles.any(_isAbilityProfile)
+        ? entry
+        : _findRuleAncestor(entry.id, parentByChildId, gameSystemFileId);
+
+    if (source == null) return;
+
+    for (final profile in source.profiles) {
       if (_isAbilityProfile(profile)) {
         final rule = ruleByProfileId[profile.id];
         if (rule != null) {
