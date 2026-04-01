@@ -27,52 +27,52 @@
     {
       "field": "expectedRules",
       "ruleName": "Paroxysm",
-      "classification": "catalog-name-differs-from-wahapedia",
-      "note": "Wahapedia labels this ability 'Paroxysm'; the BSData catalog stores the full 10th-ed form 'Paroxysm (Psychic)'. The pipeline emits the catalog name verbatim. expectedRules updated to 'Paroxysm (Psychic)' to match catalog. descriptionSubstring 'Fight phase' still matches the catalog description."
+      "classification": "non-authoritative-expectation-mismatch",
+      "note": "BSData catalog stores the ability as 'Paroxysm (Psychic)'; an external reference (Wahapedia) labels it 'Paroxysm'. BSData is authoritative. Pipeline emits the catalog name verbatim. expectedRules uses catalog name. Not a pipeline issue; not a product bug."
     },
     {
       "field": "expectedRules",
       "ruleName": "Shadow in the Warp descriptionSubstring",
-      "classification": "ground-truth-calibration",
-      "note": "Previously descriptionSubstring was 'Battleshock' (no hyphen, Wahapedia spelling). Catalog description uses 'Battle-shock' (hyphenated). Updated to 'Battle-shock' to match the literal catalog text so the substring check passes."
+      "classification": "non-authoritative-expectation-mismatch",
+      "note": "External reference (Wahapedia) spells it 'Battleshock' (no hyphen). BSData catalog description uses 'Battle-shock' (hyphenated). BSData is authoritative. descriptionSubstring updated to match catalog text. Not a pipeline issue."
     },
     {
       "field": "LD",
       "fixtureValue": "7+",
-      "groundTruthValue": "6+",
+      "externalReferenceValue": "6+",
+      "externalReference": "Wahapedia 10th ed (non-authoritative)",
       "fixture": "test/Library - Tyranids.cat",
-      "classification": "source-catalog-defect-or-version-drift",
-      "verifiedAgainst": "Wahapedia 10th ed, verified 2026-03-09",
-      "policy": "raw-fixture-preserved",
-      "note": "Fixture left unmodified per raw-source audit policy. Audit should surface this discrepancy, not silence it. Same defect present in the walking Hive Tyrant fixture."
+      "classification": "external-reference-mismatch",
+      "policy": "BSData-authoritative; fixture preserved as-is",
+      "note": "BSData fixture reports LD=7+. BSData is authoritative. External reference shows LD=6+. Same BSData snapshot discrepancy as the walking Hive Tyrant. Documentation-only; not a pipeline bug."
     },
     {
       "field": "expectedWeapons",
       "weaponName": "Heavy Venom Cannon",
       "fixtureValue": "A=D3, BS=2+, S=9, D=3",
-      "groundTruthValue": "A=3, BS=4+, S=10, D=D6+1",
+      "externalReferenceValue": "A=3, BS=4+, S=10, D=D6+1",
+      "externalReference": "Wahapedia 10th ed (non-authoritative)",
       "fixture": "test/Library - Tyranids.cat",
-      "classification": "source-catalog-defect-or-version-drift",
-      "verifiedAgainst": "Wahapedia 10th ed, verified 2026-03-09",
-      "policy": "raw-fixture-preserved",
-      "note": "Heavy Venom Cannon weapon profile in Library - Tyranids.cat has older stats: A=D3, BS=2+, S=9, D=3. Wahapedia shows A=3, BS=4+, S=10, D=D6+1. Catalog version drift in the shared library weapon profile. Same discrepancy affects the walking Hive Tyrant."
+      "classification": "external-reference-mismatch",
+      "policy": "BSData-authoritative; fixture preserved as-is",
+      "note": "BSData Library - Tyranids.cat has older weapon stats. External reference shows updated stats. BSData is authoritative. Same BSData snapshot discrepancy affects the walking Hive Tyrant. Documentation-only."
     },
     {
       "field": "expectedWeapons",
       "weaponName": "Stranglethorn Cannon",
       "fixtureValue": "A=D6+1, BS=2+, S=7",
-      "groundTruthValue": "A=D6+3, BS=4+, S=8",
+      "externalReferenceValue": "A=D6+3, BS=4+, S=8",
+      "externalReference": "Wahapedia 10th ed (non-authoritative)",
       "fixture": "test/Library - Tyranids.cat",
-      "classification": "source-catalog-defect-or-version-drift",
-      "verifiedAgainst": "Wahapedia 10th ed, verified 2026-03-09",
-      "policy": "raw-fixture-preserved",
-      "note": "Stranglethorn Cannon in Library - Tyranids.cat has A=D6+1, BS=2+, S=7. Wahapedia shows A=D6+3, BS=4+, S=8. D stat is correct (both D=2). Catalog version drift in shared library weapon profile."
+      "classification": "external-reference-mismatch",
+      "policy": "BSData-authoritative; fixture preserved as-is",
+      "note": "BSData Library - Tyranids.cat has older weapon stats (A=D6+1, BS=2+, S=7). External reference shows A=D6+3, BS=4+, S=8. D stat matches (both D=2). BSData is authoritative. Documentation-only."
     },
     {
       "field": "extraWeapons",
       "weaponName": "Tyrant talons",
       "classification": "extra-weapon-policy-question",
-      "note": "Tyrant talons appears in the Winged Hive Tyrant BSData entry but is not listed on the Wahapedia Winged Hive Tyrant datasheet. Likely a weapon option visible in the BattleScribe builder but not part of the standard loadout. Policy decision: show all possible options vs equipped/datasheet-listed only."
+      "note": "Tyrant talons appears in the BSData Winged Hive Tyrant entry but is absent from the external reference datasheet. BSData is authoritative — this weapon option exists in BSData. Policy decision: show all BSData options vs datasheet-listed only."
     }
   ],
   "expectedStats": {

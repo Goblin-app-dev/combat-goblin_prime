@@ -66,19 +66,21 @@
   "knownDiscrepancies": [
     {
       "field": "expectedStats",
-      "note": "BSData fixture stats (M 8\", T 10, W 10, LD 7+) may differ from current Wahapedia values if GW issued a points/stat update after the BSData snapshot. Any stat mismatch should be classified as source/version drift."
+      "classification": "external-reference-mismatch",
+      "policy": "BSData-authoritative; fixture preserved as-is",
+      "note": "BSData fixture stats (M 8\", T 10, W 10, LD 7+) reflect the BSData snapshot. BSData is authoritative. Any difference from an external reference (Wahapedia) is a documentation-only discrepancy; it does not drive code changes."
     },
     {
       "field": "expectedKeywords",
       "ruleName": "TYRANIDS",
-      "classification": "category-faction-extraction",
-      "note": "TYRANIDS keyword is derived from the 'Faction: Tyranids' category entry. Same extraction path as Hive Tyrant where this keyword was found missing. A mismatch here confirms the same pipeline gap."
+      "classification": "stale-resolved",
+      "note": "Previously recorded as category-faction-extraction pipeline gap. Resolved: TYRANIDS keyword IS present in current dump (categoryTokens includes 'tyranids'). Classification retained for audit history only."
     },
     {
       "field": "expectedRules",
       "ruleName": "Leader",
-      "classification": "pipeline-gap-under-investigation",
-      "note": "Leader is absent from the Swarmlord dump. The Swarmlord is a top-level entry (not a variant-selection issue), so the root cause is isolated to the description pipeline: the Tyranid catalog's unit-specific Leader <rule> node likely has an empty <description> element, causing M9 _buildRuleDocs to skip it. Fix tracked in M5 _bindRuleNodeAsProfile (always emit description characteristic) and M9 _buildRuleDocs (allow empty descriptions). The Captain (Space Marines) correctly surfaces Leader because its catalog provides a non-empty description."
+      "classification": "pipeline-gap-resolved",
+      "note": "Leader was absent from the Swarmlord dump due to the Tyranid catalog's Leader <rule> node having an empty <description> element. Fixed: M5 _bindRuleNodeAsProfile now always emits the description characteristic even when empty; M9 _buildRuleDocs relaxed to allow empty descriptions. Leader IS present in current dump with unit-specific description. Fix confirmed."
     }
   ],
   "expectedRules": [

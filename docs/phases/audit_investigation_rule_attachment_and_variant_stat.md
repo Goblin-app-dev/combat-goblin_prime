@@ -196,3 +196,45 @@ Both the container and model entries have unit-type profiles, causing both to be
 | `lib/modules/m9_index/services/index_service.dart` | `_buildRuleDocs`: relax skip guard from `null \|\| isEmpty` to `null` only |
 
 **Pass 2 (wrong-variant stat + weapon binding) is documented above but not fixed.** The fix requires confirming the catalog entry structure and surfacing the `type` attribute from `<selectionEntry>` — a targeted follow-up.
+
+---
+
+## Cluster Disposition — Hive Tyrant Investigation (Closed 2026-04-01)
+
+### Managerial Status: CLOSED
+
+This cluster is closed as an active bug investigation. All findings are resolved or classified.
+
+### Conclusions
+
+| Topic | Status |
+|-------|--------|
+| M5 / M9 variant-selection (wrong entry selected) | **Correct** — inspection test confirmed only one Hive Tyrant UnitDoc; no variant-selection bug |
+| `_collectWeaponRefs` game-system over-traversal | **Fixed** — traversal stops at game-system-sourced entries (commit `399aabe`) |
+| Leader rule gap (empty description) | **Fixed** — M5 always emits description characteristic; M9 allows empty descriptions (commits `f8c1191`, `b33b3b6`) |
+| Category/faction keyword extraction | **Correct** — all faction keywords (TYRANIDS, ADEPTUS ASTARTES etc.) confirmed present in all audit dumps |
+| Remaining Tyrant stat/weapon mismatches | **Non-bug** — classified as external-reference-mismatch (see below) |
+
+### Source-of-Truth Policy (binding from this point forward)
+
+**BSData is authoritative for all stat, weapon, and rule truth.**
+
+Wahapedia and other external references are non-authoritative. Differences between BSData fixture values and external references are classified as:
+
+- `external-reference-mismatch` — BSData stat/weapon/rule differs from an external reference value
+- `non-authoritative-expectation-mismatch` — ground truth was calibrated against an external reference name/text that differs from the BSData catalog value
+- `documentation-only-discrepancy` — surfaced by audit for information; does not drive code changes
+
+These classifications **do not indicate pipeline bugs**. They **do not drive code changes**. They are retained in `knownDiscrepancies` for diagnostic transparency only.
+
+### Ground Truth Files Updated
+
+| File | Changes |
+|------|---------|
+| `test/audit/ground_truth/hive_tyrant.json` | All `source-catalog-defect-or-version-drift` + `catalog-name-differs-from-wahapedia` items reclassified to `external-reference-mismatch` / `non-authoritative-expectation-mismatch`; `verifiedAgainst` fields revised to clarify non-authoritative status |
+| `test/audit/ground_truth/winged_hive_tyrant.json` | Same reclassification; `ground-truth-calibration` → `non-authoritative-expectation-mismatch` |
+| `test/audit/ground_truth/the_swarmlord.json` | Leader: `pipeline-gap-under-investigation` → `pipeline-gap-resolved`; TYRANIDS keyword: `category-faction-extraction` → `stale-resolved`; stats discrepancy note: → `external-reference-mismatch` |
+
+### What Remains in the Audit
+
+All remaining Hive Tyrant / Winged Hive Tyrant / Swarmlord `knownDiscrepancies` are diagnostic/documentation items. None require code action unless a future investigation reveals a conflict with BSData graph truth.

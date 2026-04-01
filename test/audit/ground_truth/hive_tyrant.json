@@ -117,8 +117,8 @@
     {
       "field": "expectedRules",
       "ruleName": "Onslaught",
-      "classification": "catalog-name-differs-from-wahapedia",
-      "note": "Wahapedia labels this ability 'Onslaught'; the BSData catalog stores the full 10th-ed form 'Onslaught (Aura, Psychic)'. The pipeline emits the catalog name verbatim. expectedRules uses the catalog name. Wahapedia also describes the rule differently ('charge' text); the catalog description references [ASSAULT] and [LETHAL HITS] — both describe the same mechanical effect. descriptionSubstring updated to match the catalog description."
+      "classification": "non-authoritative-expectation-mismatch",
+      "note": "BSData catalog stores the ability as 'Onslaught (Aura, Psychic)'; an external reference (Wahapedia) labels it 'Onslaught'. BSData is authoritative. The pipeline emits the catalog name verbatim. expectedRules uses the catalog name. External reference also describes the rule differently ('charge' text); catalog description references [ASSAULT] and [LETHAL HITS] — both describe the same mechanic. Not a pipeline issue; not a product bug."
     },
     {
       "field": "expectedRules",
@@ -129,81 +129,89 @@
     {
       "field": "M",
       "fixtureValue": "8\"",
-      "groundTruthValue": "10\"",
+      "externalReferenceValue": "10\"",
+      "externalReference": "Wahapedia 10th ed (non-authoritative)",
       "fixture": "test/Xenos - Tyranids.cat + test/Library - Tyranids.cat",
-      "classification": "source-catalog-defect-or-version-drift",
-      "verifiedAgainst": "Wahapedia 10th ed, verified 2026-03-08",
-      "policy": "raw-fixture-preserved",
-      "note": "BSData fixture reports M=8\". Wahapedia shows M=10\". Inspection test (Task 1) confirmed only one 'Hive Tyrant' UnitDoc exists in the fixture index — this is not a wrong-variant-selected issue. The fixture was captured at an older catalog version. Pipeline correctly reads the fixture data. Audit surfaces the discrepancy; fixture is left unmodified per raw-source audit policy."
+      "classification": "external-reference-mismatch",
+      "policy": "BSData-authoritative; fixture preserved as-is",
+      "note": "BSData fixture reports M=8\". BSData is the authoritative source of truth. An external reference (Wahapedia) shows M=10\". This discrepancy means the BSData fixture was captured at an older catalog snapshot. Pipeline reads BSData data correctly. This is a documentation-only discrepancy; it does not drive code changes. Inspection test confirmed only one Hive Tyrant UnitDoc exists — not a wrong-variant-selected issue."
     },
     {
       "field": "W",
       "fixtureValue": "10",
-      "groundTruthValue": "14",
+      "externalReferenceValue": "14",
+      "externalReference": "Wahapedia 10th ed (non-authoritative)",
       "fixture": "test/Xenos - Tyranids.cat + test/Library - Tyranids.cat",
-      "classification": "source-catalog-defect-or-version-drift",
-      "verifiedAgainst": "Wahapedia 10th ed, verified 2026-03-08",
-      "policy": "raw-fixture-preserved",
-      "note": "Fixture reports W=10; Wahapedia shows W=14. Same root cause as M stat: catalog version drift. Single Hive Tyrant entry confirmed by inspection test — not a wrong-variant issue."
+      "classification": "external-reference-mismatch",
+      "policy": "BSData-authoritative; fixture preserved as-is",
+      "note": "BSData fixture reports W=10. External reference shows W=14. BSData is authoritative. Catalog snapshot predates a stat update. Not a pipeline bug; not a product bug. Documentation-only discrepancy."
     },
     {
       "field": "LD",
       "fixtureValue": "7+",
-      "groundTruthValue": "6+",
+      "externalReferenceValue": "6+",
+      "externalReference": "Wahapedia 10th ed (non-authoritative)",
       "fixture": "test/Xenos - Tyranids.cat + test/Library - Tyranids.cat",
-      "classification": "source-catalog-defect-or-version-drift",
-      "verifiedAgainst": "Wahapedia 10th ed, verified 2026-03-08",
-      "policy": "raw-fixture-preserved",
-      "note": "Fixture reports LD=7+; Wahapedia shows LD=6+. Same defect is present in the Winged Hive Tyrant fixture. Catalog version drift affecting the Tyranid LD characteristic across the faction."
+      "classification": "external-reference-mismatch",
+      "policy": "BSData-authoritative; fixture preserved as-is",
+      "note": "BSData fixture reports LD=7+. External reference shows LD=6+. BSData is authoritative. Same BSData snapshot discrepancy present in Winged Hive Tyrant. Documentation-only."
     },
     {
       "field": "expectedPoints",
       "fixtureValue": 195,
-      "groundTruthValue": 210,
-      "classification": "source-catalog-defect-or-version-drift",
-      "verifiedAgainst": "Wahapedia 10th ed, verified 2026-03-08",
-      "policy": "raw-fixture-preserved",
-      "note": "Fixture pts=195; Wahapedia shows 210. Points costs change with Balance Dataslate updates. Fixture was not updated to a more recent dataslate version."
+      "externalReferenceValue": 210,
+      "externalReference": "Wahapedia 10th ed (non-authoritative)",
+      "classification": "external-reference-mismatch",
+      "policy": "BSData-authoritative; fixture preserved as-is",
+      "note": "BSData fixture pts=195. External reference shows 210. Points costs are updated by Balance Dataslate; BSData snapshot predates this update. BSData is authoritative. Documentation-only."
     },
     {
       "field": "expectedWeapons",
       "weaponName": "Monstrous Bonesword and Lash Whip / S stat",
       "fixtureValue": "S=9",
-      "groundTruthValue": "S=12",
-      "classification": "source-catalog-defect-or-version-drift",
-      "note": "Fixture weapon profile has S=9; Wahapedia shows S=12. Catalog version drift in the shared Library - Tyranids.cat weapon profile."
+      "externalReferenceValue": "S=12",
+      "externalReference": "Wahapedia 10th ed (non-authoritative)",
+      "classification": "external-reference-mismatch",
+      "policy": "BSData-authoritative; fixture preserved as-is",
+      "note": "BSData fixture weapon profile has S=9. External reference shows S=12. BSData is authoritative. Catalog snapshot predates a weapon stat update. Documentation-only."
     },
     {
       "field": "expectedWeapons",
       "weaponName": "Heavy Venom Cannon",
       "fixtureValue": "A=D3, BS=2+, S=9, D=3",
-      "groundTruthValue": "A=3, BS=4+, S=10, D=D6+1",
-      "classification": "source-catalog-defect-or-version-drift",
-      "note": "Heavy Venom Cannon weapon profile in the fixture (Library - Tyranids.cat) has older stats: A=D3, BS=2+, S=9, D=3. Wahapedia shows A=3, BS=4+, S=10, D=D6+1. Same discrepancy affects Winged Hive Tyrant. Catalog version drift in shared library weapon profile."
+      "externalReferenceValue": "A=3, BS=4+, S=10, D=D6+1",
+      "externalReference": "Wahapedia 10th ed (non-authoritative)",
+      "classification": "external-reference-mismatch",
+      "policy": "BSData-authoritative; fixture preserved as-is",
+      "note": "BSData Library - Tyranids.cat has older weapon stats. External reference shows updated stats. BSData is authoritative. Same BSData snapshot discrepancy in Winged Hive Tyrant. Documentation-only."
     },
     {
       "field": "expectedWeapons",
       "weaponName": "Tyrant Talons",
-      "classification": "source-catalog-defect-or-version-drift",
-      "note": "Tyrant Talons is listed on the Wahapedia Hive Tyrant datasheet but does not appear in the BSData fixture. The weapon option was either not yet added or is stored differently in the fixture version. Pipeline cannot surface weapons absent from the fixture."
+      "classification": "external-reference-mismatch",
+      "policy": "BSData-authoritative; fixture preserved as-is",
+      "note": "Tyrant Talons appears in external reference (Wahapedia) but is absent from this BSData fixture snapshot. BSData is authoritative. Weapon may have been added to BSData after this snapshot was captured, or is structured differently. Pipeline cannot surface weapons absent from BSData. Documentation-only."
     },
     {
       "field": "expectedWeapons",
       "weaponName": "Monstrous Bio-Cannon",
-      "classification": "source-catalog-defect-or-version-drift",
-      "note": "Monstrous Bio-Cannon is listed on the Wahapedia Hive Tyrant datasheet but does not appear in the BSData fixture. Catalog version drift — weapon option absent from this fixture version."
+      "classification": "external-reference-mismatch",
+      "policy": "BSData-authoritative; fixture preserved as-is",
+      "note": "Monstrous Bio-Cannon appears in external reference but is absent from this BSData fixture snapshot. BSData is authoritative. Documentation-only."
     },
     {
       "field": "expectedWeapons",
       "weaponName": "Monstrous Rending Claws",
-      "classification": "source-catalog-defect-or-version-drift",
-      "note": "Monstrous Rending Claws is listed on the Wahapedia Hive Tyrant datasheet but does not appear in the BSData fixture. Catalog version drift — weapon option absent from this fixture version."
+      "classification": "external-reference-mismatch",
+      "policy": "BSData-authoritative; fixture preserved as-is",
+      "note": "Monstrous Rending Claws appears in external reference but is absent from this BSData fixture snapshot. BSData is authoritative. Documentation-only."
     },
     {
       "field": "expectedWeapons",
       "weaponName": "Psychic Scream",
-      "classification": "source-catalog-defect-or-version-drift",
-      "note": "Psychic Scream is listed on the Wahapedia Hive Tyrant datasheet but does not appear in the BSData fixture. Catalog version drift — weapon option absent from this fixture version."
+      "classification": "external-reference-mismatch",
+      "policy": "BSData-authoritative; fixture preserved as-is",
+      "note": "Psychic Scream appears in external reference but is absent from this BSData fixture snapshot. BSData is authoritative. Documentation-only."
     },
     {
       "field": "extraWeapons",
