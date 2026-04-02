@@ -244,10 +244,26 @@
       "docId": "weapon:c935-c179-a028-dbb7"
     }
   ],
-  "rules": [],
+  "rules": [
+    {
+      "name": "Synapse",
+      "description": "If your Army Faction is **^^Tyranids^^**, while a **^^Tyranids^^** unit from your army is within 6\" of one or moreÂ friendly **^^Synapse^^** models, that **^^Tyranids^^** unit is saidÂ to be within Synapse Range of that model and of yourÂ army. While a **^^Tyranids^^** unit fromÂ your army is withinÂ Synapse Range of your army:\n\nâ  Each time that unit takes a Battle-shock test, takeÂ that test on 3D6 instead of 2D6.\nâ  Each time a model in that unit makes a meleeÂ attack, add 1 to the Strength characteristic ofÂ that attack.",
+      "docId": "rule:86aa-437f-260b-5cad"
+    },
+    {
+      "name": "Deadly Demise",
+      "description": "Some models have 'Deadly Demise x' listed in their abilities. When such a model is destroyed, roll one D6 before removing it from play (if such a model is a TRANSPORT, roll before any embarked models disembark). On a 6, each unit within 6\" of that model suffers a number of mortal wounds denoted by 'x' (if this is a random number, roll separately for each unit within 6\").",
+      "docId": "rule:b68a-5ded-65ac-98c"
+    },
+    {
+      "name": "Blistering Assault",
+      "description": "Each time an enemy unit is selected to shoot, after that unit has shot, if any models from this unit lost one or more wounds as a result of those attacks, this unit can make a Blistering Assault move. If it does, roll one D6, adding 2 to the result: each model in this unit can be moved a distance in inches up to the result, but this unit must finish that move as close as possible to the closest enemy unit. When doing so, those models can be moved within Engagement Range of that enemy unit. Each unit can only make one Blistering Assault move per phase.",
+      "docId": "rule:c938-60e9-2b21-17fb"
+    }
+  ],
   "diagnostics": {
     "weaponDocRefCount": 10,
-    "ruleDocRefCount": 0,
+    "ruleDocRefCount": 3,
     "keywordTokenCount": 6,
     "categoryTokenCount": 4
   }

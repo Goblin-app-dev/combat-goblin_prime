@@ -93,10 +93,31 @@
       "docId": "weapon:d093-797a-4c76-eea3"
     }
   ],
-  "rules": [],
+  "rules": [
+    {
+      "name": "Objective Secured",
+      "description": "If you control an objective marker at the end of your Command phase and this unit is within range ofÂ that objective marker, that objective marker remains under your control, even if you have no models within range of it, until your opponent controls it at the start or end of any turn.",
+      "docId": "rule:1164-3aff-c9a6-718d"
+    },
+    {
+      "name": "Oath of Moment",
+      "description": "If your Army Faction is **^^Adeptus Astartes^^**, at theÂ start of your Command phase, select one unit fromÂ your opponentâs army. Until the start of your nextÂ Command phase, that enemy unit is your OathÂ of Moment target. Each time a model with thisÂ ability makes an attack that targets your Oath ofÂ Moment target:\nâ  You can reroll the Hit roll\nâ  If you are using a Codex: Space Marines Detachment and your army does not include one or more unitsÂ with the **^^Black Templars^^**, **^^Blood Angels^^**, **^^Dark Angels^^**, **^^Deathwatch^^** or **^^Space Wolves^^** keywords, add 1 to the Wound roll as well.",
+      "docId": "rule:3b76-4053-ece9-6e7d"
+    },
+    {
+      "name": "Target Elimination",
+      "description": "Each time this unit is selected toÂ shoot, it can use this ability. If it does, until the end ofÂ the phase, add 2 to the Attacks characteristic of boltÂ rifles equipped by models in this unit and you canÂ only select one enemy unit as the target of all of thisÂ unit's attacks",
+      "docId": "rule:4207-56a0-b930-84bd"
+    },
+    {
+      "name": "Templar Vows",
+      "description": "If your Army Faction is **^^Adeptus Astartes^^**, at the start of the first battle round, select one of the following Vows to be active for **^^Adeptus Astartes^^** units from your army. While a Vow is active for your army, that unit has the associated ability below.Â \n\n**Abhor the Witch, Destroy the Witch**\nâ  Each time this unit declares a charge, if one or more targets of that charge have the **^^Psyker^^** keyword, you can re-roll the Charge roll. Melee weapons equipped by models in this unit have the **[PRECISION]** ability while targeting **^^Psyker^^** units.Â \n\n**Accept Any Challenge, No Matter the Odds**\nâ  Each time a model in this unit makes a melee attack, if the Strength characteristic of that attack is less than or equal to the Toughness characteristic of the target, add 1 to the wound roll\n\n**Suffer Not the Unclean to Live**\nâ  This unit is eligible to declare a charge in a turn in which it Fell Back, and each time a model in this unit makes a Pile-in or Consolidation move, it does not need to end that move closer to the closest enemy model, provided it ends that move as close as possible to the nearest enemy unit.Â \n\n**Uphold the Honour of the Emperor**\nIf this unit has the **^^Infantry^^** keyword:\nâ  At the end of your Command phase, if this unit is within range of an objective marker you control, that objective marker remains under your control until your opponent's level of control over that objective marker is greater than yours at the end of the phase.Â \nâ  If the mission you are playing features Actions, this unit is eligible to start to perform an Action in a turn in which it Advanced.",
+      "docId": "rule:f26c-4b28-aaea-40cf"
+    }
+  ],
   "diagnostics": {
     "weaponDocRefCount": 3,
-    "ruleDocRefCount": 0,
+    "ruleDocRefCount": 4,
     "keywordTokenCount": 11,
     "categoryTokenCount": 7
   }

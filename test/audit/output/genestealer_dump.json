@@ -52,10 +52,31 @@
       "docId": "weapon:53b5-899c-4c1e-53a3"
     }
   ],
-  "rules": [],
+  "rules": [
+    {
+      "name": "Invulnerable Save (5+)",
+      "description": "Models in this unit have a 5+ invulnerable save.",
+      "docId": "rule:3b8a-73e4-1389-b399"
+    },
+    {
+      "name": "Synapse",
+      "description": "If your Army Faction is **^^Tyranids^^**, while a **^^Tyranids^^** unit from your army is within 6\" of one or moreÂ friendly **^^Synapse^^** models, that **^^Tyranids^^** unit is saidÂ to be within Synapse Range of that model and of yourÂ army. While a **^^Tyranids^^** unit fromÂ your army is withinÂ Synapse Range of your army:\n\nâ  Each time that unit takes a Battle-shock test, takeÂ that test on 3D6 instead of 2D6.\nâ  Each time a model in that unit makes a meleeÂ attack, add 1 to the Strength characteristic ofÂ that attack.",
+      "docId": "rule:86aa-437f-260b-5cad"
+    },
+    {
+      "name": "Vanguard Predator",
+      "description": "Each time a model in this unit makes anÂ attack, re-roll a Hit roll of 1. If the target is within range ofÂ one or more objective markers, re-roll a Wound roll 1 as well.",
+      "docId": "rule:96f0-f77f-527d-7554"
+    },
+    {
+      "name": "Scouts",
+      "description": "Some units have âScouts x\"â listed in their abilities. If every model in a unit has this ability, then at the start of the first battle round, before the first turn begins, it can make a Normal move of up to x\", with the exception that, while making that move, the distance moved by each model in that unit can be greater than that model's Move characteristic, as long as it is not greater than x\".Â \n\nDEDICATED TRANSPORT models can make use of any Scouts x\" ability listed in their abilities, or a Scouts x\" ability that a unit that starts the battle embarked within that DEDICATED TRANSPORTÂ  model has (provided only models with this ability are embarked within that Dedicated Transport model), regardless of how that embarked unit gained this ability (e.g. listed in their abilities, conferred by an Enhancement or by an attached Character, etc.).Â \n\nA unit that moves using this ability must end that move more than 9\" horizontally away from all enemy models. If both players have units that can do this, the player who is taking the first turn moves their units first.",
+      "docId": "rule:ada6-bac1-ffe0-d6f7"
+    }
+  ],
   "diagnostics": {
     "weaponDocRefCount": 1,
-    "ruleDocRefCount": 0,
+    "ruleDocRefCount": 4,
     "keywordTokenCount": 5,
     "categoryTokenCount": 5
   }
