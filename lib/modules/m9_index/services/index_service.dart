@@ -484,7 +484,7 @@ class IndexService {
 
       // Build keyword tokens from categories across full entry subtree.
       final keywordTokens = <String>{};
-      _collectCategoryKeywords(entry, keywordTokens);
+      _collectCategoryKeywords(entry, keywordTokens, gameSystemFileId);
       // Parent category inheritance for model-entry keyword surface:
       // Walk up the ancestor chain to find the nearest ancestor with
       // categories (skipping groups, which are structural containers with
@@ -719,6 +719,7 @@ class IndexService {
   void _collectCategoryKeywords(
     BoundEntry entry,
     Set<String> keywords,
+    String gameSystemFileId,
   ) {
     for (final category in entry.categories) {
       final name = category.name.trim();
@@ -729,7 +730,10 @@ class IndexService {
     }
 
     for (final child in entry.children) {
-      _collectCategoryKeywords(child, keywords);
+      // Game-system entries are never unit keywords. Stop traversal here to
+      // avoid collecting categories from campaign-structure branches.
+      if (child.sourceFileId == gameSystemFileId) continue;
+      _collectCategoryKeywords(child, keywords, gameSystemFileId);
     }
   }
 
