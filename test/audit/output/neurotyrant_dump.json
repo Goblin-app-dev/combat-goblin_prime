@@ -36,18 +36,14 @@
       "character",
       "fly",
       "great devourer",
-      "grenades",
       "melee weapon",
       "monster",
-      "monster hunters",
       "neurotyrant",
       "psychic weapon",
       "psyker",
       "ranged weapon",
-      "striding behemoths",
       "synapse",
       "tyranids",
-      "tyrannic war veteran",
       "warlord"
     ],
     "note": "categoryTokens = preserved full names; keywordTokens = inverted-index tokens (normalized phrases since E-class bug fix). If multi-word category names appear fragmented in keywordTokens, this is a regression of the E-class bug."
@@ -135,7 +131,7 @@
   "diagnostics": {
     "weaponDocRefCount": 2,
     "ruleDocRefCount": 8,
-    "keywordTokenCount": 17,
+    "keywordTokenCount": 13,
     "categoryTokenCount": 8
   }
 }

@@ -35,15 +35,11 @@
       "broodlord",
       "character",
       "great devourer",
-      "grenades",
       "infantry",
       "melee weapon",
-      "monster hunters",
       "psyker",
-      "striding behemoths",
       "synapse",
       "tyranids",
-      "tyrannic war veteran",
       "vanguard invader",
       "warlord"
     ],
@@ -115,7 +111,7 @@
   "diagnostics": {
     "weaponDocRefCount": 1,
     "ruleDocRefCount": 8,
-    "keywordTokenCount": 14,
+    "keywordTokenCount": 10,
     "categoryTokenCount": 8
   }
 }

@@ -35,14 +35,10 @@
       "character",
       "fly",
       "great devourer",
-      "grenades",
       "infantry",
       "melee weapon",
-      "monster hunters",
-      "striding behemoths",
       "synapse",
       "tyranids",
-      "tyrannic war veteran",
       "vanguard invader",
       "warlord",
       "winged tyranid prime"
@@ -113,7 +109,7 @@
   "diagnostics": {
     "weaponDocRefCount": 1,
     "ruleDocRefCount": 8,
-    "keywordTokenCount": 14,
+    "keywordTokenCount": 10,
     "categoryTokenCount": 8
   }
 }

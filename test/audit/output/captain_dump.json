@@ -40,14 +40,11 @@
       "infantry",
       "lone wolf",
       "melee weapon",
-      "monster hunters",
       "pistol weapon",
       "power weapon",
       "ranged weapon",
       "relic bearer",
-      "striding behemoths",
       "tacticus",
-      "tyrannic war veteran",
       "warlord"
     ],
     "note": "categoryTokens = preserved full names; keywordTokens = inverted-index tokens (normalized phrases since E-class bug fix). If multi-word category names appear fragmented in keywordTokens, this is a regression of the E-class bug."
@@ -252,7 +249,7 @@
   "diagnostics": {
     "weaponDocRefCount": 9,
     "ruleDocRefCount": 7,
-    "keywordTokenCount": 18,
+    "keywordTokenCount": 15,
     "categoryTokenCount": 7
   }
 }

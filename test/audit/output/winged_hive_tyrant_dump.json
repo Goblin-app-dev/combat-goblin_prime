@@ -59,17 +59,13 @@
       "extra attacks weapon",
       "fly",
       "great devourer",
-      "grenades",
       "hive tyrant",
       "melee weapon",
       "monster",
-      "monster hunters",
       "psyker",
       "ranged weapon",
-      "striding behemoths",
       "synapse",
       "tyranids",
-      "tyrannic war veteran",
       "vanguard invader",
       "warlord",
       "winged hive tyrant"
@@ -208,7 +204,7 @@
   "diagnostics": {
     "weaponDocRefCount": 5,
     "ruleDocRefCount": 7,
-    "keywordTokenCount": 19,
+    "keywordTokenCount": 15,
     "categoryTokenCount": 10
   }
 }
