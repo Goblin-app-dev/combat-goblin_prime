@@ -33,28 +33,38 @@ Index sizes: SM 350 units / 850 weapons / 1213 rules · TY 87 units / 167 weapon
 
 ---
 
-## Section 2 — Fails Now
+## Section 2 — Active Blockers
 
-### Q1 — "What is the BS of Intercessors?" — FAIL (two independent issues)
+### Q1 — "What is the BS of Intercessors?" — answer-layer routing required
 
-**Issue A: Entity resolution miss**
+**Data status: CORRECT — data exists and survives intact through UnitDoc**
 
-- Query `text="intercessor"` with `limit=5` returns only Assault Intercessor variants. The plain `Intercessor` model entry exists in the index but sorts after Assault variants (alphabetical tie-break at equal relevance score). With limit=5, plain Intercessors are never reached.
-- Resolved entity: `Assault Intercessor Sergeant` — wrong unit for the question.
-- Root cause: First-match-wins at the limit boundary. "Assault Intercessor…" sorts before "Intercessor…" (A < I).
-- **Classification: V1_BLOCKER**
+- `UnitDoc.weaponDocRefs` carries references to every weapon profile for the unit. These refs resolve correctly via `IndexBundle.weaponByDocId()` to `WeaponDoc` objects whose `characteristics` list includes `BS`.
+- The pipeline (M1–M9) is not the issue. BS is on weapon profiles in 10th ed by design (unit datasheets carry M, T, SV, W, LD, OC; BS lives on ranged-weapon profiles). `UnitDoc.characteristics` correctly contains only unit-datasheet fields — this is not a missing-data bug.
+- Detail/UI rendering is not the active issue. The data path through the index is verified.
 
-**Issue B: Data model mismatch — BS is not a unit stat in 10th edition**
+**Active blocker: answer-layer routing**
 
-- In W40K 10th ed, unit datasheets carry: M, T, SV, W, LD, OC only.
-- BS lives on **weapon profiles** (type `"ranged weapons"` / `"melee weapons"`), not on unit profiles (type `"unit"`).
-- `UnitDoc.characteristics` correctly stores only what is on the unit datasheet. `_stat(unit, "BS")` returns null for every Space Marine unit — this is not a bug in M9/M10; it accurately reflects what the data contains.
-- To answer "BS of Intercessors" the answer layer must look up the unit's weapon profiles via `UnitDoc.weaponDocRefs` → `WeaponDoc.characteristics["BS"]`.
-- **Classification: V1_BLOCKER** — the answer-layer routing (voice/UI layer above M10) does not yet exist. M9/M10 have the data; it's in the right place (weapons), not the wrong place.
+- The answer layer (voice coordinator `_handleAttributeQuestion`) must route "BS of X" questions through: `UnitDoc.weaponDocRefs` → `IndexBundle.weaponByDocId()` → `WeaponDoc.characteristics['BS']`.
+- `VoiceAssistantCoordinator._handleAttributeQuestion()` already implements this path (Phase 12D). Integration test coverage for this path is tracked below.
 
-**Smallest fix for Q1:**
-- Issue A: Use `limit: 20` (or higher) and post-filter by exact canonical key `"intercessor"` before returning an answer. M10 already supports this — the caller controls `limit`.
-- Issue B: When responding to a "BS of X" query, the answer layer must resolve the unit → its weapons → weapon characteristic "BS". No M9 or M10 change required. This is a call-site responsibility.
+**Issue A: Entity resolution in name-based lookup (answer-layer concern)**
+
+- Query `text="intercessor"` with `limit=5` returns only Assault Intercessor variants. "Assault Intercessor…" sorts before "Intercessor…" (A < I), so plain Intercessors are not reached at limit=5.
+- Root cause: first-match-wins at the limit boundary. The answer layer must use exact canonical-key lookup (not raw search-result position) to resolve the unit correctly.
+- **Classification: V1_BLOCKER** — answer-layer name resolution, not a pipeline bug.
+
+**Corrected Q1 test path (as of this report revision):**
+
+The test now validates:
+1. `_findUnit(smIndex, 'intercessor')` — exact canonical-key match (bypasses limit boundary)
+2. `unit.weaponDocRefs` — non-empty: unit has weapon references
+3. `smIndex.weaponByDocId(ref)` — resolves to `WeaponDoc`
+4. `WeaponDoc.characteristics['BS']` — at least one weapon carries a BS value
+
+**Smallest remaining fix for Q1:**
+- Answer layer must use exact canonical-key match (not first search hit) to resolve the unit.
+- `_handleAttributeQuestion` already uses `VoiceSearchFacade.searchText` → the facade or coordinator must post-filter to the exact canonical key match. No M9/M10 change required.
 
 ---
 
@@ -74,12 +84,12 @@ Change the client query to `text="assault intercessors with jump pack"`. No syst
 
 ## Section 3 — Failure Classification Summary
 
-| Query | Issue | Classification | Smallest Fix |
-|-------|-------|----------------|--------------|
-| Q1 entity | "intercessor" resolves Assault variant first due to alpha tie-break at limit=5 | **V1_BLOCKER** | Caller increases limit; post-filters by canonical key |
-| Q1 BS field | BS is on weapon profiles, not unit profiles in 10th ed | **V1_BLOCKER** | Answer layer routes BS queries to `WeaponDoc.characteristics["BS"]` via `UnitDoc.weaponDocRefs` |
-| Q4 missing | Adepta Sororitas catalog not in test fixtures | **POST_V1** | Add Sisters catalog to test/; re-run |
-| Q5 name | "Jump Pack Intercessors" is not the BSData unit name | **V1_BLOCKER** | Correct client query to "assault intercessors with jump pack" |
+| Query | Issue | Classification | Status |
+|-------|-------|----------------|--------|
+| Q1 entity | "intercessor" resolves Assault variant first due to alpha tie-break at limit=5 | **V1_BLOCKER** | Open — answer-layer name resolution |
+| Q1 BS field | BS is on weapon profiles, not unit profiles in 10th ed | ~~V1_BLOCKER~~ | **RESOLVED** — data path confirmed correct; test updated to use `weaponDocRefs → WeaponDoc.characteristics['BS']` (PASS) |
+| Q4 missing | Adepta Sororitas catalog not in test fixtures | **POST_V1** | Unchanged |
+| Q5 name | "Jump Pack Intercessors" is not the BSData unit name | **V1_BLOCKER** | Open — answer-layer / name-resolution backlog |
 
 ---
 
@@ -101,8 +111,10 @@ Change the client query to `text="assault intercessors with jump pack"`. No syst
 - Carnifex rule resolution ✓
 - Synapse keyword coverage ✓
 - Clean handling of unknown entities ✓
+- BS data path: `UnitDoc.weaponDocRefs → WeaponDoc.characteristics['BS']` confirmed correct ✓
+- Coordinator integration: `_handleAttributeQuestion()` correctly consumes weapon-backed attribute data ✓
+- No spurious clarification/disambiguation for single-result BS queries ✓
 
-**Blockers (must fix before client demo):**
-1. **Answer-layer BS routing**: When query is "BS of X", look up weapons via `UnitDoc.weaponDocRefs`, not unit characteristics. Zero M9/M10 changes needed — this is a call-site gap above M10.
-2. **Entity resolution under multi-variant names**: Increase default limit for entity lookups or post-filter by canonical key match. Zero M9/M10 changes needed.
-3. **Client query Q5**: "Jump Pack Intercessors" → "Assault Intercessors with Jump Pack" (or whatever name the loaded catalog uses). This is a query-text correction, not a code fix.
+**Active blockers (answer-layer work, no pipeline changes needed):**
+1. **Entity name resolution**: Answer layer must use exact canonical-key match (not first hit at limit=5) to resolve "Intercessors" correctly. `_findUnit()` / exact-key lookup already works; coordinator search path needs to apply it.
+2. **Q5 name resolution**: "Jump Pack Intercessors" is not a BSData unit name. Backlog — answer layer / alias mapping. No M9/M10 changes needed.

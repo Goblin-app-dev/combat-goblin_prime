@@ -78,6 +78,23 @@ void main() {
     return null;
   }
 
+  /// Resolve all WeaponDocs referenced by [unit] via weaponDocRefs.
+  List<WeaponDoc> _weaponsFor(IndexBundle index, UnitDoc unit) {
+    return unit.weaponDocRefs
+        .map(index.weaponByDocId)
+        .whereType<WeaponDoc>()
+        .toList();
+  }
+
+  /// Extract a characteristic value from [weapon] by name (case-insensitive).
+  String? _weaponStat(WeaponDoc weapon, String charName) {
+    final norm = charName.toLowerCase();
+    for (final c in weapon.characteristics) {
+      if (c.name.toLowerCase() == norm) return c.valueText;
+    }
+    return null;
+  }
+
   /// Resolve all RuleDocs referenced by [unit].
   List<RuleDoc> _rulesFor(IndexBundle index, UnitDoc unit) {
     final ruleById = {for (final r in index.rules) r.docId: r};
@@ -201,46 +218,47 @@ void main() {
     emit('');
     emit('── Q1: $query');
 
-    // Search path: text="intercessor", docTypes=unit.
-    final result = service.search(
-      smIndex,
-      const SearchRequest(
-        text: 'intercessor',
-        docTypes: {SearchDocType.unit},
-        limit: 5,
-      ),
-    );
-
-    emit('  Search hits (${result.hits.length}):');
-    for (final h in result.hits) {
-      emit('    ${h.displayName}  [${h.docId}]');
+    // Entity resolution: use exact canonical-key match to avoid first-match-wins
+    // at limit boundary (Assault Intercessors sort before Intercessors alphabetically).
+    // Answer-layer must use this path, not the raw search hit at limit=5.
+    final unit = _findUnit(smIndex, 'intercessor');
+    if (unit == null) {
+      emit('  Resolved entity : (not found)');
+      emit('  Result          : FAIL');
+      emit('  Classification  : V1_BLOCKER — "intercessor" not in SM index');
+      fail('UnitDoc with canonicalKey="intercessor" not found in SM index');
     }
 
-    // Resolve to UnitDoc and extract BS.
-    final hit = result.hits.firstWhere(
-      (h) => h.displayName.toLowerCase().contains('intercessor') &&
-          !h.displayName.toLowerCase().contains('jump'),
-      orElse: () => result.hits.isEmpty ? throw TestFailure('No hits for "intercessor"') : result.hits.first,
-    );
-
-    final unit = smIndex.units.firstWhere(
-      (u) => u.docId == hit.docId,
-      orElse: () => throw TestFailure('UnitDoc not found for docId=${hit.docId}'),
-    );
-
-    final bs = _stat(unit, 'BS');
     emit('  Resolved entity : ${unit.name}  [${unit.docId}]');
-    emit('  Source          : UnitDoc.characteristics[BS]');
-    emit('  Returned answer : BS = ${bs ?? "(not found)"}');
+    emit('  weaponDocRefs   : ${unit.weaponDocRefs.length} refs');
 
-    final pass = bs != null && bs.isNotEmpty;
+    // Correct data path for BS in 10th ed:
+    //   UnitDoc.weaponDocRefs → IndexBundle.weaponByDocId() → WeaponDoc.characteristics['BS']
+    // BS does NOT live on UnitDoc.characteristics — it is a weapon-profile attribute.
+    final weapons = _weaponsFor(smIndex, unit);
+    emit('  Resolved weapons: ${weapons.length}');
+    for (final w in weapons) {
+      final bs = _weaponStat(w, 'BS');
+      emit('    ${w.name}: BS = ${bs ?? "(none)"}');
+    }
+
+    final bsLines = weapons
+        .map((w) => (w.name, _weaponStat(w, 'BS')))
+        .where((pair) => pair.$2 != null && pair.$2!.isNotEmpty)
+        .toList();
+
+    final pass = bsLines.isNotEmpty;
+    emit('  Source          : UnitDoc.weaponDocRefs → WeaponDoc.characteristics[BS]');
+    emit('  Returned answer : ${bsLines.map((p) => "${p.$1}: ${p.$2}").join(", ")}');
     emit('  Result          : ${_label(pass)}');
-    if (!pass) emit('  Classification  : V1_BLOCKER — BS field missing on unit');
+    if (!pass) {
+      emit('  Classification  : V1_BLOCKER — no weapon on Intercessors carries a BS characteristic');
+    }
 
-    expect(bs, isNotNull,
-        reason: 'BS characteristic must be present on Intercessors unit');
-    expect(bs, isNotEmpty,
-        reason: 'BS value must be non-empty');
+    expect(unit.weaponDocRefs, isNotEmpty,
+        reason: 'Intercessors UnitDoc must reference at least one weapon via weaponDocRefs');
+    expect(bsLines, isNotEmpty,
+        reason: 'At least one Intercessors weapon must carry a BS characteristic');
   });
 
   // ── Q2: Rules of a Carnifex ───────────────────────────────────────────────

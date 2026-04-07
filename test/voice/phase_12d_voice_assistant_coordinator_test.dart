@@ -1,7 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:combat_goblin_prime/modules/m1_acquire/m1_acquire.dart';
 import 'package:combat_goblin_prime/modules/m10_structured_search/m10_structured_search.dart';
 import 'package:combat_goblin_prime/modules/m3_wrap/m3_wrap.dart';
+import 'package:combat_goblin_prime/modules/m4_link/m4_link.dart';
+import 'package:combat_goblin_prime/modules/m5_bind/m5_bind.dart';
 import 'package:combat_goblin_prime/modules/m9_index/m9_index.dart';
 import 'package:combat_goblin_prime/voice/models/disambiguation_command.dart';
 import 'package:combat_goblin_prime/voice/models/spoken_entity.dart';
@@ -13,6 +16,154 @@ import 'package:combat_goblin_prime/voice/understanding/domain_canonicalizer.dar
 import 'package:combat_goblin_prime/voice/understanding/voice_assistant_coordinator.dart';
 import 'package:combat_goblin_prime/voice/understanding/voice_intent_classifier.dart';
 import 'package:combat_goblin_prime/voice/voice_search_facade.dart';
+
+// ---------------------------------------------------------------------------
+// Minimal IndexBundle builder for coordinator integration tests
+// ---------------------------------------------------------------------------
+//
+// Mirrors the hermetic approach from weapon_collection_scope_test.dart:
+// build a minimal BoundPackBundle in-memory, run IndexService, get a real
+// IndexBundle whose unitByDocId and weaponByDocId lookups work correctly.
+//
+// File-ID constants are local to this scope.
+
+const _iTestGstFileId = 'coord-gst-0001';
+const _iTestCatFileId = 'coord-cat-0001';
+
+WrappedFile _iWrappedFile(String fileId, SourceFileType type) {
+  return WrappedFile(
+    fileId: fileId,
+    fileType: type,
+    nodes: [
+      WrappedNode(
+        ref: const NodeRef(0),
+        tagName: 'catalogue',
+        attributes: const {},
+        parent: null,
+        children: const [],
+        depth: 0,
+        fileId: fileId,
+        fileType: type,
+      ),
+    ],
+    idIndex: const {},
+  );
+}
+
+WrappedPackBundle _iWrappedBundle() {
+  return WrappedPackBundle(
+    packId: 'coord-test-pack',
+    wrappedAt: DateTime(2026, 1, 1),
+    gameSystem: _iWrappedFile(_iTestGstFileId, SourceFileType.gst),
+    primaryCatalog: _iWrappedFile(_iTestCatFileId, SourceFileType.cat),
+    dependencyCatalogs: const [],
+  );
+}
+
+LinkedPackBundle _iLinkedBundle(WrappedPackBundle wrapped) {
+  return LinkedPackBundle(
+    packId: wrapped.packId,
+    linkedAt: DateTime(2026, 1, 1),
+    symbolTable: SymbolTable.fromWrappedBundle(wrapped),
+    resolvedRefs: const [],
+    diagnostics: const [],
+    wrappedBundle: wrapped,
+  );
+}
+
+/// Builds a minimal BoundProfile for a unit datasheet (typeName == 'unit').
+BoundProfile _iUnitProfile(String id) {
+  return BoundProfile(
+    id: id,
+    name: 'Unit Profile',
+    typeId: 'type-unit',
+    typeName: 'unit',
+    characteristics: const [
+      (name: 'M', value: '6"'),
+      (name: 'T', value: '4'),
+      (name: 'SV', value: '3+'),
+      (name: 'W', value: '2'),
+      (name: 'LD', value: '7+'),
+      (name: 'OC', value: '1'),
+    ],
+    sourceFileId: _iTestCatFileId,
+    sourceNode: const NodeRef(0),
+  );
+}
+
+/// Builds a minimal ranged-weapon BoundProfile whose characteristics include BS.
+BoundProfile _iRangedWeaponProfile(String id, String name, String bsValue) {
+  return BoundProfile(
+    id: id,
+    name: name,
+    typeId: 'type-wpn',
+    typeName: 'Ranged Weapons',
+    characteristics: [
+      (name: 'Range', value: '24"'),
+      (name: 'BS', value: bsValue),
+      (name: 'S', value: '4'),
+      (name: 'AP', value: '0'),
+      (name: 'D', value: '1'),
+    ],
+    sourceFileId: _iTestCatFileId,
+    sourceNode: const NodeRef(0),
+  );
+}
+
+BoundEntry _iEntry({
+  required String id,
+  required String name,
+  required List<BoundProfile> profiles,
+}) {
+  return BoundEntry(
+    id: id,
+    name: name,
+    isGroup: false,
+    isHidden: false,
+    children: const [],
+    profiles: profiles,
+    categories: const [],
+    costs: const [],
+    constraints: const [],
+    sourceFileId: _iTestCatFileId,
+    sourceNode: const NodeRef(0),
+  );
+}
+
+/// Builds a real IndexBundle containing one unit and one ranged weapon with BS.
+///
+/// UnitDoc.docId   = 'unit:{unitEntryId}'
+/// WeaponDoc.docId = 'weapon:{weaponProfileId}'
+IndexBundle _buildCoordTestBundle({
+  required String unitEntryId,
+  required String unitName,
+  required String weaponProfileId,
+  required String weaponName,
+  required String bsValue,
+}) {
+  final unitProf = _iUnitProfile('unit-prof-$unitEntryId');
+  final wpnProf = _iRangedWeaponProfile(weaponProfileId, weaponName, bsValue);
+
+  final entry = _iEntry(
+    id: unitEntryId,
+    name: unitName,
+    profiles: [unitProf, wpnProf],
+  );
+
+  final wrapped = _iWrappedBundle();
+  final linked = _iLinkedBundle(wrapped);
+  final bound = BoundPackBundle(
+    packId: 'coord-test-pack',
+    boundAt: DateTime(2026, 1, 1),
+    entries: [entry],
+    profiles: [unitProf, wpnProf],
+    categories: const [],
+    diagnostics: const [],
+    linkedBundle: linked,
+  );
+
+  return IndexService().buildIndex(bound);
+}
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -670,6 +821,129 @@ void main() {
       final plan2 = await coord2.handleTranscript(
         transcript: 'what is the BS of Intercessors',
         slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan1.primaryText, plan2.primaryText);
+      expect(plan1.debugSummary, plan2.debugSummary);
+    });
+  });
+
+  // =========================================================================
+  // Coordinator — integration with real IndexBundle
+  //
+  // These tests replace _noopBundles with a real IndexBundle so that
+  // _handleAttributeQuestion() actually exercises the full data path:
+  //   SpokenEntity.variant.sourceSlotId → slotBundles[slotId]
+  //   → IndexBundle.unitByDocId(variant.docId)
+  //   → UnitDoc.weaponDocRefs
+  //   → IndexBundle.weaponByDocId(ref)
+  //   → WeaponDoc.characteristics['BS']
+  //
+  // This exposes whether the coordinator correctly reads weapon-backed
+  // attribute data and whether any clarification behavior is still missing.
+  // =========================================================================
+  group('8. Coordinator — integration with real IndexBundle', () {
+    // Synthetic IDs — chosen so docId format is predictable:
+    //   UnitDoc.docId   = 'unit:intercessor-001'
+    //   WeaponDoc.docId = 'weapon:bolt-rifle-001'
+    const unitEntryId = 'intercessor-001';
+    const weaponProfileId = 'bolt-rifle-001';
+    const weaponName = 'Bolt Rifle';
+    const bsValue = '3+';
+
+    late IndexBundle testBundle;
+
+    setUp(() {
+      testBundle = _buildCoordTestBundle(
+        unitEntryId: unitEntryId,
+        unitName: 'Intercessor',
+        weaponProfileId: weaponProfileId,
+        weaponName: weaponName,
+        bsValue: bsValue,
+      );
+    });
+
+    // Helper: build a coordinator whose fake returns a SpokenEntity whose
+    // variant docId and sourceSlotId match the real IndexBundle.
+    VoiceAssistantCoordinator _coordWithBundle(IndexBundle bundle) {
+      final entity = SpokenEntity(
+        slotId: 'slot_0',
+        groupKey: 'intercessor',
+        displayName: 'Intercessor',
+        variants: [
+          SpokenVariant(
+            sourceSlotId: 'slot_0',
+            docType: SearchDocType.unit,
+            docId: 'unit:$unitEntryId',
+            canonicalKey: 'intercessor',
+            displayName: 'Intercessor',
+            matchReasons: const [MatchReason.canonicalKeyMatch],
+            tieBreakKey: 'intercessor\x00unit:$unitEntryId',
+          ),
+        ],
+      );
+      return VoiceAssistantCoordinator(
+        searchFacade: _FakeSearchFacade((_) => [entity]),
+      );
+    }
+
+    test('8.1 BS question with real IndexBundle → attr-answer plan with weapon data', () async {
+      // This test proves the coordinator consumes real weapon-backed attribute
+      // data via the weaponDocRefs → weaponByDocId path.
+      final coord = _coordWithBundle(testBundle);
+      final plan = await coord.handleTranscript(
+        transcript: 'what is the BS of Intercessors',
+        slotBundles: {'slot_0': testBundle},
+        contextHints: const [],
+      );
+
+      // Must resolve to an attr-answer plan — not attr-no-bundle, attr-no-unit-doc,
+      // or attr-empty. Any of those would indicate a data-path failure.
+      expect(
+        plan.debugSummary,
+        startsWith('attr-answer:bs:'),
+        reason: 'Coordinator must reach the attr-answer branch via '
+            'weaponDocRefs → weaponByDocId → characteristics[BS]. '
+            'Got: "${plan.debugSummary}"',
+      );
+      expect(plan.entities, hasLength(1));
+      expect(plan.primaryText, contains('BS'));
+      expect(plan.primaryText, contains(weaponName));
+      expect(plan.primaryText, contains(bsValue));
+    });
+
+    test('8.2 Real bundle — no clarification needed for single unambiguous result', () async {
+      // Confirms the coordinator does NOT enter a disambiguation loop when
+      // the search returns exactly one result backed by real weapon data.
+      // If the coordinator silently needed clarification but did not ask,
+      // the plan would stall in a disambiguation: branch — this test exposes that.
+      final coord = _coordWithBundle(testBundle);
+      final plan = await coord.handleTranscript(
+        transcript: 'what is the BS of Intercessors',
+        slotBundles: {'slot_0': testBundle},
+        contextHints: const [],
+      );
+
+      expect(
+        plan.debugSummary,
+        isNot(startsWith('disambiguation:')),
+        reason: 'Single-result attr question must not open a disambiguation session',
+      );
+      expect(plan.followUps, isEmpty,
+          reason: 'No follow-up prompts expected for a resolved attribute answer');
+    });
+
+    test('8.3 Deterministic: two identical coordinator instances produce identical plans', () async {
+      final coord1 = _coordWithBundle(testBundle);
+      final coord2 = _coordWithBundle(testBundle);
+      final plan1 = await coord1.handleTranscript(
+        transcript: 'what is the BS of Intercessors',
+        slotBundles: {'slot_0': testBundle},
+        contextHints: const [],
+      );
+      final plan2 = await coord2.handleTranscript(
+        transcript: 'what is the BS of Intercessors',
+        slotBundles: {'slot_0': testBundle},
         contextHints: const [],
       );
       expect(plan1.primaryText, plan2.primaryText);
