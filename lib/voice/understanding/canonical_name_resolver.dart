@@ -43,6 +43,15 @@ final class CanonicalNameResolver {
     'daemons': 'legiones daemonica',
     'daemon': 'legiones daemonica',
 
+    // ── Faction name aliases (continued) ────────────────────────────────
+    // "Imperial Agents" is colloquial for the BSData catalog
+    // "Agents of the Imperium".
+    'imperial agents': 'agents of the imperium',
+    'imperial agent': 'agents of the imperium',
+
+    // "Votann" is the colloquial shorthand for "Leagues of Votann".
+    'votann': 'leagues of votann',
+
     // ── Reordered unit name aliases ──────────────────────────────────────
     // BSData stores some units with a base-noun-first convention while
     // users naturally say the modifier first.  Each alias maps the
