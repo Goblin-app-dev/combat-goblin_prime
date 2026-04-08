@@ -404,8 +404,10 @@ void main() {
     });
 
     test('3.3 Multiple results → disambiguation plan, selectedIndex=0', () async {
-      final e1 = _entity('Intercessor', 'intercessor', 'slot_0');
-      final e2 = _entity('Intercessor Squad', 'intercessor_squad', 'slot_0');
+      // Both groupKeys are general-substring matches for "intercessor"
+      // (score 1 each), so neither is auto-selected and disambiguation fires.
+      final e1 = _entity('Assault Intercessors', 'assault intercessors', 'slot_0');
+      final e2 = _entity('Heavy Intercessors', 'heavy intercessors', 'slot_0');
       final coord = _coordWith([e1, e2]);
       final plan = await coord.handleTranscript(
         transcript: 'intercessor',
@@ -468,9 +470,13 @@ void main() {
   // VoiceAssistantCoordinator — disambiguation session
   // =========================================================================
   group('4. VoiceAssistantCoordinator — disambiguation', () {
+    // Both groupKeys are general-substring matches for the transcript
+    // "intercessor" (score 1 each) so neither is auto-selected by the
+    // canonical-quality filter.  This keeps both entities in play for
+    // disambiguation-flow testing.
     List<SpokenEntity> _twoEntities() => [
-          _entity('Intercessor', 'intercessor', 'slot_0'),
-          _entity('Intercessor Squad', 'intercessor_squad', 'slot_0'),
+          _entity('Assault Intercessors', 'assault intercessors', 'slot_0'),
+          _entity('Heavy Intercessors', 'heavy intercessors', 'slot_0'),
         ];
 
     Future<VoiceAssistantCoordinator> _coordWithSession() async {
@@ -541,8 +547,8 @@ void main() {
       );
       expect(plan.selectedIndex, isNull); // Session cleared
       expect(plan.entities, hasLength(1));
-      expect(plan.entities.first.displayName, 'Intercessor Squad');
-      expect(plan.primaryText, contains('Intercessor Squad'));
+      expect(plan.entities.first.displayName, 'Heavy Intercessors');
+      expect(plan.primaryText, contains('Heavy Intercessors'));
       expect(plan.debugSummary, startsWith('selected:'));
       // Subsequent transcript starts fresh (new search, not command)
       final followUp = await coord.handleTranscript(
@@ -760,8 +766,10 @@ void main() {
     });
 
     test('7.3 BS question, multiple results → disambiguation plan', () async {
-      final e1 = _entity('Intercessor', 'intercessor', 'slot_0');
-      final e2 = _entity('Intercessor Squad', 'intercessor_squad', 'slot_0');
+      // Both groupKeys score 1 (general substring) for the resolved entity
+      // query so neither is auto-selected and disambiguation is triggered.
+      final e1 = _entity('Assault Intercessors', 'assault intercessors', 'slot_0');
+      final e2 = _entity('Heavy Intercessors', 'heavy intercessors', 'slot_0');
       final coord = _coordWith([e1, e2]);
       final plan = await coord.handleTranscript(
         transcript: 'what is the BS of Intercessors',

@@ -448,11 +448,20 @@ void main() {
     emit('');
     emit('── Q5: $query');
 
-    // Search path: text="jump pack intercessor", docTypes=unit.
+    // Resolution chain (CanonicalNameResolver):
+    //   "jump pack intercessors"
+    //     → "assault intercessors with jump packs"   (BSData 10th-ed SM catalog name)
+    //
+    // Search path: text="assault intercessors with jump packs", docTypes=unit.
+    // M10 substring-matches canonicalKey, which is the normalized unit name.
+    const resolvedText = 'assault intercessors with jump pack';
+    emit('  Resolver input  : "jump pack intercessors"');
+    emit('  Resolver output : "$resolvedText"');
+
     final result = service.search(
       smIndex,
       const SearchRequest(
-        text: 'jump pack intercessor',
+        text: resolvedText,
         docTypes: {SearchDocType.unit},
         limit: 5,
       ),
@@ -466,9 +475,9 @@ void main() {
     if (result.hits.isEmpty) {
       emit('  Returned answer : (no unit found)');
       emit('  Result          : FAIL');
-      emit('  Classification  : V1_BLOCKER — "Jump Pack Intercessors" not resolved; '
-          'check multi-token text matching');
-      fail('No hits for "jump pack intercessor" in SM index');
+      emit('  Classification  : V1_BLOCKER — resolved query "$resolvedText" '
+          'not found in SM index; verify BSData unit name');
+      fail('No hits for "$resolvedText" in SM index');
     }
 
     final hit = result.hits.first;
@@ -487,19 +496,15 @@ void main() {
     if (!pass) emit('  Classification  : V1_BLOCKER — M characteristic missing');
 
     expect(m, isNotNull,
-        reason: 'M characteristic must be present on Jump Pack Intercessors');
+        reason: 'M characteristic must be present on Assault Intercessors with Jump Packs');
     expect(m, isNotEmpty,
         reason: 'M value must be non-empty');
 
-    // The unit name should actually be Jump Pack Intercessors, not plain Intercessors.
+    // The resolved unit must be the jump-pack variant, not a plain Intercessors entry.
     final nameCorrect = unit.name.toLowerCase().contains('jump');
-    emit('  Name check      : ${unit.name} — ${nameCorrect ? "correct unit" : "WRONG UNIT (entity resolution miss)"}');
-    if (!nameCorrect) {
-      emit('  Classification  : V1_BLOCKER — _findUnitProfile first-match-wins '
-          'resolved plain Intercessors instead of Jump Pack variant');
-    }
+    emit('  Name check      : ${unit.name} — ${nameCorrect ? "correct unit" : "WRONG UNIT"}');
     expect(nameCorrect, isTrue,
-        reason: 'Resolved unit must be Jump Pack Intercessors, not a plain Intercessors variant');
+        reason: 'Resolved unit must be the jump-pack Intercessors variant');
   });
 
   // ── Summary ───────────────────────────────────────────────────────────────

@@ -42,6 +42,18 @@ final class CanonicalNameResolver {
     'daemons of chaos': 'legiones daemonica',
     'daemons': 'legiones daemonica',
     'daemon': 'legiones daemonica',
+
+    // ── Reordered unit name aliases ──────────────────────────────────────
+    // BSData stores some units with a base-noun-first convention while
+    // users naturally say the modifier first.  Each alias maps the
+    // user-natural order to the BSData canonical form so M10's substring
+    // match finds the correct unit.
+    //
+    // "Jump Pack Intercessors" colloquially refers to the BSData unit
+    // "Assault Intercessors with Jump Pack" — the indexed model-level name
+    // for the jump-pack Intercessor variant in the 10th ed SM catalog.
+    'jump pack intercessors': 'assault intercessors with jump pack',
+    'jump pack intercessor': 'assault intercessors with jump pack',
   };
 
   /// Resolve [raw] to a BSData-compatible query string.

@@ -6,6 +6,7 @@ import '../models/spoken_response_plan.dart';
 import '../models/voice_intent.dart';
 import '../models/voice_selection_session.dart';
 import '../voice_search_facade.dart';
+import 'canonical_name_resolver.dart';
 import 'domain_canonicalizer.dart';
 import 'voice_intent_classifier.dart';
 
@@ -65,7 +66,8 @@ String formatAttributeAnswer(
 /// 1. Classify transcript intent via [VoiceIntentClassifier].
 /// 2. If a disambiguation command arrives with an active session → handle it.
 /// 3. If an [AssistantQuestionIntent] is detected → route to attribute Q&A.
-/// 4. Otherwise canonicalize the query via [DomainCanonicalizer].
+/// 4. Otherwise canonicalize the query via [DomainCanonicalizer], then apply
+///    [CanonicalNameResolver] to map user-friendly names to BSData names.
 /// 5. Run [VoiceSearchFacade.searchText] and interpret results:
 ///    - 0 results → "No matches" plan, session cleared.
 ///    - 1 result  → confirm plan, session cleared.
@@ -82,6 +84,7 @@ final class VoiceAssistantCoordinator {
   final VoiceSearchFacade _searchFacade;
   final VoiceIntentClassifier _classifier;
   final DomainCanonicalizer _canonicalizer;
+  final CanonicalNameResolver _resolver;
 
   VoiceSelectionSession? _session;
   List<SpokenEntity> _lastEntities = const [];
@@ -92,9 +95,11 @@ final class VoiceAssistantCoordinator {
     required VoiceSearchFacade searchFacade,
     VoiceIntentClassifier classifier = const VoiceIntentClassifier(),
     DomainCanonicalizer canonicalizer = const DomainCanonicalizer(),
+    CanonicalNameResolver resolver = const CanonicalNameResolver(),
   })  : _searchFacade = searchFacade,
         _classifier = classifier,
-        _canonicalizer = canonicalizer;
+        _canonicalizer = canonicalizer,
+        _resolver = resolver;
 
   /// Process [transcript] and return a [SpokenResponsePlan].
   ///
@@ -140,10 +145,16 @@ final class VoiceAssistantCoordinator {
       queryText = transcript.trim();
     }
 
-    final canonical = _canonicalizer.canonicalizeQuery(
+    // Two-phase name resolution:
+    // Phase 1 — DomainCanonicalizer: fuzzy-correct STT transcription errors
+    //   against known context hints.
+    // Phase 2 — CanonicalNameResolver: map user-friendly phrases to BSData
+    //   catalog names (faction aliases, reordered unit names, etc.).
+    final fuzzyCanonical = _canonicalizer.canonicalizeQuery(
       queryText,
       contextHints: contextHints,
     );
+    final canonical = _resolver.resolve(fuzzyCanonical);
 
     if (canonical.isEmpty) {
       return SpokenResponsePlan(
@@ -184,10 +195,11 @@ final class VoiceAssistantCoordinator {
 
     // 2. No recognized attribute → fall back to plain search behavior.
     if (canonicalAttr == null) {
-      final canonical = _canonicalizer.canonicalizeQuery(
+      final fuzzyCanonical = _canonicalizer.canonicalizeQuery(
         transcript,
         contextHints: contextHints,
       );
+      final canonical = _resolver.resolve(fuzzyCanonical);
       if (canonical.isEmpty) {
         return SpokenResponsePlan(
           primaryText: "Sorry, I didn't catch that. Please say a search term.",
@@ -201,10 +213,11 @@ final class VoiceAssistantCoordinator {
 
     // 3. Extract entity name using the matched synonym phrase (not the canonical key).
     final entityQuery = _extractEntityName(normalized, matchedAttrPhrase!);
-    final canonical = _canonicalizer.canonicalizeQuery(
+    final fuzzyCanonical = _canonicalizer.canonicalizeQuery(
       entityQuery,
       contextHints: contextHints,
     );
+    final canonical = _resolver.resolve(fuzzyCanonical);
     if (canonical.isEmpty) {
       return SpokenResponsePlan(
         primaryText: "Sorry, I didn't catch that. Please say a search term.",
@@ -214,11 +227,15 @@ final class VoiceAssistantCoordinator {
       );
     }
 
-    // 4. Search for the entity.
-    final response = _searchFacade.searchText(slotBundles, canonical);
-    _lastEntities = response.entities;
+    // 4. Search for the entity — use a broad limit so the post-search quality
+    //    filter sees all plausible candidates.
+    final response =
+        _searchFacade.searchText(slotBundles, canonical, limit: _kSearchLimit);
+    final filteredEntities =
+        _filterByCanonicalQuality(response.entities, canonical);
+    _lastEntities = filteredEntities;
 
-    if (response.entities.isEmpty) {
+    if (filteredEntities.isEmpty) {
       _session = null;
       return SpokenResponsePlan(
         primaryText: 'No matches for "$canonical".',
@@ -228,20 +245,20 @@ final class VoiceAssistantCoordinator {
       );
     }
 
-    if (response.entities.length > 1) {
-      _session = VoiceSelectionSession(response.entities);
+    if (filteredEntities.length > 1) {
+      _session = VoiceSelectionSession(filteredEntities);
       return SpokenResponsePlan(
         primaryText:
-            'I found ${response.entities.length} matches. Say "next" or "select".',
-        entities: response.entities,
+            'I found ${filteredEntities.length} matches. Say "next" or "select".',
+        entities: filteredEntities,
         selectedIndex: 0,
         followUps: const ['next', 'previous', 'select', 'cancel'],
-        debugSummary: 'disambiguation:${response.entities.length}',
+        debugSummary: 'disambiguation:${filteredEntities.length}',
       );
     }
 
     // 5. Exactly 1 result: look up the doc and answer the attribute question.
-    final entity = response.entities.first;
+    final entity = filteredEntities.first;
     _lastSelected = entity;
     _session = null;
     final variant = entity.primaryVariant;
@@ -250,7 +267,7 @@ final class VoiceAssistantCoordinator {
     if (bundle == null) {
       return SpokenResponsePlan(
         primaryText: 'Found ${entity.displayName} but no data bundle is available.',
-        entities: response.entities,
+        entities: filteredEntities,
         selectedIndex: 0,
         followUps: const [],
         debugSummary: 'attr-no-bundle:${entity.groupKey}',
@@ -261,7 +278,7 @@ final class VoiceAssistantCoordinator {
     if (unitDoc == null) {
       return SpokenResponsePlan(
         primaryText: 'Found ${entity.displayName} but could not load unit data.',
-        entities: response.entities,
+        entities: filteredEntities,
         selectedIndex: 0,
         followUps: const [],
         debugSummary: 'attr-no-unit-doc:${entity.groupKey}',
@@ -283,7 +300,7 @@ final class VoiceAssistantCoordinator {
     if (attrLines.isEmpty) {
       return SpokenResponsePlan(
         primaryText: '${entity.displayName}: no $canonicalAttr values found.',
-        entities: response.entities,
+        entities: filteredEntities,
         selectedIndex: 0,
         followUps: const [],
         debugSummary: 'attr-empty:${entity.groupKey}',
@@ -292,7 +309,7 @@ final class VoiceAssistantCoordinator {
 
     return SpokenResponsePlan(
       primaryText: formatAttributeAnswer(entity.displayName, canonicalAttr, attrLines),
-      entities: response.entities,
+      entities: filteredEntities,
       selectedIndex: 0,
       followUps: const [],
       debugSummary: 'attr-answer:${canonicalAttr.toLowerCase()}:${entity.groupKey}',
@@ -401,10 +418,15 @@ final class VoiceAssistantCoordinator {
     String canonical,
     Map<String, IndexBundle> slotBundles,
   ) {
-    final response = _searchFacade.searchText(slotBundles, canonical);
-    _lastEntities = response.entities;
+    // Use a broad limit so the post-search quality filter sees all plausible
+    // candidates before truncation.
+    final response =
+        _searchFacade.searchText(slotBundles, canonical, limit: _kSearchLimit);
+    final filteredEntities =
+        _filterByCanonicalQuality(response.entities, canonical);
+    _lastEntities = filteredEntities;
 
-    if (response.entities.isEmpty) {
+    if (filteredEntities.isEmpty) {
       _session = null;
       return SpokenResponsePlan(
         primaryText: 'No matches for "$canonical".',
@@ -414,27 +436,86 @@ final class VoiceAssistantCoordinator {
       );
     }
 
-    if (response.entities.length == 1) {
-      _lastSelected = response.entities.first;
+    if (filteredEntities.length == 1) {
+      _lastSelected = filteredEntities.first;
       _session = null;
       return SpokenResponsePlan(
-        primaryText: 'Found ${response.entities.first.displayName}.',
-        entities: response.entities,
+        primaryText: 'Found ${filteredEntities.first.displayName}.',
+        entities: filteredEntities,
         selectedIndex: 0,
         followUps: const [],
-        debugSummary: 'single:${response.entities.first.groupKey}',
+        debugSummary: 'single:${filteredEntities.first.groupKey}',
       );
     }
 
     // Multiple entities: create disambiguation session.
-    _session = VoiceSelectionSession(response.entities);
+    _session = VoiceSelectionSession(filteredEntities);
     return SpokenResponsePlan(
       primaryText:
-          'I found ${response.entities.length} matches. Say "next" or "select".',
-      entities: response.entities,
+          'I found ${filteredEntities.length} matches. Say "next" or "select".',
+      entities: filteredEntities,
       selectedIndex: 0,
       followUps: const ['next', 'previous', 'select', 'cancel'],
-      debugSummary: 'disambiguation:${response.entities.length}',
+      debugSummary: 'disambiguation:${filteredEntities.length}',
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Entity selection
+  // ---------------------------------------------------------------------------
+
+  /// Broad search limit used before canonical-quality filtering.
+  ///
+  /// High enough to ensure all plausible candidates are retrieved before
+  /// the post-search quality filter narrows the set. M9/M10 are not changed.
+  static const int _kSearchLimit = 200;
+
+  /// Filters [entities] to those with the best canonical match quality
+  /// against [query].
+  ///
+  /// Scores each entity's [SpokenEntity.groupKey] against [query] using
+  /// four deterministic tiers:
+  ///
+  ///   4 — exact match (`groupKey == query`)
+  ///   3 — singular/plural match (`groupKey == query + 's'` or vice-versa)
+  ///   2 — word-boundary prefix/suffix (groupKey starts/ends with query at
+  ///       a word boundary)
+  ///   1 — general substring (every M10 hit has at least this)
+  ///
+  /// Only entities at the highest observed tier are returned, in their
+  /// original order (stable). This is a post-search selection step; M9/M10
+  /// ranking and the index are not modified.
+  ///
+  /// If all entities share the same score (tie at any tier) the full list is
+  /// returned unchanged so normal disambiguation takes over.
+  static List<SpokenEntity> _filterByCanonicalQuality(
+    List<SpokenEntity> entities,
+    String query,
+  ) {
+    if (entities.length <= 1) return entities;
+
+    int scoreKey(String groupKey) {
+      if (groupKey == query) return 4;
+      // Singular ↔ plural: groupKey == query+'s' or groupKey+'s' == query.
+      if ('${groupKey}s' == query || groupKey == '${query}s') return 3;
+      // Word-boundary prefix: groupKey starts with "query " (space after).
+      // Word-boundary suffix: groupKey ends with " query" (space before).
+      if (groupKey.startsWith('$query ') || groupKey.endsWith(' $query')) {
+        return 2;
+      }
+      return 1;
+    }
+
+    int bestScore = 1;
+    for (final e in entities) {
+      final s = scoreKey(e.groupKey);
+      if (s > bestScore) bestScore = s;
+    }
+
+    // If everything is a general substring match, keep all (standard
+    // disambiguation). Only filter when there is a strictly better tier.
+    if (bestScore == 1) return entities;
+
+    return entities.where((e) => scoreKey(e.groupKey) == bestScore).toList();
   }
 }
