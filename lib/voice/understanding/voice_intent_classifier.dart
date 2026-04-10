@@ -34,7 +34,21 @@ final class VoiceIntentClassifier {
 
   /// Leading strings (on lowercased transcript) that signal an assistant question.
   static const List<String> _questionPrefixes = [
+    // Stat / attribute questions
     'what ',
+    "what's ",
+    'whats ',
+    // Movement queries
+    'how far',
+    // Rule / ability queries
+    'rules for',
+    'rules of',
+    'abilities of',
+    'abilities for',
+    // Ability search (cross-unit)
+    'which units',
+    'what units',
+    // General question words
     'show ',
     'tell me',
     'describe ',
