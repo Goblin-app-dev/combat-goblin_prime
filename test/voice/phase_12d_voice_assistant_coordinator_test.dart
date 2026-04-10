@@ -1416,4 +1416,369 @@ void main() {
       );
     });
   });
+
+  // =========================================================================
+  // Phase 12E-3 — Clarification Dialogue
+  // =========================================================================
+  //
+  // Three ambiguity classes:
+  //   A — Weapon-dependent stat ambiguity: multiple weapons → ask "Which weapon?"
+  //   B — Multi-entity ambiguity: multiple strong candidates → "Which X? A, B, or C."
+  //   C — Too-broad ability search: count > threshold → adds narrowing suggestion
+  //   D — No-regression: direct-answer paths are unaffected
+
+  group('11. Phase 12E-3 — clarification dialogue', () {
+    // Builds an IndexBundle with one unit that has TWO ranged weapons.
+    // Used for weapon-clarification tests (A1, A2).
+    //
+    // UnitDoc.docId   = 'unit:intercessor-wc001'
+    // WeaponDoc.docIds = 'weapon:bp-wc001', 'weapon:br-wc001'
+    const _wcUnitEntryId = 'intercessor-wc001';
+    const _wcUnitName = 'Intercessor';
+
+    late IndexBundle _wcBundle;
+
+    setUp(() {
+      // Bolt Pistol: BS 4+, Bolt Rifle: BS 3+  (deliberately different so
+      // both appear in attrLines when the coordinator queries BS)
+      final unitProf = _iUnitProfile('unit-prof-$_wcUnitEntryId');
+      final boltPistol = _iRangedWeaponProfile('bp-wc001', 'Bolt Pistol', '4+');
+      final boltRifle = _iRangedWeaponProfile('br-wc001', 'Bolt Rifle', '3+');
+
+      final entry = _iEntry(
+        id: _wcUnitEntryId,
+        name: _wcUnitName,
+        profiles: [unitProf, boltPistol, boltRifle],
+      );
+      final wrapped = _iWrappedBundle();
+      final linked = _iLinkedBundle(wrapped);
+      final bound = BoundPackBundle(
+        packId: 'coord-test-pack',
+        boundAt: DateTime(2026, 1, 1),
+        entries: [entry],
+        profiles: [unitProf, boltPistol, boltRifle],
+        categories: const [],
+        diagnostics: const [],
+        linkedBundle: linked,
+      );
+      _wcBundle = IndexService().buildIndex(bound);
+    });
+
+    /// Returns a coordinator whose fake facade returns a single entity that
+    /// maps to [unitEntryId] in slot_0.
+    VoiceAssistantCoordinator _coordForWc(
+        String unitEntryId, String groupKey, String displayName) {
+      final entity = SpokenEntity(
+        slotId: 'slot_0',
+        groupKey: groupKey,
+        displayName: displayName,
+        variants: [
+          SpokenVariant(
+            sourceSlotId: 'slot_0',
+            docType: SearchDocType.unit,
+            docId: 'unit:$unitEntryId',
+            canonicalKey: groupKey,
+            displayName: displayName,
+            matchReasons: const [MatchReason.canonicalKeyMatch],
+            tieBreakKey: '$groupKey\x00unit:$unitEntryId',
+          ),
+        ],
+      );
+      return VoiceAssistantCoordinator(
+        searchFacade: _FakeSearchFacade((_) => [entity]),
+      );
+    }
+
+    // ── A: Weapon-dependent stat clarification ──────────────────────────────
+
+    test(
+        '11.A1 Multiple weapons with BS → "Which weapon?" clarification, '
+        'no direct answer', () async {
+      // Both Bolt Pistol (BS 4+) and Bolt Rifle (BS 3+) have a BS value.
+      // The coordinator must ask which weapon rather than guessing one.
+      final coord = _coordForWc(_wcUnitEntryId, 'intercessor', _wcUnitName);
+
+      final plan = await coord.handleTranscript(
+        transcript: 'what is the ballistic skill of Intercessors',
+        slotBundles: {'slot_0': _wcBundle},
+        contextHints: const [],
+      );
+
+      expect(
+        plan.debugSummary,
+        startsWith('weapon-clarify:'),
+        reason: 'Multiple weapons with the attribute must trigger weapon clarification',
+      );
+      expect(plan.primaryText, contains('Which weapon'),
+          reason: 'Clarification prompt must ask which weapon');
+      expect(plan.primaryText, isNot(anyOf(contains('3 plus'), contains('4 plus'))),
+          reason: 'Must not guess a weapon stat value before clarification');
+      // Options must be listed (≤ 3 weapons in test setup)
+      expect(plan.primaryText, contains('Bolt Pistol'),
+          reason: 'Short weapon list must be included in clarification prompt');
+      expect(plan.primaryText, contains('Bolt Rifle'),
+          reason: 'Short weapon list must be included in clarification prompt');
+    });
+
+    test(
+        '11.A2 Weapon clarification resolved — saying "bolt rifle" answers directly',
+        () async {
+      final coord = _coordForWc(_wcUnitEntryId, 'intercessor', _wcUnitName);
+      final slotBundles = {'slot_0': _wcBundle};
+
+      // Round 1: triggers clarification
+      await coord.handleTranscript(
+        transcript: 'what is the ballistic skill of Intercessors',
+        slotBundles: slotBundles,
+        contextHints: const [],
+      );
+
+      // Round 2: user names the specific weapon
+      final plan = await coord.handleTranscript(
+        transcript: 'bolt rifle',
+        slotBundles: slotBundles,
+        contextHints: const [],
+      );
+
+      expect(
+        plan.debugSummary,
+        startsWith('attr-answer:bs:'),
+        reason: 'Weapon name response must resolve to attr-answer',
+      );
+      expect(plan.primaryText, contains('Bolt Rifle'));
+      expect(plan.primaryText, contains('3 plus'),
+          reason: 'Bolt Rifle BS is 3+, spoken as "3 plus"');
+      expect(plan.primaryText, isNot(contains('4 plus')),
+          reason: 'Must not conflate Bolt Pistol value');
+    });
+
+    // ── B: Multi-entity clarification ───────────────────────────────────────
+
+    test(
+        '11.B1 ≤ 3 entities → "Which Captain? A, B, or C." (names listed inline)',
+        () async {
+      // All three groupKeys start with "captain " → score 2 each → tie → all kept.
+      final e1 = _entity(
+          'Captain in Phobos Armour', 'captain in phobos armour', 'slot_0');
+      final e2 = _entity(
+          'Captain with Jump Pack', 'captain with jump pack', 'slot_0');
+      final e3 = _entity('Captain in Terminator Armour',
+          'captain in terminator armour', 'slot_0');
+      final coord = VoiceAssistantCoordinator(
+        searchFacade: _FakeSearchFacade((_) => [e1, e2, e3]),
+      );
+
+      final plan = await coord.handleTranscript(
+        transcript: 'captain',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+
+      expect(plan.debugSummary, startsWith('disambiguation:3'));
+      expect(plan.followUps, containsAll(['next', 'select', 'cancel']));
+
+      // Prompt must name the options, not just announce a count.
+      expect(plan.primaryText, contains('Which'),
+          reason: 'Prompt must start with "Which"');
+      expect(plan.primaryText, contains('Captain in Phobos Armour'),
+          reason: 'All 3 names must appear in prompt');
+      expect(plan.primaryText, contains('Captain with Jump Pack'));
+      expect(plan.primaryText, contains('Captain in Terminator Armour'));
+    });
+
+    test(
+        '11.B2 > 3 entities → count + browse prompt (names NOT all listed)',
+        () async {
+      // Five entities: all start with "captain " → score 2 each → tie → all kept.
+      final entities = [
+        _entity('Captain Alpha', 'captain alpha', 'slot_0'),
+        _entity('Captain Beta', 'captain beta', 'slot_0'),
+        _entity('Captain Gamma', 'captain gamma', 'slot_0'),
+        _entity('Captain Delta', 'captain delta', 'slot_0'),
+        _entity('Captain Epsilon', 'captain epsilon', 'slot_0'),
+      ];
+      final coord = VoiceAssistantCoordinator(
+        searchFacade: _FakeSearchFacade((_) => entities),
+      );
+
+      final plan = await coord.handleTranscript(
+        transcript: 'captain',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+
+      expect(plan.debugSummary, startsWith('disambiguation:5'));
+      // Must mention the count.
+      expect(plan.primaryText, contains('5'),
+          reason: 'Count must appear in prompt when there are too many to list');
+      // Must NOT try to list all 5 names.
+      expect(
+        plan.primaryText,
+        isNot(allOf(
+            contains('Captain Alpha'),
+            contains('Captain Beta'),
+            contains('Captain Gamma'),
+            contains('Captain Delta'),
+            contains('Captain Epsilon'))),
+        reason: 'Prompt must not dump all entity names when count exceeds limit',
+      );
+    });
+
+    // ── C: Too-broad ability search ─────────────────────────────────────────
+
+    test(
+        '11.C1 > 10 units with keyword → narrowing suggestion appended',
+        () async {
+      // Build 11 units each with the "Infantry" keyword category.
+      // 11 > _kAbilitySearchWideThreshold (10), so narrowing text must appear.
+      const totalUnits = 11;
+      final entries = <BoundEntry>[];
+      final profiles = <BoundProfile>[];
+
+      for (var i = 1; i <= totalUnits; i++) {
+        final prof = _iUnitProfile('prof-infantry-$i');
+        final infantryCat = BoundCategory(
+          id: 'cat-infantry-$i',
+          name: 'Infantry',
+          isPrimary: false,
+          sourceFileId: _iTestCatFileId,
+          sourceNode: const NodeRef(0),
+        );
+        entries.add(BoundEntry(
+          id: 'unit-infantry-$i',
+          name: 'Unit $i',
+          isGroup: false,
+          isHidden: false,
+          children: const [],
+          profiles: [prof],
+          categories: [infantryCat],
+          costs: const [],
+          constraints: const [],
+          sourceFileId: _iTestCatFileId,
+          sourceNode: const NodeRef(0),
+        ));
+        profiles.add(prof);
+      }
+
+      final wrapped = _iWrappedBundle();
+      final linked = _iLinkedBundle(wrapped);
+      final bound = BoundPackBundle(
+        packId: 'coord-test-pack',
+        boundAt: DateTime(2026, 1, 1),
+        entries: entries,
+        profiles: profiles,
+        categories: const [],
+        diagnostics: const [],
+        linkedBundle: linked,
+      );
+      final testBundle = IndexService().buildIndex(bound);
+
+      final coord = VoiceAssistantCoordinator(
+        searchFacade: _FakeSearchFacade((_) => []),
+      );
+
+      final plan = await coord.handleTranscript(
+        transcript: 'which units have infantry',
+        slotBundles: {'slot_0': testBundle},
+        contextHints: const [],
+      );
+
+      expect(
+        plan.debugSummary,
+        'ability-search:infantry:$totalUnits',
+        reason: 'debugSummary must include exact count',
+      );
+      expect(plan.primaryText, contains('$totalUnits'),
+          reason: 'Total count must appear in spoken answer');
+      expect(
+        plan.primaryText,
+        anyOf(
+          contains('narrow'),
+          contains('specific'),
+          contains('unit name'),
+        ),
+        reason:
+            'Wide result set must include a narrowing suggestion in the spoken answer',
+      );
+    });
+
+    // ── D: No-regression ────────────────────────────────────────────────────
+
+    test(
+        '11.D1 Single-weapon unit — weapon stat answered directly, '
+        'no weapon-clarify triggered', () async {
+      // Uses the same single-weapon bundle as group 8/10.B.
+      // Verifies weapon clarification is not triggered for a unit with only
+      // one weapon carrying the requested attribute.
+      const entryId = 'intercessor-d001';
+      final testBundle = _buildCoordTestBundle(
+        unitEntryId: entryId,
+        unitName: 'Intercessor',
+        weaponProfileId: 'br-d001',
+        weaponName: 'Bolt Rifle',
+        bsValue: '3+',
+      );
+      final entity = SpokenEntity(
+        slotId: 'slot_0',
+        groupKey: 'intercessor',
+        displayName: 'Intercessor',
+        variants: [
+          SpokenVariant(
+            sourceSlotId: 'slot_0',
+            docType: SearchDocType.unit,
+            docId: 'unit:$entryId',
+            canonicalKey: 'intercessor',
+            displayName: 'Intercessor',
+            matchReasons: const [MatchReason.canonicalKeyMatch],
+            tieBreakKey: 'intercessor\x00unit:$entryId',
+          ),
+        ],
+      );
+      final coord = VoiceAssistantCoordinator(
+        searchFacade: _FakeSearchFacade((_) => [entity]),
+      );
+
+      final plan = await coord.handleTranscript(
+        transcript: 'what is the ballistic skill of Intercessors',
+        slotBundles: {'slot_0': testBundle},
+        contextHints: const [],
+      );
+
+      expect(
+        plan.debugSummary,
+        isNot(startsWith('weapon-clarify:')),
+        reason: 'Single-weapon unit must not trigger weapon clarification',
+      );
+      expect(plan.debugSummary, startsWith('attr-answer:bs:'));
+      expect(plan.primaryText, contains('3 plus'));
+    });
+
+    test(
+        '11.D2 Single entity matched for rules — answers directly, '
+        'no disambiguation triggered', () async {
+      // A query that yields one entity must go straight to rules-answer,
+      // not open a disambiguation session.
+      final entity = _entity('Carnifex', 'carnifex', 'slot_0');
+      final coord = VoiceAssistantCoordinator(
+        searchFacade: _FakeSearchFacade((_) => [entity]),
+      );
+
+      final plan = await coord.handleTranscript(
+        transcript: 'rules for Carnifex',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+
+      expect(
+        plan.debugSummary,
+        isNot(startsWith('disambiguation:')),
+        reason: 'Single-entity result must not open a disambiguation session',
+      );
+      // With no real bundle, path is rules-no-bundle — still not disambiguation.
+      expect(
+        plan.debugSummary,
+        anyOf(startsWith('rules-'), startsWith('rules-no-bundle')),
+      );
+    });
+  });
 }

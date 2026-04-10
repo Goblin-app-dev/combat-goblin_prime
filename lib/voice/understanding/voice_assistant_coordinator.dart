@@ -57,6 +57,51 @@ const _kAttrSpokenName = <String, String>{
   'WS': 'weapon skill',
 };
 
+/// Maximum number of entity names included inline in a disambiguation prompt.
+///
+/// When the candidate count is ≤ this limit the prompt lists them:
+///   "Which Captain? Captain, Captain with Jump Pack, or Captain in Terminator Armour."
+/// When it exceeds this limit a count + browse prompt is used instead:
+///   "Which Captain? I found 12 — say 'next' to browse."
+const int _kMaxDisambiguationOptions = 3;
+
+/// Ability-search result count above which a narrowing suggestion is added.
+///
+/// At or below this threshold the result is summarised normally.
+/// Above it, the spoken answer appends a prompt to narrow the query.
+const int _kAbilitySearchWideThreshold = 10;
+
+// ---------------------------------------------------------------------------
+// Weapon clarification state
+// ---------------------------------------------------------------------------
+
+/// Holds context for a pending weapon-selection clarification.
+///
+/// When a weapon-stat question (e.g. "What is the BS of Intercessors?")
+/// identifies multiple weapons with the requested attribute, the coordinator
+/// asks "Which weapon?" and stores this state.  The next user utterance is
+/// interpreted as a weapon-name response; if it matches, the stat is answered
+/// for that weapon.  If it does not match, the state is cleared and the
+/// utterance is processed normally.
+class _WeaponClarifyState {
+  final SpokenEntity entity;
+
+  /// Pre-sorted weapons that carry the requested attribute.
+  final List<WeaponDoc> weapons;
+
+  final String canonicalAttr;
+
+  const _WeaponClarifyState({
+    required this.entity,
+    required this.weapons,
+    required this.canonicalAttr,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Package-level helpers (exposed for testing)
+// ---------------------------------------------------------------------------
+
 /// Extracts (weaponName, valueText) pairs for [attributeKey] from [weapons].
 ///
 /// [weapons] must be pre-sorted by the caller for stable output.
@@ -94,21 +139,27 @@ String formatAttributeAnswer(
   return '$entityName $attributeKey — $parts';
 }
 
+// ---------------------------------------------------------------------------
+// Coordinator
+// ---------------------------------------------------------------------------
+
 /// Coordinator that turns a voice transcript into a [SpokenResponsePlan].
 ///
 /// Responsibilities (single method [handleTranscript]):
 /// 1. Classify transcript intent via [VoiceIntentClassifier].
-/// 2. If a disambiguation command arrives with an active session → handle it.
-/// 3. If an [AssistantQuestionIntent] is detected → route to attribute Q&A.
-/// 4. Otherwise canonicalize the query via [DomainCanonicalizer], then apply
+/// 2. If a weapon-clarification round-trip is active, attempt to resolve it.
+/// 3. If a disambiguation command arrives with an active session → handle it.
+/// 4. If an [AssistantQuestionIntent] is detected → route to attribute Q&A.
+/// 5. Otherwise canonicalize the query via [DomainCanonicalizer], then apply
 ///    [CanonicalNameResolver] to map user-friendly names to BSData names.
-/// 5. Run [VoiceSearchFacade.searchText] and interpret results:
+/// 6. Run [VoiceSearchFacade.searchText] and interpret results:
 ///    - 0 results → "No matches" plan, session cleared.
 ///    - 1 result  → confirm plan, session cleared.
 ///    - N > 1     → disambiguation plan, new [VoiceSelectionSession] created.
 ///
 /// State:
 /// - [_session]: current [VoiceSelectionSession] or null.
+/// - [_pendingWeaponClarify]: active weapon-clarification state or null.
 /// - [_lastEntities]: entities from the most recent search (for navigation plans).
 /// - [_lastSelected]: last entity confirmed via "select".
 ///
@@ -121,8 +172,8 @@ final class VoiceAssistantCoordinator {
   final CanonicalNameResolver _resolver;
 
   VoiceSelectionSession? _session;
+  _WeaponClarifyState? _pendingWeaponClarify;
   List<SpokenEntity> _lastEntities = const [];
-
   SpokenEntity? _lastSelected;
 
   VoiceAssistantCoordinator({
@@ -144,6 +195,67 @@ final class VoiceAssistantCoordinator {
     required Map<String, IndexBundle> slotBundles,
     required List<String> contextHints,
   }) async {
+    // --- Weapon-clarification round-trip ---
+    // The pending state is cleared unconditionally: the next utterance either
+    // resolves the clarification (weapon name matched) or cancels it (no match).
+    if (_pendingWeaponClarify != null) {
+      final state = _pendingWeaponClarify!;
+      _pendingWeaponClarify = null;
+
+      // Handle explicit cancel commands.
+      final lower = transcript.trim().toLowerCase();
+      if (lower == 'cancel' ||
+          lower == 'stop' ||
+          lower == 'nevermind' ||
+          lower == 'never mind') {
+        _session = null;
+        return SpokenResponsePlan(
+          primaryText: 'Cancelled.',
+          entities: const [],
+          followUps: const [],
+          debugSummary: 'cancelled',
+        );
+      }
+
+      // Try to match the utterance against a weapon name.
+      final normalized = _normalizeForParsing(transcript);
+      WeaponDoc? weaponMatch;
+      for (final w in state.weapons) {
+        final weaponNorm = _normalizeForParsing(w.name);
+        if (normalized == weaponNorm || normalized.contains(weaponNorm)) {
+          weaponMatch = w;
+          break;
+        }
+      }
+
+      if (weaponMatch != null) {
+        _lastSelected = state.entity;
+        _lastEntities = [state.entity];
+        final attrLines = extractAttributeValues(state.canonicalAttr, [weaponMatch]);
+        if (attrLines.isEmpty) {
+          return SpokenResponsePlan(
+            primaryText:
+                '${weaponMatch.name} has no ${_attrSpoken(state.canonicalAttr)} value.',
+            entities: [state.entity],
+            selectedIndex: 0,
+            followUps: const [],
+            debugSummary: 'attr-empty:${state.entity.groupKey}',
+          );
+        }
+        final (_, value) = attrLines.first;
+        return SpokenResponsePlan(
+          primaryText:
+              '${weaponMatch.name} ${_attrSpoken(state.canonicalAttr)} is ${_formatStatValue(value)}.',
+          entities: [state.entity],
+          selectedIndex: 0,
+          followUps: const [],
+          debugSummary:
+              'attr-answer:${state.canonicalAttr.toLowerCase()}:${state.entity.groupKey}',
+        );
+      }
+      // No weapon matched — fall through to normal processing of the transcript.
+    }
+
     final intent = _classifier.classify(transcript);
 
     // --- Disambiguation command with active session ---
@@ -180,10 +292,8 @@ final class VoiceAssistantCoordinator {
     }
 
     // Two-phase name resolution:
-    // Phase 1 — DomainCanonicalizer: fuzzy-correct STT transcription errors
-    //   against known context hints.
-    // Phase 2 — CanonicalNameResolver: map user-friendly phrases to BSData
-    //   catalog names (faction aliases, reordered unit names, etc.).
+    // Phase 1 — DomainCanonicalizer: fuzzy-correct STT transcription errors.
+    // Phase 2 — CanonicalNameResolver: map user-friendly phrases to BSData names.
     final fuzzyCanonical = _canonicalizer.canonicalizeQuery(
       queryText,
       contextHints: contextHints,
@@ -202,11 +312,15 @@ final class VoiceAssistantCoordinator {
     return _runSearch(canonical, slotBundles);
   }
 
-  /// Clear the active [VoiceSelectionSession] (e.g. on mode change).
-  void clearSession() => _session = null;
+  /// Clear the active [VoiceSelectionSession] and any pending clarification state
+  /// (e.g. on mode change).
+  void clearSession() {
+    _session = null;
+    _pendingWeaponClarify = null;
+  }
 
   // ---------------------------------------------------------------------------
-  // Private
+  // Private — answer routing
   // ---------------------------------------------------------------------------
 
   SpokenResponsePlan _handleAttributeQuestion({
@@ -280,8 +394,7 @@ final class VoiceAssistantCoordinator {
       );
     }
 
-    // 6. Search for the entity — use a broad limit so the post-search quality
-    //    filter sees all plausible candidates.
+    // 6. Search for the entity.
     final response =
         _searchFacade.searchText(slotBundles, canonical, limit: _kSearchLimit);
     final filteredEntities =
@@ -301,8 +414,7 @@ final class VoiceAssistantCoordinator {
     if (filteredEntities.length > 1) {
       _session = VoiceSelectionSession(filteredEntities);
       return SpokenResponsePlan(
-        primaryText:
-            'I found ${filteredEntities.length} matches. Say "next" or "select".',
+        primaryText: _disambiguationPrompt(filteredEntities, canonical),
         entities: filteredEntities,
         selectedIndex: 0,
         followUps: const ['next', 'previous', 'select', 'cancel'],
@@ -340,7 +452,6 @@ final class VoiceAssistantCoordinator {
 
     // 8. Branch: unit-level stat vs weapon-level stat.
     if (_kUnitStatAttrs.contains(canonicalAttr)) {
-      // Unit stat: look up directly from UnitDoc.characteristics.
       IndexedCharacteristic? statChar;
       for (final c in unitDoc.characteristics) {
         if (c.name == canonicalAttr) {
@@ -392,21 +503,35 @@ final class VoiceAssistantCoordinator {
       );
     }
 
-    // Format weapon stat answer in natural language.
     final spokenAttr = _attrSpoken(canonicalAttr);
-    final String primaryText;
-    if (attrLines.length == 1) {
-      final (weaponName, value) = attrLines.first;
-      primaryText = '$weaponName $spokenAttr is ${_formatStatValue(value)}.';
-    } else {
-      final parts = attrLines
-          .map((l) => '${l.$1}: ${_formatStatValue(l.$2)}')
-          .join(', ');
-      primaryText = '${entity.displayName} $spokenAttr — $parts';
+
+    // Multiple weapons: ask for clarification rather than guessing.
+    if (attrLines.length > 1) {
+      final weaponsWithAttr = weapons
+          .where((w) => w.characteristics.any((c) => c.name == canonicalAttr))
+          .toList();
+      _pendingWeaponClarify = _WeaponClarifyState(
+        entity: entity,
+        weapons: weaponsWithAttr,
+        canonicalAttr: canonicalAttr,
+      );
+      final weaponNames = weaponsWithAttr.map((w) => w.name).toList();
+      final String clarifyPrompt = weaponNames.length <= _kMaxDisambiguationOptions
+          ? 'Which weapon? ${_joinList(weaponNames)}.'
+          : 'Which weapon?';
+      return SpokenResponsePlan(
+        primaryText: clarifyPrompt,
+        entities: [entity],
+        selectedIndex: 0,
+        followUps: weaponNames,
+        debugSummary: 'weapon-clarify:${entity.groupKey}',
+      );
     }
 
+    // Single weapon: answer directly.
+    final (weaponName, value) = attrLines.first;
     return SpokenResponsePlan(
-      primaryText: primaryText,
+      primaryText: '$weaponName $spokenAttr is ${_formatStatValue(value)}.',
       entities: filteredEntities,
       selectedIndex: 0,
       followUps: const [],
@@ -416,15 +541,11 @@ final class VoiceAssistantCoordinator {
   }
 
   /// Handles "rules for X" / "rules of X" queries.
-  ///
-  /// Looks up [UnitDoc.ruleDocRefs] and formats rule names as a natural-language
-  /// list: "Carnifex has Synapse, Deadly Demise, and Blistering Assault."
   SpokenResponsePlan _handleRuleListQuestion({
     required String normalized,
     required Map<String, IndexBundle> slotBundles,
     required List<String> contextHints,
   }) {
-    // Extract entity name after the "rules for " or "rules of " prefix.
     final entityQuery = normalized.startsWith('rules for ')
         ? normalized.substring('rules for '.length).trim()
         : normalized.substring('rules of '.length).trim();
@@ -471,8 +592,7 @@ final class VoiceAssistantCoordinator {
     if (filteredEntities.length > 1) {
       _session = VoiceSelectionSession(filteredEntities);
       return SpokenResponsePlan(
-        primaryText:
-            'I found ${filteredEntities.length} matches. Say "next" or "select".',
+        primaryText: _disambiguationPrompt(filteredEntities, canonical),
         entities: filteredEntities,
         selectedIndex: 0,
         followUps: const ['next', 'previous', 'select', 'cancel'],
@@ -535,14 +655,10 @@ final class VoiceAssistantCoordinator {
   }
 
   /// Handles "which units have X" / "what units have X" queries.
-  ///
-  /// Searches all slot bundles via [IndexBundle.unitsByKeyword] and formats
-  /// the result as: "21 units have Synapse, including Hive Tyrant and Carnifex."
   SpokenResponsePlan _handleAbilitySearchQuestion({
     required String normalized,
     required Map<String, IndexBundle> slotBundles,
   }) {
-    // Extract ability name after the "which units have " or "what units have " prefix.
     final prefix = normalized.startsWith('which units have ')
         ? 'which units have '
         : 'what units have ';
@@ -557,7 +673,6 @@ final class VoiceAssistantCoordinator {
       );
     }
 
-    // Search all slot bundles for units with this keyword.
     final matchingUnits = <UnitDoc>[];
     final seenDocIds = <String>{};
     for (final bundle in slotBundles.values) {
@@ -582,9 +697,16 @@ final class VoiceAssistantCoordinator {
     final samples = matchingUnits.take(2).map((u) => u.name).toList();
     final abilityCap = _capitalize(abilityQuery);
 
-    final primaryText = count == 1
-        ? '1 unit has $abilityCap: ${matchingUnits.first.name}.'
-        : '$count units have $abilityCap, including ${_joinList(samples)}.';
+    final String primaryText;
+    if (count == 1) {
+      primaryText = '1 unit has $abilityCap: ${matchingUnits.first.name}.';
+    } else if (count > _kAbilitySearchWideThreshold) {
+      primaryText =
+          '$count units have $abilityCap, including ${_joinList(samples)}. '
+          'Try a more specific search to narrow down.';
+    } else {
+      primaryText = '$count units have $abilityCap, including ${_joinList(samples)}.';
+    }
 
     return SpokenResponsePlan(
       primaryText: primaryText,
@@ -594,9 +716,12 @@ final class VoiceAssistantCoordinator {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Private — text normalization and entity extraction
+  // ---------------------------------------------------------------------------
+
   /// Normalizes text for internal question parsing.
   /// Lowercases, strips punctuation, collapses whitespace.
-  /// Distinct from [DomainCanonicalizer] which is for entity search matching.
   static String _normalizeForParsing(String text) {
     return text
         .toLowerCase()
@@ -608,15 +733,8 @@ final class VoiceAssistantCoordinator {
   /// Extracts the entity name from a normalized question string.
   ///
   /// Rule 1: " of " pattern ("movement of X", "what is the BS of X").
-  ///         Take the substring after the last " of " and strip a leading "the ".
-  ///
   /// Rule 2: verb-at-end pattern ("how far do X move", "how far does X move").
-  ///         Detected when [attrPhrase] is the final word of the string.
-  ///         Strip the verb suffix, then strip a known question prelude
-  ///         ("how far do ", "how far does ", etc.) to isolate the entity.
-  ///
   /// Rule 3: attrPhrase-in-middle pattern ("show me the BS for X").
-  ///         Find [attrPhrase], take everything after it, strip leading stopword.
   static String _extractEntityName(String normalized, String attrPhrase) {
     const stopwords = ['the ', 'a ', 'an ', 'for ', 'on ', 'in ', 'to '];
 
@@ -633,7 +751,6 @@ final class VoiceAssistantCoordinator {
     if (normalized.endsWith(verbSuffix)) {
       var withoutVerb =
           normalized.substring(0, normalized.length - verbSuffix.length).trim();
-      // Strip known question preludes that precede the entity name.
       for (final p in const [
         'how far does ',
         'how far do ',
@@ -645,7 +762,6 @@ final class VoiceAssistantCoordinator {
           break;
         }
       }
-      // Strip any remaining leading stopword.
       for (final sw in stopwords) {
         if (withoutVerb.startsWith(sw)) {
           withoutVerb = withoutVerb.substring(sw.length).trim();
@@ -653,7 +769,6 @@ final class VoiceAssistantCoordinator {
         }
       }
       if (withoutVerb.isNotEmpty) return withoutVerb;
-      // Fall through to Rule 3 if still empty (degenerate input).
     }
 
     // Rule 3: attrPhrase in middle of string — take text after it.
@@ -671,6 +786,10 @@ final class VoiceAssistantCoordinator {
 
     return normalized;
   }
+
+  // ---------------------------------------------------------------------------
+  // Private — session and navigation
+  // ---------------------------------------------------------------------------
 
   SpokenResponsePlan _handleCommand(DisambiguationCommand command) {
     final session = _session!;
@@ -735,8 +854,6 @@ final class VoiceAssistantCoordinator {
     String canonical,
     Map<String, IndexBundle> slotBundles,
   ) {
-    // Use a broad limit so the post-search quality filter sees all plausible
-    // candidates before truncation.
     final response =
         _searchFacade.searchText(slotBundles, canonical, limit: _kSearchLimit);
     final filteredEntities =
@@ -765,11 +882,9 @@ final class VoiceAssistantCoordinator {
       );
     }
 
-    // Multiple entities: create disambiguation session.
     _session = VoiceSelectionSession(filteredEntities);
     return SpokenResponsePlan(
-      primaryText:
-          'I found ${filteredEntities.length} matches. Say "next" or "select".',
+      primaryText: _disambiguationPrompt(filteredEntities, canonical),
       entities: filteredEntities,
       selectedIndex: 0,
       followUps: const ['next', 'previous', 'select', 'cancel'],
@@ -778,33 +893,12 @@ final class VoiceAssistantCoordinator {
   }
 
   // ---------------------------------------------------------------------------
-  // Entity selection
+  // Private — entity selection
   // ---------------------------------------------------------------------------
 
-  /// Broad search limit used before canonical-quality filtering.
-  ///
-  /// High enough to ensure all plausible candidates are retrieved before
-  /// the post-search quality filter narrows the set. M9/M10 are not changed.
   static const int _kSearchLimit = 200;
 
-  /// Filters [entities] to those with the best canonical match quality
-  /// against [query].
-  ///
-  /// Scores each entity's [SpokenEntity.groupKey] against [query] using
-  /// four deterministic tiers:
-  ///
-  ///   4 — exact match (`groupKey == query`)
-  ///   3 — singular/plural match (`groupKey == query + 's'` or vice-versa)
-  ///   2 — word-boundary prefix/suffix (groupKey starts/ends with query at
-  ///       a word boundary)
-  ///   1 — general substring (every M10 hit has at least this)
-  ///
-  /// Only entities at the highest observed tier are returned, in their
-  /// original order (stable). This is a post-search selection step; M9/M10
-  /// ranking and the index are not modified.
-  ///
-  /// If all entities share the same score (tie at any tier) the full list is
-  /// returned unchanged so normal disambiguation takes over.
+  /// Filters [entities] to those with the best canonical match quality.
   static List<SpokenEntity> _filterByCanonicalQuality(
     List<SpokenEntity> entities,
     String query,
@@ -813,10 +907,7 @@ final class VoiceAssistantCoordinator {
 
     int scoreKey(String groupKey) {
       if (groupKey == query) return 4;
-      // Singular ↔ plural: groupKey == query+'s' or groupKey+'s' == query.
       if ('${groupKey}s' == query || groupKey == '${query}s') return 3;
-      // Word-boundary prefix: groupKey starts with "query " (space after).
-      // Word-boundary suffix: groupKey ends with " query" (space before).
       if (groupKey.startsWith('$query ') || groupKey.endsWith(' $query')) {
         return 2;
       }
@@ -829,15 +920,12 @@ final class VoiceAssistantCoordinator {
       if (s > bestScore) bestScore = s;
     }
 
-    // If everything is a general substring match, keep all (standard
-    // disambiguation). Only filter when there is a strictly better tier.
     if (bestScore == 1) return entities;
-
     return entities.where((e) => scoreKey(e.groupKey) == bestScore).toList();
   }
 
   // ---------------------------------------------------------------------------
-  // Formatting helpers
+  // Private — formatting helpers
   // ---------------------------------------------------------------------------
 
   /// Formats a characteristic value text into spoken form.
@@ -856,6 +944,22 @@ final class VoiceAssistantCoordinator {
   /// Returns the spoken display name for a canonical attribute key.
   static String _attrSpoken(String canonicalAttr) {
     return _kAttrSpokenName[canonicalAttr] ?? canonicalAttr.toLowerCase();
+  }
+
+  /// Builds a short voiced disambiguation prompt.
+  ///
+  /// Includes entity names inline when the count is within
+  /// [_kMaxDisambiguationOptions]; falls back to a count + browse prompt.
+  static String _disambiguationPrompt(
+    List<SpokenEntity> entities,
+    String canonical,
+  ) {
+    final subject = _capitalize(canonical);
+    if (entities.length <= _kMaxDisambiguationOptions) {
+      final names = entities.map((e) => e.displayName).toList();
+      return 'Which $subject? ${_joinList(names)}.';
+    }
+    return 'Which $subject? I found ${entities.length} — say "next" to browse.';
   }
 
   /// Joins a list of items into a natural English series.
