@@ -37,6 +37,26 @@ const _kAttributeSynonyms = <String, String>{
   'move': 'M',
 };
 
+/// Canonical attribute keys that are unit-level stats (from UnitDoc.characteristics).
+///
+/// Attributes NOT in this set are treated as weapon-level stats and looked up
+/// from WeaponDoc.characteristics via UnitDoc.weaponDocRefs.
+const _kUnitStatAttrs = {'M', 'T', 'SV', 'W', 'LD', 'OC'};
+
+/// Maps canonical attribute key → spoken display name used in natural-language answers.
+///
+/// Prevents raw BattleScribe codes (e.g. "T", "SV") from appearing in spoken text.
+const _kAttrSpokenName = <String, String>{
+  'M': 'movement',
+  'T': 'toughness',
+  'SV': 'save',
+  'W': 'wounds',
+  'LD': 'leadership',
+  'OC': 'objective control',
+  'BS': 'ballistic skill',
+  'WS': 'weapon skill',
+};
+
 /// Extracts (weaponName, valueText) pairs for [attributeKey] from [weapons].
 ///
 /// [weapons] must be pre-sorted by the caller for stable output.
@@ -196,7 +216,26 @@ final class VoiceAssistantCoordinator {
   }) {
     final normalized = _normalizeForParsing(transcript);
 
-    // 1. Detect attribute token — multi-word keys checked first (insertion order).
+    // 1. Rule-list query ("rules for X", "rules of X").
+    if (normalized.startsWith('rules for ') ||
+        normalized.startsWith('rules of ')) {
+      return _handleRuleListQuestion(
+        normalized: normalized,
+        slotBundles: slotBundles,
+        contextHints: contextHints,
+      );
+    }
+
+    // 2. Ability-search query ("which units have X", "what units have X").
+    if (normalized.startsWith('which units have ') ||
+        normalized.startsWith('what units have ')) {
+      return _handleAbilitySearchQuestion(
+        normalized: normalized,
+        slotBundles: slotBundles,
+      );
+    }
+
+    // 3. Detect attribute token — multi-word keys checked first (insertion order).
     String? canonicalAttr;
     String? matchedAttrPhrase;
     for (final entry in _kAttributeSynonyms.entries) {
@@ -207,7 +246,7 @@ final class VoiceAssistantCoordinator {
       }
     }
 
-    // 2. No recognized attribute → fall back to plain search behavior.
+    // 4. No recognized attribute → fall back to plain search behavior.
     if (canonicalAttr == null) {
       final fuzzyCanonical = _canonicalizer.canonicalizeQuery(
         transcript,
@@ -225,7 +264,7 @@ final class VoiceAssistantCoordinator {
       return _runSearch(canonical, slotBundles);
     }
 
-    // 3. Extract entity name using the matched synonym phrase (not the canonical key).
+    // 5. Extract entity name using the matched synonym phrase (not the canonical key).
     final entityQuery = _extractEntityName(normalized, matchedAttrPhrase!);
     final fuzzyCanonical = _canonicalizer.canonicalizeQuery(
       entityQuery,
@@ -241,7 +280,7 @@ final class VoiceAssistantCoordinator {
       );
     }
 
-    // 4. Search for the entity — use a broad limit so the post-search quality
+    // 6. Search for the entity — use a broad limit so the post-search quality
     //    filter sees all plausible candidates.
     final response =
         _searchFacade.searchText(slotBundles, canonical, limit: _kSearchLimit);
@@ -252,7 +291,7 @@ final class VoiceAssistantCoordinator {
     if (filteredEntities.isEmpty) {
       _session = null;
       return SpokenResponsePlan(
-        primaryText: 'No matches for "$canonical".',
+        primaryText: "I couldn't find that unit in the loaded data.",
         entities: const [],
         followUps: const [],
         debugSummary: 'no-results:$canonical',
@@ -271,7 +310,7 @@ final class VoiceAssistantCoordinator {
       );
     }
 
-    // 5. Exactly 1 result: look up the doc and answer the attribute question.
+    // 7. Exactly 1 result: look up the doc and answer the attribute question.
     final entity = filteredEntities.first;
     _lastSelected = entity;
     _session = null;
@@ -299,7 +338,38 @@ final class VoiceAssistantCoordinator {
       );
     }
 
-    // Resolve and sort weapons: stable order (name, docId).
+    // 8. Branch: unit-level stat vs weapon-level stat.
+    if (_kUnitStatAttrs.contains(canonicalAttr)) {
+      // Unit stat: look up directly from UnitDoc.characteristics.
+      IndexedCharacteristic? statChar;
+      for (final c in unitDoc.characteristics) {
+        if (c.name == canonicalAttr) {
+          statChar = c;
+          break;
+        }
+      }
+      if (statChar == null) {
+        return SpokenResponsePlan(
+          primaryText:
+              '${entity.displayName}: no ${_attrSpoken(canonicalAttr)} value found.',
+          entities: filteredEntities,
+          selectedIndex: 0,
+          followUps: const [],
+          debugSummary: 'attr-empty:${entity.groupKey}',
+        );
+      }
+      return SpokenResponsePlan(
+        primaryText:
+            '${entity.displayName} ${_attrSpoken(canonicalAttr)} is ${_formatStatValue(statChar.valueText)}.',
+        entities: filteredEntities,
+        selectedIndex: 0,
+        followUps: const [],
+        debugSummary:
+            'attr-answer:${canonicalAttr.toLowerCase()}:${entity.groupKey}',
+      );
+    }
+
+    // Weapon stat: look up from weapons.
     final weapons = unitDoc.weaponDocRefs
         .map(bundle.weaponByDocId)
         .whereType<WeaponDoc>()
@@ -313,7 +383,8 @@ final class VoiceAssistantCoordinator {
 
     if (attrLines.isEmpty) {
       return SpokenResponsePlan(
-        primaryText: '${entity.displayName}: no $canonicalAttr values found.',
+        primaryText:
+            '${entity.displayName}: no ${_attrSpoken(canonicalAttr)} values found.',
         entities: filteredEntities,
         selectedIndex: 0,
         followUps: const [],
@@ -321,12 +392,205 @@ final class VoiceAssistantCoordinator {
       );
     }
 
+    // Format weapon stat answer in natural language.
+    final spokenAttr = _attrSpoken(canonicalAttr);
+    final String primaryText;
+    if (attrLines.length == 1) {
+      final (weaponName, value) = attrLines.first;
+      primaryText = '$weaponName $spokenAttr is ${_formatStatValue(value)}.';
+    } else {
+      final parts = attrLines
+          .map((l) => '${l.$1}: ${_formatStatValue(l.$2)}')
+          .join(', ');
+      primaryText = '${entity.displayName} $spokenAttr — $parts';
+    }
+
     return SpokenResponsePlan(
-      primaryText: formatAttributeAnswer(entity.displayName, canonicalAttr, attrLines),
+      primaryText: primaryText,
       entities: filteredEntities,
       selectedIndex: 0,
       followUps: const [],
-      debugSummary: 'attr-answer:${canonicalAttr.toLowerCase()}:${entity.groupKey}',
+      debugSummary:
+          'attr-answer:${canonicalAttr.toLowerCase()}:${entity.groupKey}',
+    );
+  }
+
+  /// Handles "rules for X" / "rules of X" queries.
+  ///
+  /// Looks up [UnitDoc.ruleDocRefs] and formats rule names as a natural-language
+  /// list: "Carnifex has Synapse, Deadly Demise, and Blistering Assault."
+  SpokenResponsePlan _handleRuleListQuestion({
+    required String normalized,
+    required Map<String, IndexBundle> slotBundles,
+    required List<String> contextHints,
+  }) {
+    // Extract entity name after the "rules for " or "rules of " prefix.
+    final entityQuery = normalized.startsWith('rules for ')
+        ? normalized.substring('rules for '.length).trim()
+        : normalized.substring('rules of '.length).trim();
+
+    if (entityQuery.isEmpty) {
+      return SpokenResponsePlan(
+        primaryText: "Sorry, I didn't catch that. Please say a search term.",
+        entities: const [],
+        followUps: const [],
+        debugSummary: 'empty-canonical',
+      );
+    }
+
+    final fuzzyCanonical = _canonicalizer.canonicalizeQuery(
+      entityQuery,
+      contextHints: contextHints,
+    );
+    final canonical = _resolver.resolve(fuzzyCanonical);
+    if (canonical.isEmpty) {
+      return SpokenResponsePlan(
+        primaryText: "Sorry, I didn't catch that. Please say a search term.",
+        entities: const [],
+        followUps: const [],
+        debugSummary: 'empty-canonical',
+      );
+    }
+
+    final response =
+        _searchFacade.searchText(slotBundles, canonical, limit: _kSearchLimit);
+    final filteredEntities =
+        _filterByCanonicalQuality(response.entities, canonical);
+    _lastEntities = filteredEntities;
+
+    if (filteredEntities.isEmpty) {
+      _session = null;
+      return SpokenResponsePlan(
+        primaryText: "I couldn't find that unit in the loaded data.",
+        entities: const [],
+        followUps: const [],
+        debugSummary: 'no-results:$canonical',
+      );
+    }
+
+    if (filteredEntities.length > 1) {
+      _session = VoiceSelectionSession(filteredEntities);
+      return SpokenResponsePlan(
+        primaryText:
+            'I found ${filteredEntities.length} matches. Say "next" or "select".',
+        entities: filteredEntities,
+        selectedIndex: 0,
+        followUps: const ['next', 'previous', 'select', 'cancel'],
+        debugSummary: 'disambiguation:${filteredEntities.length}',
+      );
+    }
+
+    final entity = filteredEntities.first;
+    _lastSelected = entity;
+    _session = null;
+    final variant = entity.primaryVariant;
+    final bundle = slotBundles[variant.sourceSlotId];
+
+    if (bundle == null) {
+      return SpokenResponsePlan(
+        primaryText:
+            'Found ${entity.displayName} but no data bundle is available.',
+        entities: filteredEntities,
+        selectedIndex: 0,
+        followUps: const [],
+        debugSummary: 'rules-no-bundle:${entity.groupKey}',
+      );
+    }
+
+    final unitDoc = bundle.unitByDocId(variant.docId);
+    if (unitDoc == null) {
+      return SpokenResponsePlan(
+        primaryText:
+            'Found ${entity.displayName} but could not load unit data.',
+        entities: filteredEntities,
+        selectedIndex: 0,
+        followUps: const [],
+        debugSummary: 'rules-no-unit-doc:${entity.groupKey}',
+      );
+    }
+
+    final ruleNames = unitDoc.ruleDocRefs
+        .map(bundle.ruleByDocId)
+        .whereType<RuleDoc>()
+        .map((r) => r.name)
+        .toList();
+
+    if (ruleNames.isEmpty) {
+      return SpokenResponsePlan(
+        primaryText: '${entity.displayName} has no rules listed.',
+        entities: filteredEntities,
+        selectedIndex: 0,
+        followUps: const [],
+        debugSummary: 'rules-empty:${entity.groupKey}',
+      );
+    }
+
+    return SpokenResponsePlan(
+      primaryText: '${entity.displayName} has ${_joinList(ruleNames)}.',
+      entities: filteredEntities,
+      selectedIndex: 0,
+      followUps: const [],
+      debugSummary: 'rules-answer:${entity.groupKey}',
+    );
+  }
+
+  /// Handles "which units have X" / "what units have X" queries.
+  ///
+  /// Searches all slot bundles via [IndexBundle.unitsByKeyword] and formats
+  /// the result as: "21 units have Synapse, including Hive Tyrant and Carnifex."
+  SpokenResponsePlan _handleAbilitySearchQuestion({
+    required String normalized,
+    required Map<String, IndexBundle> slotBundles,
+  }) {
+    // Extract ability name after the "which units have " or "what units have " prefix.
+    final prefix = normalized.startsWith('which units have ')
+        ? 'which units have '
+        : 'what units have ';
+    final abilityQuery = normalized.substring(prefix.length).trim();
+
+    if (abilityQuery.isEmpty) {
+      return SpokenResponsePlan(
+        primaryText: "Sorry, I didn't catch that. Please say a search term.",
+        entities: const [],
+        followUps: const [],
+        debugSummary: 'empty-canonical',
+      );
+    }
+
+    // Search all slot bundles for units with this keyword.
+    final matchingUnits = <UnitDoc>[];
+    final seenDocIds = <String>{};
+    for (final bundle in slotBundles.values) {
+      for (final unit in bundle.unitsByKeyword(abilityQuery)) {
+        if (seenDocIds.add(unit.docId)) {
+          matchingUnits.add(unit);
+        }
+      }
+    }
+
+    if (matchingUnits.isEmpty) {
+      return SpokenResponsePlan(
+        primaryText: 'No units found with ${_capitalize(abilityQuery)}.',
+        entities: const [],
+        followUps: const [],
+        debugSummary: 'ability-search-empty:$abilityQuery',
+      );
+    }
+
+    matchingUnits.sort((a, b) => a.name.compareTo(b.name));
+    final count = matchingUnits.length;
+    final samples = matchingUnits.take(2).map((u) => u.name).toList();
+    final abilityCap = _capitalize(abilityQuery);
+
+    final primaryText = count == 1
+        ? '1 unit has $abilityCap: ${matchingUnits.first.name}.'
+        : '$count units have $abilityCap, including ${_joinList(samples)}.';
+
+    return SpokenResponsePlan(
+      primaryText: primaryText,
+      entities: const [],
+      followUps: const [],
+      debugSummary: 'ability-search:$abilityQuery:$count',
     );
   }
 
@@ -570,5 +834,48 @@ final class VoiceAssistantCoordinator {
     if (bestScore == 1) return entities;
 
     return entities.where((e) => scoreKey(e.groupKey) == bestScore).toList();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Formatting helpers
+  // ---------------------------------------------------------------------------
+
+  /// Formats a characteristic value text into spoken form.
+  ///
+  /// "3+" → "3 plus", '6"' → "6 inches", otherwise unchanged.
+  static String _formatStatValue(String raw) {
+    if (raw.endsWith('+')) {
+      return '${raw.substring(0, raw.length - 1)} plus';
+    }
+    if (raw.endsWith('"')) {
+      return '${raw.substring(0, raw.length - 1)} inches';
+    }
+    return raw;
+  }
+
+  /// Returns the spoken display name for a canonical attribute key.
+  static String _attrSpoken(String canonicalAttr) {
+    return _kAttrSpokenName[canonicalAttr] ?? canonicalAttr.toLowerCase();
+  }
+
+  /// Joins a list of items into a natural English series.
+  ///
+  /// []        → ""
+  /// ["A"]     → "A"
+  /// ["A","B"] → "A and B"
+  /// ["A","B","C"] → "A, B, and C"
+  static String _joinList(List<String> items) {
+    if (items.isEmpty) return '';
+    if (items.length == 1) return items.first;
+    if (items.length == 2) return '${items[0]} and ${items[1]}';
+    final last = items.last;
+    final rest = items.sublist(0, items.length - 1);
+    return '${rest.join(', ')}, and $last';
+  }
+
+  /// Capitalizes the first character of [s].
+  static String _capitalize(String s) {
+    if (s.isEmpty) return s;
+    return s[0].toUpperCase() + s.substring(1);
   }
 }

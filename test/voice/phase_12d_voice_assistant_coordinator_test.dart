@@ -915,9 +915,11 @@ void main() {
             'Got: "${plan.debugSummary}"',
       );
       expect(plan.entities, hasLength(1));
-      expect(plan.primaryText, contains('BS'));
+      // Phase 12E-2: natural-language format — no raw codes, value is spoken.
+      // Single weapon → "Bolt Rifle ballistic skill is 3 plus."
+      expect(plan.primaryText, contains('ballistic skill'));
       expect(plan.primaryText, contains(weaponName));
-      expect(plan.primaryText, contains(bsValue));
+      expect(plan.primaryText, contains('3 plus')); // "3+" → "3 plus"
     });
 
     test('8.2 Real bundle — no clarification needed for single unambiguous result', () async {
@@ -1106,6 +1108,312 @@ void main() {
       );
       expect(p1.primaryText, p2.primaryText);
       expect(p1.debugSummary, p2.debugSummary);
+    });
+  });
+
+  // =========================================================================
+  // Phase 12E-2 — Spoken Answer Assembly
+  // =========================================================================
+  //
+  // Five answer types:
+  //   A — Unit-level stat (T, M, SV, W, LD, OC) from UnitDoc.characteristics
+  //   B — Weapon-level stat (BS, WS) from WeaponDoc.characteristics
+  //   C — Rule list from UnitDoc.ruleDocRefs → RuleDoc.name
+  //   D — Ability search across bundles via IndexBundle.unitsByKeyword
+  //   E — No-match for unknown entity
+
+  // ---------------------------------------------------------------------------
+  // 10.A  Unit-level stat answers — helpers
+  // ---------------------------------------------------------------------------
+  //
+  // Reuses _buildCoordTestBundle (unit with M='6"', T='4', SV='3+', etc.)
+  // and a coordinator whose fake facade returns the matching entity.
+
+  group('10. Phase 12E-2 — spoken answer assembly', () {
+    // Shared setup reused by tests A1, A2, B.
+    const _unitEntryId12e2 = 'intercessor-12e2';
+    const _weaponProfileId12e2 = 'bolt-rifle-12e2';
+    const _unitName12e2 = 'Intercessor';
+    const _weaponName12e2 = 'Bolt Rifle';
+    const _bs12e2 = '3+';
+
+    late IndexBundle _bundle12e2;
+
+    setUp(() {
+      _bundle12e2 = _buildCoordTestBundle(
+        unitEntryId: _unitEntryId12e2,
+        unitName: _unitName12e2,
+        weaponProfileId: _weaponProfileId12e2,
+        weaponName: _weaponName12e2,
+        bsValue: _bs12e2,
+      );
+    });
+
+    // Builds a coordinator whose fake returns an entity with docId matching
+    // [unitEntryId] in [bundle], wired to slot_0.
+    VoiceAssistantCoordinator _coordFor(
+        String unitEntryId, String groupKey, String displayName) {
+      final entity = SpokenEntity(
+        slotId: 'slot_0',
+        groupKey: groupKey,
+        displayName: displayName,
+        variants: [
+          SpokenVariant(
+            sourceSlotId: 'slot_0',
+            docType: SearchDocType.unit,
+            docId: 'unit:$unitEntryId',
+            canonicalKey: groupKey,
+            displayName: displayName,
+            matchReasons: const [MatchReason.canonicalKeyMatch],
+            tieBreakKey: '$groupKey\x00unit:$unitEntryId',
+          ),
+        ],
+      );
+      return VoiceAssistantCoordinator(
+        searchFacade: _FakeSearchFacade((_) => [entity]),
+      );
+    }
+
+    // ── A: Unit-level stat answers ──────────────────────────────────────────
+
+    test('10.A1 Toughness stat → "Intercessor toughness is 4."', () async {
+      // UnitDoc has T='4' (from _iUnitProfile). The coordinator must read
+      // UnitDoc.characteristics directly — NOT look in weapons.
+      final coord = _coordFor(_unitEntryId12e2, 'intercessor', _unitName12e2);
+      final plan = await coord.handleTranscript(
+        transcript: 'what is the toughness of Intercessors',
+        slotBundles: {'slot_0': _bundle12e2},
+        contextHints: const [],
+      );
+
+      expect(
+        plan.debugSummary,
+        startsWith('attr-answer:t:'),
+        reason: 'Toughness must reach attr-answer branch via UnitDoc.characteristics',
+      );
+      expect(plan.primaryText, contains('toughness'));
+      expect(plan.primaryText, contains('4'));
+      expect(plan.primaryText, isNot(contains('T')), // no raw code
+          reason: 'Spoken answer must not expose the raw BattleScribe code "T"');
+    });
+
+    test('10.A2 Movement stat → spoken value "6 inches" (not raw \'6"\')', () async {
+      // UnitDoc has M='6"'. The coordinator must format the inch symbol as
+      // "inches" for TTS-friendliness.
+      final coord = _coordFor(_unitEntryId12e2, 'intercessor', _unitName12e2);
+      final plan = await coord.handleTranscript(
+        transcript: 'what is the movement of Intercessors',
+        slotBundles: {'slot_0': _bundle12e2},
+        contextHints: const [],
+      );
+
+      expect(plan.debugSummary, startsWith('attr-answer:m:'));
+      expect(plan.primaryText, contains('movement'));
+      expect(plan.primaryText, contains('6 inches'),
+          reason: '6" must be spoken as "6 inches"');
+      expect(plan.primaryText, isNot(contains('"')),
+          reason: 'Raw inch symbol must not appear in spoken answer');
+    });
+
+    // ── B: Weapon-level stat answer ─────────────────────────────────────────
+
+    test('10.B Weapon BS → "Bolt Rifle ballistic skill is 3 plus."', () async {
+      // Verifies natural-language format for weapon stat: spoken attr name and
+      // spoken value ("3 plus" not "3+"). Single weapon → single-sentence format.
+      final coord = _coordFor(_unitEntryId12e2, 'intercessor', _unitName12e2);
+      final plan = await coord.handleTranscript(
+        transcript: 'what is the ballistic skill of Intercessors',
+        slotBundles: {'slot_0': _bundle12e2},
+        contextHints: const [],
+      );
+
+      expect(plan.debugSummary, startsWith('attr-answer:bs:'));
+      expect(plan.primaryText, contains('ballistic skill'));
+      expect(plan.primaryText, contains(_weaponName12e2));
+      expect(plan.primaryText, contains('3 plus'),
+          reason: '"3+" must be spoken as "3 plus"');
+      expect(plan.primaryText, isNot(contains('BS')),
+          reason: 'Raw attribute code must not appear in spoken answer');
+    });
+
+    // ── C: Rule list answer ─────────────────────────────────────────────────
+
+    test('10.C Rule list → "Carnifex has Synapse and Deadly Demise."', () async {
+      // Builds a unit with two ability profiles. The coordinator must read
+      // UnitDoc.ruleDocRefs → RuleDoc.name and format as a natural list.
+      const entryId = 'carnifex-c001';
+      const unitName = 'Carnifex';
+
+      final abilityProfs = [
+        BoundProfile(
+          id: 'ability-synapse-c001',
+          name: 'Synapse',
+          typeId: 'type-ability',
+          typeName: 'ability',
+          characteristics: const [(name: 'description', value: 'A synapse creature.')],
+          sourceFileId: _iTestCatFileId,
+          sourceNode: const NodeRef(0),
+        ),
+        BoundProfile(
+          id: 'ability-dd-c001',
+          name: 'Deadly Demise',
+          typeId: 'type-ability',
+          typeName: 'ability',
+          characteristics: const [(name: 'description', value: 'Roll a D6.')],
+          sourceFileId: _iTestCatFileId,
+          sourceNode: const NodeRef(0),
+        ),
+      ];
+
+      final unitProf = _iUnitProfile('unit-prof-$entryId');
+      final entry = BoundEntry(
+        id: entryId,
+        name: unitName,
+        isGroup: false,
+        isHidden: false,
+        children: const [],
+        profiles: [unitProf, ...abilityProfs],
+        categories: const [],
+        costs: const [],
+        constraints: const [],
+        sourceFileId: _iTestCatFileId,
+        sourceNode: const NodeRef(0),
+      );
+      final wrapped = _iWrappedBundle();
+      final linked = _iLinkedBundle(wrapped);
+      final bound = BoundPackBundle(
+        packId: 'coord-test-pack',
+        boundAt: DateTime(2026, 1, 1),
+        entries: [entry],
+        profiles: [unitProf, ...abilityProfs],
+        categories: const [],
+        diagnostics: const [],
+        linkedBundle: linked,
+      );
+      final testBundle = IndexService().buildIndex(bound);
+
+      final entity = SpokenEntity(
+        slotId: 'slot_0',
+        groupKey: 'carnifex',
+        displayName: unitName,
+        variants: [
+          SpokenVariant(
+            sourceSlotId: 'slot_0',
+            docType: SearchDocType.unit,
+            docId: 'unit:$entryId',
+            canonicalKey: 'carnifex',
+            displayName: unitName,
+            matchReasons: const [MatchReason.canonicalKeyMatch],
+            tieBreakKey: 'carnifex\x00unit:$entryId',
+          ),
+        ],
+      );
+      final coord = VoiceAssistantCoordinator(
+        searchFacade: _FakeSearchFacade((_) => [entity]),
+      );
+
+      final plan = await coord.handleTranscript(
+        transcript: 'rules for Carnifex',
+        slotBundles: {'slot_0': testBundle},
+        contextHints: const [],
+      );
+
+      expect(
+        plan.debugSummary,
+        startsWith('rules-answer:'),
+        reason: 'Rule list query must reach rules-answer branch',
+      );
+      expect(plan.primaryText, contains(unitName));
+      expect(plan.primaryText, contains('Synapse'));
+      expect(plan.primaryText, contains('Deadly Demise'));
+    });
+
+    // ── D: Ability search answer ────────────────────────────────────────────
+
+    test('10.D Ability search → "N units have Synapse, including Carnifex."',
+        () async {
+      // Builds a unit whose keyword tokens include "synapse" (via categories).
+      // The coordinator must use IndexBundle.unitsByKeyword — NOT the facade.
+      const entryId = 'carnifex-d001';
+      const unitName = 'Carnifex';
+
+      final unitProf = _iUnitProfile('unit-prof-$entryId');
+      final synapseCategory = BoundCategory(
+        id: 'cat-synapse-d001',
+        name: 'Synapse',
+        isPrimary: false,
+        sourceFileId: _iTestCatFileId,
+        sourceNode: const NodeRef(0),
+      );
+      final entry = BoundEntry(
+        id: entryId,
+        name: unitName,
+        isGroup: false,
+        isHidden: false,
+        children: const [],
+        profiles: [unitProf],
+        categories: [synapseCategory],
+        costs: const [],
+        constraints: const [],
+        sourceFileId: _iTestCatFileId,
+        sourceNode: const NodeRef(0),
+      );
+      final wrapped = _iWrappedBundle();
+      final linked = _iLinkedBundle(wrapped);
+      final bound = BoundPackBundle(
+        packId: 'coord-test-pack',
+        boundAt: DateTime(2026, 1, 1),
+        entries: [entry],
+        profiles: [unitProf],
+        categories: const [],
+        diagnostics: const [],
+        linkedBundle: linked,
+      );
+      final testBundle = IndexService().buildIndex(bound);
+
+      // Facade returns nothing — ability search bypasses facade entirely.
+      final coord = VoiceAssistantCoordinator(
+        searchFacade: _FakeSearchFacade((_) => []),
+      );
+
+      final plan = await coord.handleTranscript(
+        transcript: 'which units have synapse',
+        slotBundles: {'slot_0': testBundle},
+        contextHints: const [],
+      );
+
+      expect(
+        plan.debugSummary,
+        startsWith('ability-search:synapse:'),
+        reason: 'Ability search must use unitsByKeyword, not searchFacade',
+      );
+      expect(plan.primaryText, contains('Synapse'),
+          reason: 'Ability name must be capitalised in the spoken answer');
+      expect(plan.primaryText, contains(unitName),
+          reason: 'Matched unit name must appear in the spoken answer');
+    });
+
+    // ── E: No-match answer ──────────────────────────────────────────────────
+
+    test('10.E No-match → natural-language "couldn\'t find" message', () async {
+      // Facade returns nothing — simulates a unit name not in the loaded data.
+      final coord = VoiceAssistantCoordinator(
+        searchFacade: _FakeSearchFacade((_) => []),
+      );
+
+      final plan = await coord.handleTranscript(
+        transcript: "what is the toughness of Xyzzy Unit 9999",
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+
+      expect(plan.entities, isEmpty);
+      expect(plan.debugSummary, startsWith('no-results:'));
+      expect(
+        plan.primaryText,
+        contains("couldn't find"),
+        reason: 'No-match spoken answer must be natural language, not a code string',
+      );
     });
   });
 }
