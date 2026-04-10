@@ -40,6 +40,8 @@ final class VoiceIntentClassifier {
     'whats ',
     // Movement queries
     'how far',
+    'movement ',
+    'move ',
     // Rule / ability queries
     'rules for',
     'rules of',

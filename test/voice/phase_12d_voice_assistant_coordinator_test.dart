@@ -958,4 +958,154 @@ void main() {
       expect(plan1.debugSummary, plan2.debugSummary);
     });
   });
+
+  // =========================================================================
+  // Phase 12E-1 — attribute synonym expansion + movement query routing
+  // =========================================================================
+  group('9. Phase 12E-1 — synonym expansion + movement routing', () {
+    // ── Movement query classification ──────────────────────────────────────
+
+    test('9.1 "movement of X" → AssistantQuestionIntent, routes attr-', () async {
+      final entity = _entity('Intercessor', 'intercessor', 'slot_0');
+      final coord = _coordWith([entity]);
+      final plan = await coord.handleTranscript(
+        transcript: 'movement of Intercessors',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      // Would be "single:" (SearchIntent path) if "movement " prefix were absent.
+      expect(plan.debugSummary, startsWith('attr-'),
+          reason: '"movement of X" must be classified as AssistantQuestionIntent '
+              'and routed through _handleAttributeQuestion');
+    });
+
+    test('9.2 "move of X" → AssistantQuestionIntent, routes attr-', () async {
+      final entity = _entity('Intercessor', 'intercessor', 'slot_0');
+      final coord = _coordWith([entity]);
+      final plan = await coord.handleTranscript(
+        transcript: 'move of Intercessors',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, startsWith('attr-'),
+          reason: '"move of X" must route through _handleAttributeQuestion');
+    });
+
+    test('9.3 "how far do X move" → entity extracted, attr- routing', () async {
+      // Verifies verb-at-end extraction. If extraction fails, canonical is empty
+      // and debugSummary would be "empty-canonical" — that is the failure mode.
+      final entity = _entity('Intercessors', 'intercessor', 'slot_0');
+      final coord = _coordWith([entity]);
+      final plan = await coord.handleTranscript(
+        transcript: 'how far do Intercessors move',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, isNot('empty-canonical'),
+          reason: 'Entity must be extracted from verb-at-end pattern');
+      expect(plan.debugSummary, startsWith('attr-'));
+      expect(plan.entities, hasLength(1));
+    });
+
+    test('9.4 "how far does X move" → entity extracted correctly', () async {
+      final entity = _entity('Intercessors', 'intercessor', 'slot_0');
+      final coord = _coordWith([entity]);
+      final plan = await coord.handleTranscript(
+        transcript: 'how far does the Intercessor move',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, isNot('empty-canonical'));
+      expect(plan.debugSummary, startsWith('attr-'));
+    });
+
+    // ── Expanded synonym coverage ───────────────────────────────────────────
+
+    test('9.5 "weapon skill" synonym → attr- routing', () async {
+      final entity = _entity('Intercessor', 'intercessor', 'slot_0');
+      final coord = _coordWith([entity]);
+      final plan = await coord.handleTranscript(
+        transcript: 'what is the weapon skill of Intercessors',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, startsWith('attr-'));
+    });
+
+    test('9.6 "toughness" synonym → attr- routing', () async {
+      final entity = _entity('Intercessor', 'intercessor', 'slot_0');
+      final coord = _coordWith([entity]);
+      final plan = await coord.handleTranscript(
+        transcript: "what's the toughness of Intercessors",
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, startsWith('attr-'));
+    });
+
+    test('9.7 "wounds" synonym → attr- routing', () async {
+      final entity = _entity('Intercessor', 'intercessor', 'slot_0');
+      final coord = _coordWith([entity]);
+      final plan = await coord.handleTranscript(
+        transcript: 'what are the wounds of Intercessors',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, startsWith('attr-'));
+    });
+
+    test('9.8 "leadership" synonym → attr- routing', () async {
+      final entity = _entity('Intercessor', 'intercessor', 'slot_0');
+      final coord = _coordWith([entity]);
+      final plan = await coord.handleTranscript(
+        transcript: 'what is the leadership of Intercessors',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, startsWith('attr-'));
+    });
+
+    test('9.9 "save" synonym → attr- routing', () async {
+      final entity = _entity('Intercessor', 'intercessor', 'slot_0');
+      final coord = _coordWith([entity]);
+      final plan = await coord.handleTranscript(
+        transcript: 'what is the save of Intercessors',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, startsWith('attr-'));
+    });
+
+    test('9.10 "objective control" synonym → attr- routing', () async {
+      final entity = _entity('Intercessor', 'intercessor', 'slot_0');
+      final coord = _coordWith([entity]);
+      final plan = await coord.handleTranscript(
+        transcript: 'what is the objective control of Intercessors',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, startsWith('attr-'));
+    });
+
+    // ── Determinism ────────────────────────────────────────────────────────
+
+    test('9.11 Deterministic: "how far do X move" same plan on two instances',
+        () async {
+      final entity = _entity('Intercessors', 'intercessor', 'slot_0');
+      final coord1 = _coordWith([entity]);
+      final coord2 = _coordWith([entity]);
+      final p1 = await coord1.handleTranscript(
+        transcript: 'how far do Intercessors move',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      final p2 = await coord2.handleTranscript(
+        transcript: 'how far do Intercessors move',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(p1.primaryText, p2.primaryText);
+      expect(p1.debugSummary, p2.debugSummary);
+    });
+  });
 }

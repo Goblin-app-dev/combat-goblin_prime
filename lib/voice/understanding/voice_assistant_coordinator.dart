@@ -17,10 +17,24 @@ import 'voice_intent_classifier.dart';
 ///
 /// Synonym resolution belongs on the question side; the canonical key (e.g. "BS")
 /// is what is matched against IndexedCharacteristic.name in the index data.
+///
+/// Canonical names are taken verbatim from BattleScribe XML attribute names
+/// (e.g. "SV" not "Sv", "LD" not "Ld").
 const _kAttributeSynonyms = <String, String>{
-  'ballistic skill': 'BS', // longest first
+  // ── Multi-word keys first (longest-match priority via insertion order) ──
+  'ballistic skill': 'BS',
+  'weapon skill': 'WS',
+  'objective control': 'OC',
+  // ── Single-word / short forms ────────────────────────────────────────────
+  'movement': 'M', // before 'move' — 'movement' contains 'move'
+  'toughness': 'T',
+  'leadership': 'LD',
+  'wounds': 'W',
+  'save': 'SV',
   'ballistic': 'BS',
   'bs': 'BS',
+  'ws': 'WS',
+  'move': 'M',
 };
 
 /// Extracts (weaponName, valueText) pairs for [attributeKey] from [weapons].
@@ -329,18 +343,56 @@ final class VoiceAssistantCoordinator {
 
   /// Extracts the entity name from a normalized question string.
   ///
-  /// Rule 1: If normalized contains " of ", take the substring after the last
-  ///         " of " and strip a leading "the ".
-  /// Rule 2: Else find [attrPhrase] in the string, take everything after it,
-  ///         and strip a leading stopword ("the", "a", "an", etc.).
+  /// Rule 1: " of " pattern ("movement of X", "what is the BS of X").
+  ///         Take the substring after the last " of " and strip a leading "the ".
+  ///
+  /// Rule 2: verb-at-end pattern ("how far do X move", "how far does X move").
+  ///         Detected when [attrPhrase] is the final word of the string.
+  ///         Strip the verb suffix, then strip a known question prelude
+  ///         ("how far do ", "how far does ", etc.) to isolate the entity.
+  ///
+  /// Rule 3: attrPhrase-in-middle pattern ("show me the BS for X").
+  ///         Find [attrPhrase], take everything after it, strip leading stopword.
   static String _extractEntityName(String normalized, String attrPhrase) {
     const stopwords = ['the ', 'a ', 'an ', 'for ', 'on ', 'in ', 'to '];
+
+    // Rule 1: " of " pattern.
     final ofIdx = normalized.lastIndexOf(' of ');
     if (ofIdx != -1) {
       var entity = normalized.substring(ofIdx + 4).trim();
       if (entity.startsWith('the ')) entity = entity.substring(4).trim();
       return entity;
     }
+
+    // Rule 2: verb-at-end pattern — attrPhrase is the last word.
+    final verbSuffix = ' $attrPhrase';
+    if (normalized.endsWith(verbSuffix)) {
+      var withoutVerb =
+          normalized.substring(0, normalized.length - verbSuffix.length).trim();
+      // Strip known question preludes that precede the entity name.
+      for (final p in const [
+        'how far does ',
+        'how far do ',
+        'how does ',
+        'does ',
+      ]) {
+        if (withoutVerb.startsWith(p)) {
+          withoutVerb = withoutVerb.substring(p.length).trim();
+          break;
+        }
+      }
+      // Strip any remaining leading stopword.
+      for (final sw in stopwords) {
+        if (withoutVerb.startsWith(sw)) {
+          withoutVerb = withoutVerb.substring(sw.length).trim();
+          break;
+        }
+      }
+      if (withoutVerb.isNotEmpty) return withoutVerb;
+      // Fall through to Rule 3 if still empty (degenerate input).
+    }
+
+    // Rule 3: attrPhrase in middle of string — take text after it.
     final attrIdx = normalized.indexOf(attrPhrase);
     if (attrIdx != -1) {
       var entity = normalized.substring(attrIdx + attrPhrase.length).trim();
@@ -352,6 +404,7 @@ final class VoiceAssistantCoordinator {
       }
       return entity;
     }
+
     return normalized;
   }
 

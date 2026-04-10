@@ -72,31 +72,40 @@ final class CanonicalNameResolver {
     final normalized = _normalize(raw);
     if (normalized.isEmpty) return '';
 
+    // Pre-process: strip trailing " units" / " unit" noise.
+    // These are generic collection words that carry no additional specificity
+    // in BSData canonical names. "chaos daemons units" should resolve the same
+    // as "chaos daemons".
+    final base = normalized.endsWith(' units') && normalized.length > 6
+        ? normalized.substring(0, normalized.length - 6)
+        : normalized.endsWith(' unit') && normalized.length > 5
+            ? normalized.substring(0, normalized.length - 5)
+            : normalized;
+
     // Step 1: exact alias lookup.
-    final exact = _aliases[normalized];
+    final exact = _aliases[base];
     if (exact != null) return exact;
 
     // Step 2: singular → plural alias (e.g. "daemon" → look up "daemons").
-    if (!normalized.endsWith('s')) {
-      final pluralAlias = _aliases['${normalized}s'];
+    if (!base.endsWith('s')) {
+      final pluralAlias = _aliases['${base}s'];
       if (pluralAlias != null) return pluralAlias;
     }
 
     // Step 3: plural → singular alias (e.g. "daemons" → look up "daemon").
-    if (normalized.endsWith('s') && normalized.length > 3) {
-      final singularAlias =
-          _aliases[normalized.substring(0, normalized.length - 1)];
+    if (base.endsWith('s') && base.length > 3) {
+      final singularAlias = _aliases[base.substring(0, base.length - 1)];
       if (singularAlias != null) return singularAlias;
     }
 
     // Step 4: general plural stripping to improve M10 substring coverage.
     // E.g. "intercessors" → "intercessor" so that M10 can find
     // "intercessor squad" via substring matching.
-    if (_shouldSingularize(normalized)) {
-      return normalized.substring(0, normalized.length - 1);
+    if (_shouldSingularize(base)) {
+      return base.substring(0, base.length - 1);
     }
 
-    return normalized;
+    return base;
   }
 
   /// Whether trailing 's' should be stripped from [s] as a plural→singular

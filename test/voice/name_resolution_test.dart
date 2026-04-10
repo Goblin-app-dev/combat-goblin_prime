@@ -385,4 +385,68 @@ void main() {
       expect(plan.entities.first.groupKey, 'intercessor squad');
     });
   });
+
+  // =========================================================================
+  // 6. Units / unit suffix stripping
+  // =========================================================================
+  group('6. Units / unit suffix stripping', () {
+    // Verifies that trailing " units" or " unit" is removed before alias
+    // and plural-matching steps run, so faction-name aliases still apply.
+
+    test('6.1 "chaos daemons units" resolves same as "chaos daemons"', () {
+      expect(
+        _resolver.resolve('chaos daemons units'),
+        _resolver.resolve('chaos daemons'),
+        reason: 'Trailing " units" must not prevent faction alias from applying',
+      );
+    });
+
+    test('6.2 "daemons units" resolves to legiones daemonica', () {
+      // "daemons" alone resolves via alias. "daemons units" must strip " units"
+      // then fall through to the same alias.
+      expect(_resolver.resolve('daemons units'), _resolver.resolve('daemons'));
+    });
+
+    test('6.3 "tyranid units" strips " units" and returns "tyranid" (singular)', () {
+      // No alias for "tyranid" — result is the stripped + singularized form.
+      // Important: must NOT return "tyranid units" (unstripped).
+      final result = _resolver.resolve('tyranid units');
+      expect(result, isNot(contains(' units')),
+          reason: 'Suffix must be removed before returning');
+      expect(result, isNot(contains(' unit')));
+    });
+
+    test('6.4 " unit" singular suffix stripped ("chaos daemons unit")', () {
+      expect(
+        _resolver.resolve('chaos daemons unit'),
+        _resolver.resolve('chaos daemons'),
+        reason: 'Trailing " unit" (singular) must also be stripped',
+      );
+    });
+
+    test('6.5 Short string without suffix is unchanged', () {
+      // "units" alone (6 chars) must NOT become empty — guard requires length > 6.
+      final result = _resolver.resolve('units');
+      expect(result, isNotEmpty);
+    });
+
+    test('6.6 Word that merely ends in "units" is not affected', () {
+      // e.g. "heavy support units" → strip " units" → "heavy support"
+      // (not a name that ends in the letters u-n-i-t-s without a preceding space)
+      // The implementation only strips when preceded by a space, so "stunits"
+      // would not be affected — but that's a contrived case; this test confirms
+      // the space-boundary rule is honoured.
+      final withSuffix = _resolver.resolve('heavy support units');
+      final withoutSuffix = _resolver.resolve('heavy support');
+      expect(withSuffix, withoutSuffix,
+          reason: '" units" suffix is stripped regardless of leading words');
+    });
+
+    test('6.7 Deterministic: same input always produces same output', () {
+      expect(
+        _resolver.resolve('chaos daemons units'),
+        _resolver.resolve('chaos daemons units'),
+      );
+    });
+  });
 }
