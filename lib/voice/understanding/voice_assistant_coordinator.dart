@@ -330,9 +330,13 @@ final class VoiceAssistantCoordinator {
   }) {
     final normalized = _normalizeForParsing(transcript);
 
-    // 1. Rule-list query ("rules for X", "rules of X").
+    // 1. Rule-list query — all natural phrasing variants.
+    //    "rules for X", "rules of X" (existing)
+    //    "what rules does/do X have", "what abilities does/do X have" (new)
     if (normalized.startsWith('rules for ') ||
-        normalized.startsWith('rules of ')) {
+        normalized.startsWith('rules of ') ||
+        normalized.startsWith('what rules ') ||
+        normalized.startsWith('what abilities ')) {
       return _handleRuleListQuestion(
         normalized: normalized,
         slotBundles: slotBundles,
@@ -340,7 +344,18 @@ final class VoiceAssistantCoordinator {
       );
     }
 
-    // 2. Ability-search query ("which units have X", "what units have X").
+    // 2. Weapon-stat plural query: "what are the X values for Y weapons".
+    //    User explicitly asks for all-weapon values → answer compactly, no clarification.
+    if (normalized.startsWith('what are the ') &&
+        normalized.contains(' values for ')) {
+      return _handleWeaponStatPluralQuestion(
+        normalized: normalized,
+        slotBundles: slotBundles,
+        contextHints: contextHints,
+      );
+    }
+
+    // 3. Ability-search query ("which units have X", "what units have X").
     if (normalized.startsWith('which units have ') ||
         normalized.startsWith('what units have ')) {
       return _handleAbilitySearchQuestion(
@@ -546,9 +561,7 @@ final class VoiceAssistantCoordinator {
     required Map<String, IndexBundle> slotBundles,
     required List<String> contextHints,
   }) {
-    final entityQuery = normalized.startsWith('rules for ')
-        ? normalized.substring('rules for '.length).trim()
-        : normalized.substring('rules of '.length).trim();
+    final entityQuery = _extractEntityForRuleQuery(normalized);
 
     if (entityQuery.isEmpty) {
       return SpokenResponsePlan(
@@ -714,6 +727,228 @@ final class VoiceAssistantCoordinator {
       followUps: const [],
       debugSummary: 'ability-search:$abilityQuery:$count',
     );
+  }
+
+  /// Handles "what are the X values for Y weapons" queries.
+  ///
+  /// The user explicitly asked for all-weapon values, so multiple weapons are
+  /// answered compactly rather than triggering per-weapon clarification.
+  SpokenResponsePlan _handleWeaponStatPluralQuestion({
+    required String normalized,
+    required Map<String, IndexBundle> slotBundles,
+    required List<String> contextHints,
+  }) {
+    // Parse: "what are the [attr phrase] values for [entity] [weapons?]"
+    final afterThe = normalized.substring('what are the '.length);
+    final valuesForIdx = afterThe.indexOf(' values for ');
+    if (valuesForIdx == -1) {
+      return SpokenResponsePlan(
+        primaryText: "Sorry, I didn't catch that. Please say a search term.",
+        entities: const [],
+        followUps: const [],
+        debugSummary: 'empty-canonical',
+      );
+    }
+
+    final attrPhrase = afterThe.substring(0, valuesForIdx).trim();
+    var entityPart =
+        afterThe.substring(valuesForIdx + ' values for '.length).trim();
+
+    // Strip optional trailing "weapons" the user appended for naturalness.
+    if (entityPart.endsWith(' weapons')) {
+      entityPart =
+          entityPart.substring(0, entityPart.length - ' weapons'.length).trim();
+    }
+
+    if (entityPart.isEmpty) {
+      return SpokenResponsePlan(
+        primaryText: "Sorry, I didn't catch that. Please say a search term.",
+        entities: const [],
+        followUps: const [],
+        debugSummary: 'empty-canonical',
+      );
+    }
+
+    // Resolve attribute synonym (longest-match via insertion order, same as main path).
+    String? canonicalAttr;
+    for (final entry in _kAttributeSynonyms.entries) {
+      if (attrPhrase == entry.key || attrPhrase.contains(entry.key)) {
+        canonicalAttr = entry.value;
+        break;
+      }
+    }
+
+    // Unrecognized attribute → fall back to entity search.
+    if (canonicalAttr == null) {
+      final fuzzyCanonical = _canonicalizer.canonicalizeQuery(
+        entityPart,
+        contextHints: contextHints,
+      );
+      final canonical = _resolver.resolve(fuzzyCanonical);
+      if (canonical.isEmpty) {
+        return SpokenResponsePlan(
+          primaryText: "Sorry, I didn't catch that. Please say a search term.",
+          entities: const [],
+          followUps: const [],
+          debugSummary: 'empty-canonical',
+        );
+      }
+      return _runSearch(canonical, slotBundles);
+    }
+
+    // Resolve entity using the same two-phase name resolution as all other paths.
+    final fuzzyCanonical = _canonicalizer.canonicalizeQuery(
+      entityPart,
+      contextHints: contextHints,
+    );
+    final canonical = _resolver.resolve(fuzzyCanonical);
+    if (canonical.isEmpty) {
+      return SpokenResponsePlan(
+        primaryText: "Sorry, I didn't catch that. Please say a search term.",
+        entities: const [],
+        followUps: const [],
+        debugSummary: 'empty-canonical',
+      );
+    }
+
+    final response =
+        _searchFacade.searchText(slotBundles, canonical, limit: _kSearchLimit);
+    final filteredEntities =
+        _filterByCanonicalQuality(response.entities, canonical);
+    _lastEntities = filteredEntities;
+
+    if (filteredEntities.isEmpty) {
+      _session = null;
+      return SpokenResponsePlan(
+        primaryText: "I couldn't find that unit in the loaded data.",
+        entities: const [],
+        followUps: const [],
+        debugSummary: 'no-results:$canonical',
+      );
+    }
+
+    if (filteredEntities.length > 1) {
+      _session = VoiceSelectionSession(filteredEntities);
+      return SpokenResponsePlan(
+        primaryText: _disambiguationPrompt(filteredEntities, canonical),
+        entities: filteredEntities,
+        selectedIndex: 0,
+        followUps: const ['next', 'previous', 'select', 'cancel'],
+        debugSummary: 'disambiguation:${filteredEntities.length}',
+      );
+    }
+
+    final entity = filteredEntities.first;
+    _lastSelected = entity;
+    _session = null;
+
+    final variant = entity.primaryVariant;
+    final bundle = slotBundles[variant.sourceSlotId];
+    if (bundle == null) {
+      return SpokenResponsePlan(
+        primaryText:
+            'Found ${entity.displayName} but no data bundle is available.',
+        entities: filteredEntities,
+        selectedIndex: 0,
+        followUps: const [],
+        debugSummary: 'attr-no-bundle:${entity.groupKey}',
+      );
+    }
+
+    final unitDoc = bundle.unitByDocId(variant.docId);
+    if (unitDoc == null) {
+      return SpokenResponsePlan(
+        primaryText:
+            'Found ${entity.displayName} but could not load unit data.',
+        entities: filteredEntities,
+        selectedIndex: 0,
+        followUps: const [],
+        debugSummary: 'attr-no-unit-doc:${entity.groupKey}',
+      );
+    }
+
+    final weapons = unitDoc.weaponDocRefs
+        .map(bundle.weaponByDocId)
+        .whereType<WeaponDoc>()
+        .toList()
+      ..sort((a, b) {
+        final cmp = a.name.compareTo(b.name);
+        return cmp != 0 ? cmp : a.docId.compareTo(b.docId);
+      });
+
+    final attrLines = extractAttributeValues(canonicalAttr, weapons);
+    final spokenAttr = _attrSpoken(canonicalAttr);
+
+    if (attrLines.isEmpty) {
+      return SpokenResponsePlan(
+        primaryText: '${entity.displayName}: no $spokenAttr values found.',
+        entities: filteredEntities,
+        selectedIndex: 0,
+        followUps: const [],
+        debugSummary: 'attr-empty:${entity.groupKey}',
+      );
+    }
+
+    if (attrLines.length == 1) {
+      final (weaponName, value) = attrLines.first;
+      return SpokenResponsePlan(
+        primaryText: '$weaponName $spokenAttr is ${_formatStatValue(value)}.',
+        entities: filteredEntities,
+        selectedIndex: 0,
+        followUps: const [],
+        debugSummary:
+            'attr-answer:${canonicalAttr.toLowerCase()}:${entity.groupKey}',
+      );
+    }
+
+    // Multiple weapons: compact summary without clarification round-trip.
+    final parts =
+        attrLines.map((l) => '${l.$1} at ${_formatStatValue(l.$2)}').toList();
+    return SpokenResponsePlan(
+      primaryText:
+          '${entity.displayName} weapons with $spokenAttr values include ${_joinList(parts)}.',
+      entities: filteredEntities,
+      selectedIndex: 0,
+      followUps: const [],
+      debugSummary:
+          'attr-answer:${canonicalAttr.toLowerCase()}:${entity.groupKey}',
+    );
+  }
+
+  /// Extracts the entity name from any supported rule/ability query phrasing.
+  ///
+  /// Supported forms:
+  /// - "rules for X" / "rules of X"
+  /// - "what rules does/do X have"
+  /// - "what abilities does/do X have"
+  ///
+  /// Returns empty string if no entity can be extracted (triggers empty-canonical path).
+  static String _extractEntityForRuleQuery(String normalized) {
+    if (normalized.startsWith('rules for ')) {
+      return normalized.substring('rules for '.length).trim();
+    }
+    if (normalized.startsWith('rules of ')) {
+      return normalized.substring('rules of '.length).trim();
+    }
+    for (final prefix in const [
+      'what rules does ',
+      'what rules do ',
+      'what abilities does ',
+      'what abilities do ',
+    ]) {
+      if (normalized.startsWith(prefix)) {
+        var entity = normalized.substring(prefix.length).trim();
+        // Strip trailing "have" (present in "what rules does X have").
+        if (entity.endsWith(' have')) {
+          entity =
+              entity.substring(0, entity.length - ' have'.length).trim();
+        }
+        // Strip leading article.
+        if (entity.startsWith('the ')) entity = entity.substring(4).trim();
+        return entity;
+      }
+    }
+    return '';
   }
 
   // ---------------------------------------------------------------------------

@@ -1781,4 +1781,346 @@ void main() {
       );
     });
   });
+
+  // =========================================================================
+  // Phase 12E-4 — Query-Shape Expansion
+  // =========================================================================
+  //
+  // A — Movement queries: multi-word entity names, spoken answer confirmed.
+  // B — Weapon-stat plural: "what are the X values for Y weapons" returns all
+  //     weapon stats in compact form without triggering weapon clarification.
+  // C — Rule query phrasing: "what rules/abilities does X have" routes to
+  //     the rule-list answer, same surface as "rules for X".
+  // D — No-regression: existing direct-answer paths unaffected.
+
+  group('12. Phase 12E-4 — query-shape expansion', () {
+    // ---------------------------------------------------------------------------
+    // Shared: two-weapon bundle (Bolt Pistol BS 4+, Bolt Rifle BS 3+)
+    // ---------------------------------------------------------------------------
+    //
+    // Reuses the same in-memory construction pattern as group 11.
+    // UnitDoc.docId = 'unit:intercessor-12e4'
+    // WeaponDoc docIds: 'weapon:bp-12e4', 'weapon:br-12e4'
+
+    const _e4UnitEntryId = 'intercessor-12e4';
+    const _e4UnitName = 'Intercessor';
+    late IndexBundle _e4Bundle;
+
+    setUp(() {
+      final unitProf = _iUnitProfile('unit-prof-$_e4UnitEntryId');
+      final boltPistol = _iRangedWeaponProfile('bp-12e4', 'Bolt Pistol', '4+');
+      final boltRifle = _iRangedWeaponProfile('br-12e4', 'Bolt Rifle', '3+');
+      final entry = _iEntry(
+        id: _e4UnitEntryId,
+        name: _e4UnitName,
+        profiles: [unitProf, boltPistol, boltRifle],
+      );
+      final wrapped = _iWrappedBundle();
+      final linked = _iLinkedBundle(wrapped);
+      final bound = BoundPackBundle(
+        packId: 'coord-test-pack',
+        boundAt: DateTime(2026, 1, 1),
+        entries: [entry],
+        profiles: [unitProf, boltPistol, boltRifle],
+        categories: const [],
+        diagnostics: const [],
+        linkedBundle: linked,
+      );
+      _e4Bundle = IndexService().buildIndex(bound);
+    });
+
+    /// Returns a coordinator whose fake facade returns [entity] for any query,
+    /// wired to [unitEntryId] in slot_0.
+    VoiceAssistantCoordinator _coordFor12e4(
+        String unitEntryId, String groupKey, String displayName) {
+      final entity = SpokenEntity(
+        slotId: 'slot_0',
+        groupKey: groupKey,
+        displayName: displayName,
+        variants: [
+          SpokenVariant(
+            sourceSlotId: 'slot_0',
+            docType: SearchDocType.unit,
+            docId: 'unit:$unitEntryId',
+            canonicalKey: groupKey,
+            displayName: displayName,
+            matchReasons: const [MatchReason.canonicalKeyMatch],
+            tieBreakKey: '$groupKey\x00unit:$unitEntryId',
+          ),
+        ],
+      );
+      return VoiceAssistantCoordinator(
+        searchFacade: _FakeSearchFacade((_) => [entity]),
+      );
+    }
+
+    // ── A: Movement queries ──────────────────────────────────────────────────
+
+    test(
+        '12.A1 "how far do jump pack intercessors move" → '
+        'M stat answered with spoken inch value', () async {
+      // Builds a real bundle with M='6"' for a multi-word entity name.
+      // Verifies that _extractEntityName handles the verb-at-end pattern
+      // correctly for multi-word unit names AND that _formatStatValue converts
+      // '6"' → '6 inches' in the spoken answer.
+      const entryId = 'jpi-12e4';
+      final jpiBundle = _buildCoordTestBundle(
+        unitEntryId: entryId,
+        unitName: 'Jump Pack Intercessor',
+        weaponProfileId: 'jpi-wpn-12e4',
+        weaponName: 'Bolt Pistol',
+        bsValue: '4+',
+      );
+      final coord = VoiceAssistantCoordinator(
+        searchFacade: _FakeSearchFacade((_) => [
+              SpokenEntity(
+                slotId: 'slot_0',
+                groupKey: 'jump pack intercessor',
+                displayName: 'Jump Pack Intercessor',
+                variants: [
+                  SpokenVariant(
+                    sourceSlotId: 'slot_0',
+                    docType: SearchDocType.unit,
+                    docId: 'unit:$entryId',
+                    canonicalKey: 'jump pack intercessor',
+                    displayName: 'Jump Pack Intercessor',
+                    matchReasons: const [MatchReason.canonicalKeyMatch],
+                    tieBreakKey:
+                        'jump pack intercessor\x00unit:$entryId',
+                  ),
+                ],
+              )
+            ]),
+      );
+
+      final plan = await coord.handleTranscript(
+        transcript: 'how far do Jump Pack Intercessors move',
+        slotBundles: {'slot_0': jpiBundle},
+        contextHints: const [],
+      );
+
+      expect(plan.debugSummary, startsWith('attr-answer:m:'),
+          reason: 'Movement query must reach attr-answer via M characteristic');
+      expect(plan.primaryText, contains('6 inches'),
+          reason: '6" must be formatted as "6 inches" for voice');
+      expect(plan.primaryText, isNot(contains('"')),
+          reason: 'Raw inch symbol must not appear in spoken answer');
+    });
+
+    test('12.A2 "movement of carnifex" → routes to M attribute branch',
+        () async {
+      // No real bundle — verifies routing only (attr-no-bundle is correct output
+      // when the bundle is absent; what matters is that the attr- branch was reached).
+      final entity = _entity('Carnifex', 'carnifex', 'slot_0');
+      final coord = _coordWith([entity]);
+
+      final plan = await coord.handleTranscript(
+        transcript: 'movement of Carnifex',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+
+      expect(plan.debugSummary, startsWith('attr-'),
+          reason: '"movement of X" must route through _handleAttributeQuestion');
+    });
+
+    // ── B: Weapon-stat plural queries ────────────────────────────────────────
+
+    test(
+        '12.B1 "what are the bs values for intercessor weapons" → '
+        'compact all-weapon summary, no weapon clarification triggered', () async {
+      // Unit has two weapons with BS: Bolt Pistol (4+) and Bolt Rifle (3+).
+      // The plural phrasing means the user wants all values — the coordinator
+      // must NOT trigger weapon clarification and must list both.
+      final coord = _coordFor12e4(_e4UnitEntryId, 'intercessor', _e4UnitName);
+
+      final plan = await coord.handleTranscript(
+        transcript: 'what are the bs values for intercessor weapons',
+        slotBundles: {'slot_0': _e4Bundle},
+        contextHints: const [],
+      );
+
+      expect(
+        plan.debugSummary,
+        isNot(startsWith('weapon-clarify:')),
+        reason: 'Plural weapon-stat query must not trigger weapon clarification',
+      );
+      expect(
+        plan.debugSummary,
+        startsWith('attr-answer:bs:'),
+        reason: 'Must reach attr-answer branch for BS',
+      );
+      // Both weapon names and values must appear in the spoken answer.
+      expect(plan.primaryText, contains('Bolt Pistol'),
+          reason: 'Bolt Pistol must be included in multi-weapon summary');
+      expect(plan.primaryText, contains('Bolt Rifle'),
+          reason: 'Bolt Rifle must be included in multi-weapon summary');
+      expect(plan.primaryText, contains('3 plus'),
+          reason: 'Bolt Rifle BS 3+ must be spoken as "3 plus"');
+      expect(plan.primaryText, contains('4 plus'),
+          reason: 'Bolt Pistol BS 4+ must be spoken as "4 plus"');
+    });
+
+    test(
+        '12.B2 "what are the ballistic skill values for intercessor weapons" → '
+        'synonym "ballistic skill" resolved to BS, same result', () async {
+      // Verifies that the multi-word synonym "ballistic skill" is recognised
+      // in the plural phrasing, not just the short form "bs".
+      final coord = _coordFor12e4(_e4UnitEntryId, 'intercessor', _e4UnitName);
+
+      final plan = await coord.handleTranscript(
+        transcript:
+            'what are the ballistic skill values for intercessor weapons',
+        slotBundles: {'slot_0': _e4Bundle},
+        contextHints: const [],
+      );
+
+      expect(
+        plan.debugSummary,
+        startsWith('attr-answer:bs:'),
+        reason: '"ballistic skill" must resolve to BS, same as "bs"',
+      );
+      expect(
+        plan.debugSummary,
+        isNot(startsWith('weapon-clarify:')),
+        reason: 'Plural phrasing must not trigger weapon clarification',
+      );
+      expect(plan.primaryText, contains('Bolt Pistol'));
+      expect(plan.primaryText, contains('Bolt Rifle'));
+    });
+
+    // ── C: Rule query phrasing ────────────────────────────────────────────────
+
+    test(
+        '12.C1 "what rules does carnifex have" → routes to rule-list branch',
+        () async {
+      // Before 12E-4, this phrasing fell through to generic search.
+      // Now it must route to _handleRuleListQuestion (rules- debugSummary prefix).
+      final entity = _entity('Carnifex', 'carnifex', 'slot_0');
+      final coord = VoiceAssistantCoordinator(
+        searchFacade: _FakeSearchFacade((_) => [entity]),
+      );
+
+      final plan = await coord.handleTranscript(
+        transcript: 'what rules does Carnifex have',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+
+      expect(
+        plan.debugSummary,
+        anyOf(startsWith('rules-'), startsWith('no-results:')),
+        reason: '"what rules does X have" must route to rule-list handler, '
+            'not fall back to generic search',
+      );
+      expect(
+        plan.debugSummary,
+        isNot(startsWith('single:')),
+        reason: 'Must not reach generic search single-result path',
+      );
+    });
+
+    test(
+        '12.C2 "what abilities does carnifex have" → routes to rule-list branch',
+        () async {
+      // "abilities" maps to the same rule surface as "rules".
+      // Before 12E-4, this fell through to generic entity search.
+      final entity = _entity('Carnifex', 'carnifex', 'slot_0');
+      final coord = VoiceAssistantCoordinator(
+        searchFacade: _FakeSearchFacade((_) => [entity]),
+      );
+
+      final plan = await coord.handleTranscript(
+        transcript: 'what abilities does Carnifex have',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+
+      expect(
+        plan.debugSummary,
+        anyOf(startsWith('rules-'), startsWith('no-results:')),
+        reason: '"what abilities does X have" must route to rule-list handler',
+      );
+      expect(
+        plan.debugSummary,
+        isNot(startsWith('single:')),
+        reason: 'Must not reach generic search single-result path',
+      );
+    });
+
+    // ── D: No-regression ─────────────────────────────────────────────────────
+
+    test(
+        '12.D1 "what is the bs of intercessors" still answered directly '
+        '(single-weapon path unaffected)', () async {
+      // The two-weapon bundle from this group's setUp would trigger clarification.
+      // Use a single-weapon bundle to confirm the direct-answer path is intact.
+      const entryId = 'intercessor-d-12e4';
+      final singleWpnBundle = _buildCoordTestBundle(
+        unitEntryId: entryId,
+        unitName: 'Intercessor',
+        weaponProfileId: 'br-d-12e4',
+        weaponName: 'Bolt Rifle',
+        bsValue: '3+',
+      );
+      final coord = VoiceAssistantCoordinator(
+        searchFacade: _FakeSearchFacade((_) => [
+              SpokenEntity(
+                slotId: 'slot_0',
+                groupKey: 'intercessor',
+                displayName: 'Intercessor',
+                variants: [
+                  SpokenVariant(
+                    sourceSlotId: 'slot_0',
+                    docType: SearchDocType.unit,
+                    docId: 'unit:$entryId',
+                    canonicalKey: 'intercessor',
+                    displayName: 'Intercessor',
+                    matchReasons: const [MatchReason.canonicalKeyMatch],
+                    tieBreakKey: 'intercessor\x00unit:$entryId',
+                  ),
+                ],
+              )
+            ]),
+      );
+
+      final plan = await coord.handleTranscript(
+        transcript: 'what is the bs of Intercessors',
+        slotBundles: {'slot_0': singleWpnBundle},
+        contextHints: const [],
+      );
+
+      expect(plan.debugSummary, startsWith('attr-answer:bs:'));
+      expect(plan.primaryText, contains('3 plus'));
+      expect(
+        plan.debugSummary,
+        isNot(startsWith('weapon-clarify:')),
+        reason: 'Single-weapon unit must never trigger weapon clarification',
+      );
+    });
+
+    test(
+        '12.D2 "which units have synapse" still routes to ability-search '
+        '(not confused with new rule-query phrasings)', () async {
+      // Confirms that the "which units have" ability-search path is unaffected
+      // by the new "what rules/abilities does X have" rule-list detection.
+      final coord = VoiceAssistantCoordinator(
+        searchFacade: _FakeSearchFacade((_) => []),
+      );
+
+      final plan = await coord.handleTranscript(
+        transcript: 'which units have synapse',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+
+      // Both 'ability-search:' (with results) and 'ability-search-empty:' (no
+      // results, because _noopBundles is empty) confirm the handler was reached.
+      expect(
+        plan.debugSummary,
+        startsWith('ability-search'),
+        reason: '"which units have X" must still route to ability-search handler',
+      );
+    });
+  });
 }
