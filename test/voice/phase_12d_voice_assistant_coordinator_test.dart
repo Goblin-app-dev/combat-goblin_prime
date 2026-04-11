@@ -1947,8 +1947,8 @@ void main() {
       );
       expect(
         plan.debugSummary,
-        startsWith('attr-answer:bs:'),
-        reason: 'Must reach attr-answer branch for BS',
+        startsWith('weapon-stat-plural:bs:'),
+        reason: 'Plural weapon-stat query must reach weapon-stat-plural branch',
       );
       // Both weapon names and values must appear in the spoken answer.
       expect(plan.primaryText, contains('Bolt Pistol'),
@@ -1977,8 +1977,8 @@ void main() {
 
       expect(
         plan.debugSummary,
-        startsWith('attr-answer:bs:'),
-        reason: '"ballistic skill" must resolve to BS, same as "bs"',
+        startsWith('weapon-stat-plural:bs:'),
+        reason: '"ballistic skill" must resolve to BS on the weapon-stat-plural path',
       );
       expect(
         plan.debugSummary,

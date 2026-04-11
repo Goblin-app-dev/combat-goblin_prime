@@ -433,7 +433,13 @@ final class VoiceAssistantCoordinator {
     String? weaponQualifier;
     if (filteredEntities.isEmpty && canonical.contains(' with ')) {
       final withIdx = canonical.indexOf(' with ');
-      final baseEntity = canonical.substring(0, withIdx).trim();
+      // Resolve the base entity name (e.g. singularize "intercessors" →
+      // "intercessor") so the subsequent search matches the indexed canonical
+      // key.  Without this, "intercessors with bolt rifles" extracts baseEntity
+      // "intercessors" which substring-matches both "assault intercessors" and
+      // "heavy intercessors", producing disambiguation instead of a direct answer.
+      final baseEntityRaw = canonical.substring(0, withIdx).trim();
+      final baseEntity = _resolver.resolve(baseEntityRaw);
       final qualifierRaw = canonical.substring(withIdx + 6).trim();
       if (baseEntity.isNotEmpty) {
         final baseResponse = _searchFacade.searchText(
@@ -962,7 +968,7 @@ final class VoiceAssistantCoordinator {
         selectedIndex: 0,
         followUps: const [],
         debugSummary:
-            'attr-answer:${canonicalAttr.toLowerCase()}:${entity.groupKey}',
+            'weapon-stat-plural:${canonicalAttr.toLowerCase()}:${entity.groupKey}',
       );
     }
 
@@ -976,7 +982,7 @@ final class VoiceAssistantCoordinator {
       selectedIndex: 0,
       followUps: const [],
       debugSummary:
-          'attr-answer:${canonicalAttr.toLowerCase()}:${entity.groupKey}',
+          'weapon-stat-plural:${canonicalAttr.toLowerCase()}:${entity.groupKey}',
     );
   }
 
@@ -1042,7 +1048,13 @@ final class VoiceAssistantCoordinator {
     final ofIdx = normalized.lastIndexOf(' of ');
     if (ofIdx != -1) {
       var entity = normalized.substring(ofIdx + 4).trim();
-      if (entity.startsWith('the ')) entity = entity.substring(4).trim();
+      // Strip leading articles/prepositions (same set used by Rules 2 and 3).
+      for (final sw in stopwords) {
+        if (entity.startsWith(sw)) {
+          entity = entity.substring(sw.length).trim();
+          break;
+        }
+      }
       return entity;
     }
 
