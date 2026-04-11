@@ -346,18 +346,27 @@ void main() {
 
     test(
         'A2 "what is the bs of intercessors with bolt rifles" '
-        '(entity-qualifier phrase — documents behaviour)', () async {
+        '(weapon-qualifier fallback → direct answer)', () async {
       final plan = await _run('what is the bs of intercessors with bolt rifles');
       _log('what is the bs of intercessors with bolt rifles', plan);
       // Entity extracted: "intercessors with bolt rifles".
       // CanonicalNameResolver strips 's' → "intercessors with bolt rifle".
-      // M10 findUnitsContaining("intercessors with bolt rifle"):
-      //   "intercessors".contains("intercessors with bolt rifle") → FALSE
-      //   → no results → no-results or, if the search engine matches longer
-      //   queries against shorter canonical keys, a result may appear.
-      // This test documents actual behaviour rather than asserting a specific result.
-      expect(plan.primaryText, isNotEmpty,
-          reason: 'Must produce some spoken response (even no-match)');
+      // Step 6 first search: M10 findUnitsContaining("intercessors with bolt rifle")
+      //   → "intercessors".contains("intercessors with bolt rifle") == FALSE → empty.
+      // Step 6a fallback: split at " with " → base="intercessors", qualifier="bolt rifle".
+      //   Re-search with "intercessors" → unit found (canonicalKey "intercessors").
+      //   Qualifier "bolt rifle" matches Bolt Rifle uniquely → pre-selected.
+      // Result: "Bolt Rifle ballistic skill is 3 plus." with no clarification.
+      expect(plan.debugSummary, startsWith('attr-answer:bs:'),
+          reason: 'Weapon-qualifier fallback must yield a direct BS answer');
+      expect(plan.primaryText, contains('Bolt Rifle'),
+          reason: 'Pre-selected weapon must be named in the answer');
+      expect(plan.primaryText, contains('3 plus'),
+          reason: 'Bolt Rifle BS value must be spoken correctly');
+      expect(plan.debugSummary, isNot(startsWith('weapon-clarify:')),
+          reason: 'Qualifier pre-selection must skip the clarification round-trip');
+      expect(plan.debugSummary, isNot(startsWith('no-results:')),
+          reason: 'Fallback must find the Intercessors unit');
     });
 
     test('A3 "how far do jump pack intercessors move" (alias resolution + M stat)',

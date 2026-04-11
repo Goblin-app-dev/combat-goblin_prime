@@ -2123,4 +2123,215 @@ void main() {
       );
     });
   });
+
+  // ===========================================================================
+  // Group 13 — Weapon-qualifier fallback (12E-5 blocker fix)
+  // ===========================================================================
+  //
+  // Verifies that queries of the form "what is the [stat] of [unit] with
+  // [weapon]" — where the M10 index lookup unitCanonicalKey.contains(full_query)
+  // returns false — correctly fall back to searching with just the base unit
+  // name, then pre-select the specified weapon without asking for clarification.
+  //
+  // Also verifies that compound unit names containing " with " (e.g. "Captain
+  // with Jump Pack") are NOT affected: their first search succeeds because the
+  // full name is in the index, so the fallback never fires.
+
+  group('Group 13 — weapon-qualifier fallback', () {
+    // Two-weapon Intercessor bundle shared across 13.A and 13.C.
+    const _g13UnitEntryId = 'intercessor-g13';
+    const _g13UnitName = 'Intercessor';
+    late IndexBundle _g13Bundle;
+
+    setUp(() {
+      final unitProf = _iUnitProfile('unit-prof-$_g13UnitEntryId');
+      final boltPistol = _iRangedWeaponProfile('bp-g13', 'Bolt Pistol', '4+');
+      final boltRifle = _iRangedWeaponProfile('br-g13', 'Bolt Rifle', '3+');
+      final entry = _iEntry(
+        id: _g13UnitEntryId,
+        name: _g13UnitName,
+        profiles: [unitProf, boltPistol, boltRifle],
+      );
+      final wrapped = _iWrappedBundle();
+      final linked = _iLinkedBundle(wrapped);
+      final bound = BoundPackBundle(
+        packId: 'coord-test-pack',
+        boundAt: DateTime(2026, 1, 1),
+        entries: [entry],
+        profiles: [unitProf, boltPistol, boltRifle],
+        categories: const [],
+        diagnostics: const [],
+        linkedBundle: linked,
+      );
+      _g13Bundle = IndexService().buildIndex(bound);
+    });
+
+    // ── A: Weapon-qualifier fallback — unique match → direct answer ───────────
+
+    test(
+        '13.A "what is the bs of intercessors with bolt rifles" → '
+        'direct answer, no clarification round-trip', () async {
+      // The full canonical "intercessors with bolt rifle" fails the index
+      // lookup (unitCanonicalKey.contains("intercessors with bolt rifle") is
+      // false for canonicalKey="intercessor"). The fallback splits at " with ",
+      // retries with "intercessors", then pre-selects Bolt Rifle by qualifier.
+      final entity = SpokenEntity(
+        slotId: 'slot_0',
+        groupKey: 'intercessor',
+        displayName: 'Intercessor',
+        variants: [
+          SpokenVariant(
+            sourceSlotId: 'slot_0',
+            docType: SearchDocType.unit,
+            docId: 'unit:$_g13UnitEntryId',
+            canonicalKey: 'intercessor',
+            displayName: 'Intercessor',
+            matchReasons: const [MatchReason.canonicalKeyMatch],
+            tieBreakKey: 'intercessor\x00unit:$_g13UnitEntryId',
+          ),
+        ],
+      );
+      // Simulate index behaviour: full " with " query finds nothing; base name
+      // finds the unit. This is what M10 does when the query is more specific
+      // than the unit's canonicalKey.
+      final coord = VoiceAssistantCoordinator(
+        searchFacade: _FakeSearchFacade(
+          (q) => q.contains(' with ') ? [] : [entity],
+        ),
+      );
+
+      final plan = await coord.handleTranscript(
+        transcript: 'what is the bs of intercessors with bolt rifles',
+        slotBundles: {'slot_0': _g13Bundle},
+        contextHints: const [],
+      );
+
+      expect(
+        plan.debugSummary,
+        startsWith('attr-answer:bs:'),
+        reason: 'Qualifier fallback must yield a direct attribute answer',
+      );
+      expect(
+        plan.primaryText,
+        contains('Bolt Rifle'),
+        reason: 'Answer must name the pre-selected weapon',
+      );
+      expect(
+        plan.primaryText,
+        contains('3 plus'),
+        reason: 'Bolt Rifle BS must be spoken as "3 plus"',
+      );
+      expect(
+        plan.debugSummary,
+        isNot(startsWith('weapon-clarify:')),
+        reason: 'Qualifier pre-selection must skip the clarification round-trip',
+      );
+    });
+
+    // ── B: Compound unit name — first search succeeds, fallback does not fire ─
+
+    test(
+        '13.B "what is the toughness of captain with jump pack" → '
+        'first search succeeds, fallback not triggered', () async {
+      // "Captain with Jump Pack" is a genuine compound unit name. Its canonical
+      // key contains " with ", but the first search returns the entity because
+      // the full name is indexed. The weapon-qualifier fallback must not fire.
+      const cjpEntryId = 'captain-jpi-g13';
+      final cjpBundle = _buildCoordTestBundle(
+        unitEntryId: cjpEntryId,
+        unitName: 'Captain with Jump Pack',
+        weaponProfileId: 'cjp-wpn-g13',
+        weaponName: 'Bolt Pistol',
+        bsValue: '2+',
+      );
+      final entity = SpokenEntity(
+        slotId: 'slot_0',
+        groupKey: 'captain with jump pack',
+        displayName: 'Captain with Jump Pack',
+        variants: [
+          SpokenVariant(
+            sourceSlotId: 'slot_0',
+            docType: SearchDocType.unit,
+            docId: 'unit:$cjpEntryId',
+            canonicalKey: 'captain with jump pack',
+            displayName: 'Captain with Jump Pack',
+            matchReasons: const [MatchReason.canonicalKeyMatch],
+            tieBreakKey: 'captain with jump pack\x00unit:$cjpEntryId',
+          ),
+        ],
+      );
+      // First search always returns the entity — simulates a full-name hit.
+      final coord = VoiceAssistantCoordinator(
+        searchFacade: _FakeSearchFacade((_) => [entity]),
+      );
+
+      final plan = await coord.handleTranscript(
+        transcript: 'what is the toughness of captain with jump pack',
+        slotBundles: {'slot_0': cjpBundle},
+        contextHints: const [],
+      );
+
+      // T is a unit-level stat; must answer directly from the unit profile.
+      expect(
+        plan.debugSummary,
+        startsWith('attr-answer:t:'),
+        reason: 'Compound unit name must resolve on first search',
+      );
+      expect(
+        plan.primaryText,
+        contains('4'),
+        reason: 'T value from _iUnitProfile is 4',
+      );
+      expect(
+        plan.debugSummary,
+        isNot(startsWith('no-results:')),
+        reason: 'Fallback must not fire when first search succeeds',
+      );
+    });
+
+    // ── C: No qualifier — weapon clarification still fires ────────────────────
+
+    test(
+        '13.C "what is the bs of intercessors" (no qualifier) → '
+        'weapon clarification still asked', () async {
+      // Confirms the fallback does not accidentally suppress clarification when
+      // the user asks about a multi-weapon unit without specifying a weapon.
+      final entity = SpokenEntity(
+        slotId: 'slot_0',
+        groupKey: 'intercessor',
+        displayName: 'Intercessor',
+        variants: [
+          SpokenVariant(
+            sourceSlotId: 'slot_0',
+            docType: SearchDocType.unit,
+            docId: 'unit:$_g13UnitEntryId',
+            canonicalKey: 'intercessor',
+            displayName: 'Intercessor',
+            matchReasons: const [MatchReason.canonicalKeyMatch],
+            tieBreakKey: 'intercessor\x00unit:$_g13UnitEntryId',
+          ),
+        ],
+      );
+      // First search finds the unit; no fallback needed.
+      final coord = VoiceAssistantCoordinator(
+        searchFacade: _FakeSearchFacade((_) => [entity]),
+      );
+
+      final plan = await coord.handleTranscript(
+        transcript: 'what is the bs of intercessors',
+        slotBundles: {'slot_0': _g13Bundle},
+        contextHints: const [],
+      );
+
+      expect(
+        plan.debugSummary,
+        startsWith('weapon-clarify:'),
+        reason: 'Multi-weapon unit without qualifier must ask for weapon clarification',
+      );
+      expect(
+        plan.primaryText,
+        contains('Which weapon?'),
+      );
+    });
+  });
 }

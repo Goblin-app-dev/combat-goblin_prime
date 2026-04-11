@@ -399,7 +399,7 @@ final class VoiceAssistantCoordinator {
       entityQuery,
       contextHints: contextHints,
     );
-    final canonical = _resolver.resolve(fuzzyCanonical);
+    var canonical = _resolver.resolve(fuzzyCanonical);
     if (canonical.isEmpty) {
       return SpokenResponsePlan(
         primaryText: "Sorry, I didn't catch that. Please say a search term.",
@@ -412,8 +412,45 @@ final class VoiceAssistantCoordinator {
     // 6. Search for the entity.
     final response =
         _searchFacade.searchText(slotBundles, canonical, limit: _kSearchLimit);
-    final filteredEntities =
+    var filteredEntities =
         _filterByCanonicalQuality(response.entities, canonical);
+
+    // 6a. Weapon-qualifier fallback.
+    //
+    //     "what is the bs of intercessors with bolt rifles" fails because
+    //     IndexBundle.findUnitsContaining checks unitCanonicalKey.contains(query),
+    //     and "intercessors".contains("intercessors with bolt rifle") is false.
+    //
+    //     When the initial search returns no results and the canonical query
+    //     contains " with ", split into a base unit name and a weapon qualifier.
+    //     Re-run the search with only the base name; if that succeeds, store the
+    //     qualifier so the weapon-selection step can pre-select the matching weapon
+    //     rather than asking for clarification.
+    //
+    //     Intentionally bounded: only " with " triggers the fallback, so legitimate
+    //     compound unit names such as "Captain with Jump Pack" are unaffected
+    //     (their first search succeeds because the full name appears in the index).
+    String? weaponQualifier;
+    if (filteredEntities.isEmpty && canonical.contains(' with ')) {
+      final withIdx = canonical.indexOf(' with ');
+      final baseEntity = canonical.substring(0, withIdx).trim();
+      final qualifierRaw = canonical.substring(withIdx + 6).trim();
+      if (baseEntity.isNotEmpty) {
+        final baseResponse = _searchFacade.searchText(
+          slotBundles,
+          baseEntity,
+          limit: _kSearchLimit,
+        );
+        final baseEntities =
+            _filterByCanonicalQuality(baseResponse.entities, baseEntity);
+        if (baseEntities.isNotEmpty) {
+          filteredEntities = baseEntities;
+          canonical = baseEntity;
+          weaponQualifier = qualifierRaw;
+        }
+      }
+    }
+
     _lastEntities = filteredEntities;
 
     if (filteredEntities.isEmpty) {
@@ -525,6 +562,34 @@ final class VoiceAssistantCoordinator {
       final weaponsWithAttr = weapons
           .where((w) => w.characteristics.any((c) => c.name == canonicalAttr))
           .toList();
+
+      // Qualifier-based pre-selection: if a weapon qualifier was extracted from
+      // a "unit with weapon" phrasing (step 6a), try to match it against the
+      // available weapons. A unique match answers directly, skipping the
+      // clarification round-trip.
+      if (weaponQualifier != null) {
+        final qNorm = weaponQualifier.toLowerCase();
+        final matched = weaponsWithAttr
+            .where((w) =>
+                w.name.toLowerCase().contains(qNorm) ||
+                qNorm.contains(w.name.toLowerCase()))
+            .toList();
+        if (matched.length == 1) {
+          final w = matched.first;
+          final charValue = w.characteristics
+              .firstWhere((c) => c.name == canonicalAttr)
+              .valueText;
+          return SpokenResponsePlan(
+            primaryText: '${w.name} $spokenAttr is ${_formatStatValue(charValue)}.',
+            entities: filteredEntities,
+            selectedIndex: 0,
+            followUps: const [],
+            debugSummary:
+                'attr-answer:${canonicalAttr.toLowerCase()}:${entity.groupKey}',
+          );
+        }
+      }
+
       _pendingWeaponClarify = _WeaponClarifyState(
         entity: entity,
         weapons: weaponsWithAttr,
