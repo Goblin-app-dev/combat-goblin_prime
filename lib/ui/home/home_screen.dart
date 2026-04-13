@@ -12,7 +12,6 @@ import 'package:combat_goblin_prime/voice/models/spoken_entity.dart';
 import 'package:combat_goblin_prime/voice/models/spoken_variant.dart';
 import 'package:combat_goblin_prime/voice/models/spoken_response_plan.dart';
 import 'package:combat_goblin_prime/voice/models/text_candidate.dart';
-import 'package:combat_goblin_prime/voice/models/voice_search_response.dart';
 import 'package:combat_goblin_prime/voice/understanding/voice_assistant_coordinator.dart';
 import 'package:combat_goblin_prime/voice/runtime/noop_text_to_speech_engine.dart';
 import 'package:combat_goblin_prime/voice/runtime/spoken_plan_player.dart';
@@ -57,10 +56,14 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Guards against duplicate SnackBars per (sessionId, reason) pair.
   final Set<(int, VoiceStopReason)> _shownVoiceErrors = {};
 
-  VoiceSearchResponse? _voiceResult;
-
   /// Structured plan from the voice coordinator.
   SpokenResponsePlan? _voicePlan;
+
+  /// True while the coordinator is awaiting a result (processing state).
+  bool _isProcessing = false;
+
+  /// Non-null when the coordinator or search threw an unexpected exception.
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -83,11 +86,21 @@ class _HomeScreenState extends State<HomeScreen> {
     unawaited(_initRealVoice());
   }
 
-  /// Attaches [onTextCandidate] and the event listener to [controller].
+  /// Attaches [onTextCandidate], the event listener, and the state listener
+  /// to [controller]. Caller must have already removed the listener from the
+  /// previous controller before calling this.
   void _attachVoiceCallbacks(VoiceRuntimeController controller) {
     _voiceEventSub?.cancel();
     controller.onTextCandidate = _onTextCandidate;
     _voiceEventSub = controller.events.listen(_onVoiceEvent);
+    controller.state.addListener(_onRuntimeStateChanged);
+  }
+
+  /// Rebuilds body when the voice runtime transitions state (e.g. idle →
+  /// listening → processing → idle). Kept minimal: the body reads state
+  /// directly via [_computeBodyState] during build.
+  void _onRuntimeStateChanged() {
+    if (mounted) setState(() {});
   }
 
   /// Async init: creates real platform adapters and replaces the controller.
@@ -113,6 +126,7 @@ class _HomeScreenState extends State<HomeScreen> {
       maxCaptureDuration: Duration(seconds: settings.maxCaptureDurationSeconds),
     );
     final oldController = _voiceController;
+    oldController.state.removeListener(_onRuntimeStateChanged);
     _attachVoiceCallbacks(newController);
     _voiceController = newController;
     oldController.dispose();
@@ -132,6 +146,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _voiceEventSub?.cancel();
+    _voiceController.state.removeListener(_onRuntimeStateChanged);
     _searchController.dispose();
     _voiceController.dispose();
     _spokenPlanPlayer.dispose();
@@ -145,22 +160,28 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Routes a [TextCandidate] through [VoiceAssistantCoordinator] and updates UI.
   Future<void> _onTextCandidate(TextCandidate candidate) async {
     if (!mounted || candidate.text.isEmpty) return;
+    setState(() { _isProcessing = true; _errorMessage = null; });
     final sessionController = ImportSessionProvider.of(context);
     final bundles = _activeBundles(sessionController);
-    final plan = await _coordinator.handleTranscript(
-      transcript: candidate.text,
-      slotBundles: bundles,
-      contextHints: _buildContextHints(sessionController),
-    );
-    if (!mounted) return;
-    setState(() {
-      _voicePlan = plan;
-      _voiceResult = null;
-      _searchController.text = candidate.text;
-    });
-    // Speak the plan. play() handles its own concurrency: any previous
-    // playback is cancelled before the new plan starts.
-    unawaited(_spokenPlanPlayer.play(plan));
+    try {
+      final plan = await _coordinator.handleTranscript(
+        transcript: candidate.text,
+        slotBundles: bundles,
+        contextHints: _buildContextHints(sessionController),
+      );
+      if (!mounted) return;
+      setState(() {
+        _isProcessing = false;
+        _voicePlan = plan;
+        _searchController.text = candidate.text;
+      });
+      // Speak the plan. play() handles its own concurrency: any previous
+      // playback is cancelled before the new plan starts.
+      unawaited(_spokenPlanPlayer.play(plan));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() { _isProcessing = false; _errorMessage = 'Something went wrong.'; });
+    }
   }
 
   /// Shows a one-time SnackBar for voice permission/focus errors.
@@ -240,25 +261,25 @@ class _HomeScreenState extends State<HomeScreen> {
     final controller = ImportSessionProvider.of(context);
     final bundles = _activeBundles(controller);
     if (query.isEmpty || bundles.isEmpty) {
-      setState(() {
-        _voiceResult = null;
-        _voicePlan = null;
-      });
+      setState(() { _voicePlan = null; _errorMessage = null; });
       return;
     }
+    setState(() { _isProcessing = true; _errorMessage = null; });
     // Route through coordinator so typed questions use the full intent pipeline.
     final hints = _buildContextHints(controller);
     unawaited(() async {
-      final plan = await _coordinator.handleTranscript(
-        transcript: query,
-        slotBundles: bundles,
-        contextHints: hints,
-      );
-      if (!mounted) return;
-      setState(() {
-        _voicePlan = plan;
-        _voiceResult = null;
-      });
+      try {
+        final plan = await _coordinator.handleTranscript(
+          transcript: query,
+          slotBundles: bundles,
+          contextHints: hints,
+        );
+        if (!mounted) return;
+        setState(() { _isProcessing = false; _voicePlan = plan; });
+      } catch (_) {
+        if (!mounted) return;
+        setState(() { _isProcessing = false; _errorMessage = 'Something went wrong.'; });
+      }
     }());
   }
 
@@ -633,165 +654,44 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildResults(ImportSessionController controller) {
-    final bundles = _activeBundles(controller);
-
-    if (bundles.isEmpty) {
-      final slots = controller.slots;
-      final isBootRestoring = slots.any((s) => s.isBootRestoring);
-      final isBuilding = slots.any((s) => s.status == SlotStatus.building);
-
-      if (isBootRestoring || isBuilding) {
-        final label = isBootRestoring ? 'Restoring…' : 'Building index…';
-        final icon = isBootRestoring ? Icons.restore : Icons.build_circle;
-        final color = isBootRestoring ? Colors.orange : Colors.amber;
-        return Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 64, color: color),
-              const SizedBox(height: 16),
-              Text(label),
-              const SizedBox(height: 4),
-              Text(
-                'Search will be available shortly',
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-              ),
-            ],
-          ),
-        );
-      }
-
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.inventory_2_outlined,
-              size: 64,
-              color: Colors.grey.shade400,
-            ),
-            const SizedBox(height: 16),
-            const Text('No catalogs loaded'),
-            const SizedBox(height: 8),
-            TextButton.icon(
-              onPressed: widget.onNavigateToDownloads,
-              icon: const Icon(Icons.download),
-              label: const Text('Go to Downloads'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // --- Phase 12D: voice coordinator plan takes priority over text search result ---
-    if (_voicePlan != null) {
-      return _buildPlanResults(_voicePlan!);
-    }
-
-    if (_voiceResult == null) {
-      var totalUnits = 0;
-      var totalWeapons = 0;
-      var totalRules = 0;
-      for (final bundle in bundles.values) {
-        totalUnits += bundle.units.length;
-        totalWeapons += bundle.weapons.length;
-        totalRules += bundle.rules.length;
-      }
-      final packCount = bundles.length;
-      final packLabel = packCount == 1 ? 'Pack' : 'Packs';
-      final gameSystemName = controller.gameSystemDisplayName;
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey),
-            const SizedBox(height: 16),
-            if (gameSystemName != null) ...[
-              Text(
-                gameSystemName,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.grey.shade600,
-                    ),
-              ),
-              const SizedBox(height: 4),
-            ],
-            Text(
-              '$packCount $packLabel Loaded',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 8),
-            ..._loadedFactionNames(controller).map(
-              (name) => Padding(
-                padding: const EdgeInsets.only(bottom: 2),
-                child: Text(
-                  name,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w500,
-                      ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '$totalUnits units · $totalWeapons weapons · $totalRules rules',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            if (_partialLoadHint(controller) case final hint?)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  hint,
-                  style: TextStyle(fontSize: 12, color: Colors.orange.shade700),
-                ),
-              ),
-            const SizedBox(height: 24),
-            const Text(
-              'Start typing to search',
-              style: TextStyle(color: Colors.grey),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (_voiceResult!.entities.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.search_off, size: 64, color: Colors.grey),
-            const SizedBox(height: 16),
-            const Text('No results found'),
-            if (_voiceResult!.diagnostics.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                _voiceResult!.diagnostics.first.message,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: _voiceResult!.entities.length,
-      itemBuilder: (context, index) {
-        return _buildEntityCard(_voiceResult!.entities[index]);
-      },
-    );
+  /// Computes the current body state from voice runtime state + coordinator
+  /// output. Called during [build] — no side effects.
+  _BodyState _computeBodyState() {
+    final rs = _voiceController.state.value;
+    if (rs is ArmingState || rs is ListeningState) return const _ListeningBodyState();
+    if (rs is ProcessingState || _isProcessing) return const _ProcessingBodyState();
+    if (_errorMessage != null) return _ErrorBodyState(_errorMessage!);
+    final plan = _voicePlan;
+    if (plan == null) return const _IdleBodyState();
+    // No entities → no match (empty result or cancelled/unrecognised).
+    if (plan.entities.isEmpty) return _NoMatchBodyState(plan.primaryText);
+    // Follow-ups present → disambiguation session active.
+    if (plan.followUps.isNotEmpty) return _ClarifyBodyState(plan);
+    return _AnswerBodyState(plan);
   }
 
-  /// DEBUG BRIDGE UI — validation and testing only, not final UX.
+  /// Dispatches to exactly one body widget based on [_computeBodyState].
   ///
+  /// The no-catalogs path is checked first as a precondition; it is outside
+  /// the 7-state machine because those states only apply when data is loaded.
+  Widget _buildResults(ImportSessionController controller) {
+    final bundles = _activeBundles(controller);
+    if (bundles.isEmpty) return _buildNoCatalogsBody(controller);
+    return switch (_computeBodyState()) {
+      _IdleBodyState() => _buildIdleBody(controller),
+      _ListeningBodyState() => _buildListeningBody(),
+      _ProcessingBodyState() => _buildProcessingBody(),
+      _AnswerBodyState(:final plan) => _buildAnswerBody(plan),
+      _ClarifyBodyState(:final plan) => _buildClarifyBody(plan),
+      _NoMatchBodyState(:final message) => _buildNoMatchBody(message),
+      _ErrorBodyState(:final message) => _buildErrorBody(message),
+    };
+  }
+
   /// Renders a [SpokenResponsePlan]: primary text banner + entity list.
-  /// This rendering exists to validate voice coordinator output on-device
-  /// during Phase 12D development. It is intentionally minimal and will be
-  /// replaced by the proper spoken-response UX in a future phase.
   ///
-  /// When [plan.selectedIndex] is non-null, the highlighted entity row is
+  /// Shared by [_buildAnswerBody] and [_buildClarifyBody]. When
+  /// [plan.selectedIndex] is non-null the highlighted entity row is
   /// rendered with a subtle accent border.
   Widget _buildPlanResults(SpokenResponsePlan plan) {
     return Column(
@@ -827,6 +727,183 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
       ],
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Body state builders — exactly one renders at a time.
+  // ---------------------------------------------------------------------------
+
+  /// Pre-condition path: no catalog data loaded yet.
+  Widget _buildNoCatalogsBody(ImportSessionController controller) {
+    final slots = controller.slots;
+    final isBootRestoring = slots.any((s) => s.isBootRestoring);
+    final isBuilding = slots.any((s) => s.status == SlotStatus.building);
+
+    if (isBootRestoring || isBuilding) {
+      final label = isBootRestoring ? 'Restoring…' : 'Building index…';
+      final icon = isBootRestoring ? Icons.restore : Icons.build_circle;
+      final color = isBootRestoring ? Colors.orange : Colors.amber;
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 64, color: color),
+            const SizedBox(height: 16),
+            Text(label),
+            const SizedBox(height: 4),
+            Text(
+              'Search will be available shortly',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey.shade400),
+          const SizedBox(height: 16),
+          const Text('No catalogs loaded'),
+          const SizedBox(height: 8),
+          TextButton.icon(
+            onPressed: widget.onNavigateToDownloads,
+            icon: const Icon(Icons.download),
+            label: const Text('Go to Downloads'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// idle — catalogs loaded, no query submitted.
+  Widget _buildIdleBody(ImportSessionController controller) {
+    final bundles = _activeBundles(controller);
+    var totalUnits = 0;
+    var totalWeapons = 0;
+    var totalRules = 0;
+    for (final bundle in bundles.values) {
+      totalUnits += bundle.units.length;
+      totalWeapons += bundle.weapons.length;
+      totalRules += bundle.rules.length;
+    }
+    final packCount = bundles.length;
+    final packLabel = packCount == 1 ? 'Pack' : 'Packs';
+    final gameSystemName = controller.gameSystemDisplayName;
+
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey),
+          const SizedBox(height: 16),
+          if (gameSystemName != null) ...[
+            Text(
+              gameSystemName,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.grey.shade600,
+                  ),
+            ),
+            const SizedBox(height: 4),
+          ],
+          Text(
+            '$packCount $packLabel Loaded',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 8),
+          ..._loadedFactionNames(controller).map(
+            (name) => Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: Text(
+                name,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '$totalUnits units · $totalWeapons weapons · $totalRules rules',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          if (_partialLoadHint(controller) case final hint?)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                hint,
+                style: TextStyle(fontSize: 12, color: Colors.orange.shade700),
+              ),
+            ),
+          const SizedBox(height: 24),
+          const Text('Ask a question', style: TextStyle(color: Colors.grey)),
+        ],
+      ),
+    );
+  }
+
+  /// listening — mic is arming or capturing.
+  Widget _buildListeningBody() {
+    return const Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.mic, size: 64, color: Colors.red),
+          SizedBox(height: 16),
+          Text('Listening…'),
+        ],
+      ),
+    );
+  }
+
+  /// processing — STT pipeline or coordinator is running.
+  Widget _buildProcessingBody() {
+    return const Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircularProgressIndicator(),
+          SizedBox(height: 16),
+          Text('Thinking…'),
+        ],
+      ),
+    );
+  }
+
+  /// answer — single confirmed result or attribute answer.
+  Widget _buildAnswerBody(SpokenResponsePlan plan) => _buildPlanResults(plan);
+
+  /// clarify — disambiguation session active (multiple matches).
+  Widget _buildClarifyBody(SpokenResponsePlan plan) => _buildPlanResults(plan);
+
+  /// noMatch — coordinator returned no entities.
+  Widget _buildNoMatchBody(String _) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.search_off, size: 64, color: Colors.grey.shade400),
+          const SizedBox(height: 16),
+          const Text("I couldn't find that unit in the loaded data."),
+        ],
+      ),
+    );
+  }
+
+  /// error — coordinator or search threw an unexpected exception.
+  Widget _buildErrorBody(String _) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.error_outline, size: 64, color: Colors.red.shade300),
+          const SizedBox(height: 16),
+          const Text('Something went wrong. Please try again.'),
+        ],
+      ),
     );
   }
 
@@ -1040,4 +1117,47 @@ class _MicButtonState extends State<_MicButton> {
       ),
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// Body state model — private sealed hierarchy.
+//
+// [_computeBodyState] maps runtime + coordinator state onto one of these.
+// [_buildResults] switches on them so exactly one body widget renders.
+// ---------------------------------------------------------------------------
+
+sealed class _BodyState {
+  const _BodyState();
+}
+
+final class _IdleBodyState extends _BodyState {
+  const _IdleBodyState();
+}
+
+final class _ListeningBodyState extends _BodyState {
+  const _ListeningBodyState();
+}
+
+final class _ProcessingBodyState extends _BodyState {
+  const _ProcessingBodyState();
+}
+
+final class _AnswerBodyState extends _BodyState {
+  final SpokenResponsePlan plan;
+  const _AnswerBodyState(this.plan);
+}
+
+final class _ClarifyBodyState extends _BodyState {
+  final SpokenResponsePlan plan;
+  const _ClarifyBodyState(this.plan);
+}
+
+final class _NoMatchBodyState extends _BodyState {
+  final String message;
+  const _NoMatchBodyState(this.message);
+}
+
+final class _ErrorBodyState extends _BodyState {
+  final String message;
+  const _ErrorBodyState(this.message);
 }
