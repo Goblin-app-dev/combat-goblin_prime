@@ -7,7 +7,6 @@ import 'package:combat_goblin_prime/modules/m9_index/m9_index.dart';
 import 'package:combat_goblin_prime/modules/m10_structured_search/m10_structured_search.dart';
 import 'package:combat_goblin_prime/ui/import/import_session_controller.dart';
 import 'package:combat_goblin_prime/ui/import/import_session_provider.dart';
-import 'package:combat_goblin_prime/ui/voice/voice_control_bar.dart';
 import 'package:combat_goblin_prime/voice/adapters/voice_platform_factory.dart';
 import 'package:combat_goblin_prime/voice/models/spoken_entity.dart';
 import 'package:combat_goblin_prime/voice/models/spoken_variant.dart';
@@ -20,8 +19,10 @@ import 'package:combat_goblin_prime/voice/runtime/spoken_plan_player.dart';
 import 'package:combat_goblin_prime/voice/runtime/testing/fake_audio_focus_gateway.dart';
 import 'package:combat_goblin_prime/voice/runtime/testing/fake_audio_route_observer.dart';
 import 'package:combat_goblin_prime/voice/runtime/testing/fake_mic_permission_gateway.dart';
+import 'package:combat_goblin_prime/voice/runtime/voice_listen_trigger.dart';
 import 'package:combat_goblin_prime/voice/runtime/voice_runtime_controller.dart';
 import 'package:combat_goblin_prime/voice/runtime/voice_runtime_event.dart';
+import 'package:combat_goblin_prime/voice/runtime/voice_runtime_state.dart';
 import 'package:combat_goblin_prime/voice/runtime/voice_stop_reason.dart';
 import 'package:combat_goblin_prime/voice/settings/voice_settings.dart';
 import 'package:combat_goblin_prime/voice/voice_search_facade.dart';
@@ -58,27 +59,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   VoiceSearchResponse? _voiceResult;
 
-  /// Phase 12D: structured plan from the voice coordinator.
+  /// Structured plan from the voice coordinator.
   SpokenResponsePlan? _voicePlan;
-
-  // Typeahead suggestion state — rendered via ValueListenableBuilder to avoid
-  // full-screen rebuilds on every keystroke.
-  late final ValueNotifier<({List<String> items, bool show})> _suggestionsNotifier;
-
-  // 300 ms debounce timer for typeahead computation.
-  Timer? _debounceTimer;
-
-  // Suggestion cache: normalized_query|sorted_packIds -> suggestions.
-  final Map<String, List<String>> _suggestionCache = {};
-
-  // Stale-result guard: tracks the cache key for the most recent in-flight query.
-  // Before publishing, the timer callback checks that its key still matches.
-  String _latestQueryKey = '';
 
   @override
   void initState() {
     super.initState();
-    _suggestionsNotifier = ValueNotifier((items: const [], show: false));
     _coordinator = VoiceAssistantCoordinator(searchFacade: _facade);
     // Synchronous bootstrap with fakes so the widget is immediately usable.
     _voiceController = VoiceRuntimeController(
@@ -145,10 +131,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    _debounceTimer?.cancel();
     _voiceEventSub?.cancel();
     _searchController.dispose();
-    _suggestionsNotifier.dispose();
     _voiceController.dispose();
     _spokenPlanPlayer.dispose();
     super.dispose();
@@ -169,7 +153,6 @@ class _HomeScreenState extends State<HomeScreen> {
       contextHints: _buildContextHints(sessionController),
     );
     if (!mounted) return;
-    _suggestionsNotifier.value = (items: const [], show: false);
     setState(() {
       _voicePlan = plan;
       _voiceResult = null;
@@ -253,56 +236,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return hints.take(50).toList();
   }
 
-  void _onChanged(String query) {
-    _debounceTimer?.cancel();
-
-    final normalized = query.trim().toLowerCase();
-    final controller = ImportSessionProvider.of(context);
-    final bundles = _activeBundles(controller);
-
-    // Clear immediately for short/empty queries — no need to debounce.
-    if (normalized.length < 2 || bundles.isEmpty) {
-      _latestQueryKey = '';
-      _suggestionsNotifier.value = (items: const [], show: false);
-      return;
-    }
-
-    // Build a deterministic cache key: normalized query + stable-sorted packIds.
-    final bundleKey = (bundles.keys.toList()..sort()).join(',');
-    final cacheKey = '$normalized|$bundleKey';
-    _latestQueryKey = cacheKey;
-
-    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
-      if (!mounted) return;
-      // Stale-result guard: discard if a newer query has taken over.
-      if (_latestQueryKey != cacheKey) return;
-
-      if (!_suggestionCache.containsKey(cacheKey)) {
-        // Re-read bundles at callback time; they may have changed (e.g. a new
-        // catalog finished loading). The cache key already encodes the pack set
-        // that was current when the user typed, so a mismatch just means we
-        // compute fresh without poisoning the cache for the new pack set.
-        final freshController = ImportSessionProvider.of(context);
-        final freshBundles = _activeBundles(freshController);
-        _suggestionCache[cacheKey] = _facade.suggest(freshBundles, normalized, limit: 8);
-      }
-
-      // Stale guard is still valid: suggest() is synchronous so _latestQueryKey
-      // cannot have changed, but being explicit is correct discipline.
-      if (_latestQueryKey != cacheKey) return;
-
-      final suggestions = _suggestionCache[cacheKey]!;
-      _suggestionsNotifier.value = (items: suggestions, show: suggestions.isNotEmpty);
-    });
-  }
-
   void _search(String query) {
-    // Cancel any pending debounce so a typeahead result cannot arrive after
-    // the explicit submission and overwrite the cleared suggestion list.
-    _debounceTimer?.cancel();
-    _latestQueryKey = '';
-    _suggestionsNotifier.value = (items: const [], show: false);
-
     final controller = ImportSessionProvider.of(context);
     final bundles = _activeBundles(controller);
     if (query.isEmpty || bundles.isEmpty) {
@@ -313,7 +247,6 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
     // Route through coordinator so typed questions use the full intent pipeline.
-    // _search stays sync; async work launches internally and checks mounted before setState.
     final hints = _buildContextHints(controller);
     unawaited(() async {
       final plan = await _coordinator.handleTranscript(
@@ -327,11 +260,6 @@ class _HomeScreenState extends State<HomeScreen> {
         _voiceResult = null;
       });
     }());
-  }
-
-  void _selectSuggestion(String suggestion) {
-    _searchController.text = suggestion;
-    _search(suggestion);
   }
 
   /// Returns display names of all loaded catalog slots (for stats view).
@@ -665,69 +593,33 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
 
-            // --- Top: Search Bar ---
+            // --- Input row: text field + mic button ---
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  TextField(
-                    controller: _searchController,
-                    decoration: InputDecoration(
-                      hintText: _activeBundles(controller).isEmpty
-                          ? 'Load catalogs to search...'
-                          : 'Search units, weapons, rules...',
-                      prefixIcon: const Icon(Icons.search),
-                      suffixIcon: _searchController.text.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear),
-                              onPressed: () {
-                                _searchController.clear();
-                                _onChanged('');
-                              },
-                            )
-                          : null,
-                      border: const OutlineInputBorder(),
-                      enabled: _activeBundles(controller).isNotEmpty,
+                  Expanded(
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: const InputDecoration(
+                        hintText: 'Ask a question…',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      onSubmitted: _search,
+                      textInputAction: TextInputAction.search,
                     ),
-                    onChanged: _onChanged,
-                    onSubmitted: _search,
-                    textInputAction: TextInputAction.search,
                   ),
-                  // ValueListenableBuilder keeps suggestion updates isolated:
-                  // only this subtree rebuilds on each typeahead change.
-                  ValueListenableBuilder<({List<String> items, bool show})>(
-                    valueListenable: _suggestionsNotifier,
-                    builder: (context, suggestions, _) {
-                      if (!suggestions.show || suggestions.items.isEmpty) {
-                        return const SizedBox.shrink();
-                      }
-                      return Material(
-                        elevation: 4,
-                        child: ListView.builder(
-                          shrinkWrap: true,
-                          itemCount: suggestions.items.length,
-                          itemBuilder: (context, index) {
-                            return ListTile(
-                              leading: const Icon(Icons.history, size: 18),
-                              title: Text(suggestions.items[index]),
-                              dense: true,
-                              onTap: () =>
-                                  _selectSuggestion(suggestions.items[index]),
-                            );
-                          },
-                        ),
-                      );
-                    },
-                  ),
+                  const SizedBox(width: 12),
+                  _MicButton(controller: _voiceController),
                 ],
               ),
             ),
 
-            // --- Voice Control Bar ---
-            VoiceControlBar(controller: _voiceController),
+            const Divider(height: 1, thickness: 1),
 
-            // --- Middle: Results ---
+            // --- Body: results / states ---
             Expanded(child: _buildResults(controller)),
 
             // --- Bottom: Slot Status Bar ---
@@ -1073,6 +965,79 @@ class _SlotChip extends StatelessWidget {
         style: TextStyle(fontSize: 12, color: color),
       ),
       visualDensity: VisualDensity.compact,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Mic button — push-to-talk, observes VoiceRuntimeController state directly.
+// ---------------------------------------------------------------------------
+
+class _MicButton extends StatefulWidget {
+  final VoiceRuntimeController controller;
+  const _MicButton({required this.controller});
+
+  @override
+  State<_MicButton> createState() => _MicButtonState();
+}
+
+class _MicButtonState extends State<_MicButton> {
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.state.addListener(_rebuild);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.state.removeListener(_rebuild);
+    super.dispose();
+  }
+
+  void _rebuild() => setState(() {});
+
+  @override
+  Widget build(BuildContext context) {
+    final state = widget.controller.state.value;
+    final isListening = state is ListeningState;
+    final isArming = state is ArmingState;
+    final isBusy = isListening || isArming;
+
+    final Color bg = isListening
+        ? Colors.red
+        : isArming
+            ? Colors.orange
+            : Theme.of(context).colorScheme.primary;
+
+    return GestureDetector(
+      onTapDown: isBusy
+          ? null
+          : (_) => widget.controller
+              .beginListening(trigger: VoiceListenTrigger.pushToTalk),
+      onTapUp: (_) => widget.controller
+          .endListening(reason: VoiceStopReason.userReleasedPushToTalk),
+      onTapCancel: () => widget.controller
+          .endListening(reason: VoiceStopReason.userCancelled),
+      child: Container(
+        width: 52,
+        height: 52,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: bg,
+          boxShadow: [
+            BoxShadow(
+              color: bg.withValues(alpha: 0.35),
+              blurRadius: 8,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: Icon(
+          isListening ? Icons.stop : Icons.mic,
+          color: Colors.white,
+          size: 26,
+        ),
+      ),
     );
   }
 }
