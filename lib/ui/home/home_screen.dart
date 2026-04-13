@@ -901,7 +901,7 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           Icon(Icons.error_outline, size: 64, color: Colors.red.shade300),
           const SizedBox(height: 16),
-          const Text('Something went wrong. Please try again.'),
+          const Text('Something went wrong.'),
         ],
       ),
     );
