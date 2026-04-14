@@ -16,10 +16,30 @@ import 'voice_intent_classifier.dart';
 ///
 /// Synonym resolution belongs on the question side; the canonical key (e.g. "BS")
 /// is what is matched against IndexedCharacteristic.name in the index data.
+///
+/// Unit stats: M (Movement), T (Toughness), SV (Save), W (Wounds), LD (Leadership),
+///             OC (Objective Control), WS (Weapon Skill).
+/// Weapon stats: Range, A (Attacks), BS (Ballistic Skill), S (Strength), AP, D (Damage).
 const _kAttributeSynonyms = <String, String>{
-  'ballistic skill': 'BS', // longest first
+  // Multi-word phrases — longest first
+  'objective control': 'OC',
+  'weapon skill': 'WS',
+  'ballistic skill': 'BS',
+  // Long single-word unit stats
+  'leadership': 'LD',
+  'toughness': 'T',
+  'movement': 'M',
   'ballistic': 'BS',
+  // Short single-word stats
+  'wounds': 'W',
+  'save': 'SV',
+  'move': 'M', // after 'movement' so 'movement' wins on longer strings
+  // Two-letter abbreviations
   'bs': 'BS',
+  'oc': 'OC',
+  'ld': 'LD',
+  'sv': 'SV',
+  'ws': 'WS',
 };
 
 /// Extracts (weaponName, valueText) pairs for [attributeKey] from [weapons].
@@ -43,6 +63,28 @@ List<(String, String)> extractAttributeValues(
     }
   }
   return result;
+}
+
+/// Formats the disambiguation prompt, listing up to 3 entity names inline.
+///
+/// Examples:
+///   2 entities → `'I found 2 matches: Alpha and Beta. Say "next" or "select".'`
+///   3 entities → `'I found 3 matches: A, B, and C. Say "next" or "select".'`
+///   4 entities → `'I found 4 matches: A, B, and C. Say "next" or "select".'`
+///
+/// Including names is essential for TTS: "I found 3 matches" alone gives the
+/// listener no information about what they are choosing between.
+String _formatDisambiguationPrompt(List<SpokenEntity> entities) {
+  final count = entities.length;
+  final shown = entities.take(3).map((e) => e.displayName).toList();
+  final String nameClause;
+  if (shown.length == 2) {
+    nameClause = '${shown[0]} and ${shown[1]}';
+  } else {
+    nameClause = '${shown[0]}, ${shown[1]}, and ${shown[2]}';
+  }
+  return 'I found $count ${count == 1 ? 'match' : 'matches'}: $nameClause. '
+      'Say "next" or "select".';
 }
 
 /// Formats a human-readable attribute-answer string.
@@ -119,6 +161,7 @@ final class VoiceAssistantCoordinator {
         entities: const [],
         followUps: const [],
         debugSummary: 'unknown-empty',
+        sessionCleared: true,
       );
     }
 
@@ -151,6 +194,7 @@ final class VoiceAssistantCoordinator {
         entities: const [],
         followUps: const [],
         debugSummary: 'empty-canonical',
+        sessionCleared: true,
       );
     }
 
@@ -194,6 +238,7 @@ final class VoiceAssistantCoordinator {
           entities: const [],
           followUps: const [],
           debugSummary: 'empty-canonical',
+          sessionCleared: true,
         );
       }
       return _runSearch(canonical, slotBundles);
@@ -211,6 +256,7 @@ final class VoiceAssistantCoordinator {
         entities: const [],
         followUps: const [],
         debugSummary: 'empty-canonical',
+        sessionCleared: true,
       );
     }
 
@@ -231,8 +277,7 @@ final class VoiceAssistantCoordinator {
     if (response.entities.length > 1) {
       _session = VoiceSelectionSession(response.entities);
       return SpokenResponsePlan(
-        primaryText:
-            'I found ${response.entities.length} matches. Say "next" or "select".',
+        primaryText: _formatDisambiguationPrompt(response.entities),
         entities: response.entities,
         selectedIndex: 0,
         followUps: const ['next', 'previous', 'select', 'cancel'],
@@ -278,7 +323,18 @@ final class VoiceAssistantCoordinator {
         return cmp != 0 ? cmp : a.docId.compareTo(b.docId);
       });
 
-    final attrLines = extractAttributeValues(canonicalAttr, weapons);
+    // Unit-level characteristics (T, W, M, SV, LD, OC, WS) take priority.
+    // If the requested attribute is found on the unit itself, skip weapon lookup.
+    final unitLines = <(String, String)>[];
+    for (final c in unitDoc.characteristics) {
+      if (c.name == canonicalAttr) {
+        unitLines.add((entity.displayName, c.valueText));
+        break; // one value per unit profile
+      }
+    }
+
+    final attrLines =
+        unitLines.isNotEmpty ? unitLines : extractAttributeValues(canonicalAttr, weapons);
 
     if (attrLines.isEmpty) {
       return SpokenResponsePlan(
@@ -373,6 +429,7 @@ final class VoiceAssistantCoordinator {
           entities: const [],
           followUps: const [],
           debugSummary: 'cancelled',
+          sessionCleared: true,
         );
     }
   }
@@ -429,8 +486,7 @@ final class VoiceAssistantCoordinator {
     // Multiple entities: create disambiguation session.
     _session = VoiceSelectionSession(response.entities);
     return SpokenResponsePlan(
-      primaryText:
-          'I found ${response.entities.length} matches. Say "next" or "select".',
+      primaryText: _formatDisambiguationPrompt(response.entities),
       entities: response.entities,
       selectedIndex: 0,
       followUps: const ['next', 'previous', 'select', 'cancel'],

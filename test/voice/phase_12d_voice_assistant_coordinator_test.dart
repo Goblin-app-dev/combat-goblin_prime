@@ -413,6 +413,7 @@ void main() {
       expect(plan.primaryText, 'Cancelled.');
       expect(plan.entities, isEmpty);
       expect(plan.debugSummary, 'cancelled');
+      expect(plan.sessionCleared, isTrue);
     });
 
     test('4.7 Command with no active session → treated as search', () async {
@@ -674,6 +675,193 @@ void main() {
       );
       expect(plan1.primaryText, plan2.primaryText);
       expect(plan1.debugSummary, plan2.debugSummary);
+    });
+  });
+
+  // =========================================================================
+  // Unit stat synonym routing
+  // =========================================================================
+  group('8. Unit stat synonym routing', () {
+    Future<SpokenResponsePlan> attrPlan(String transcript) async {
+      final entity = _entity('Carnifex', 'carnifex', 'slot_0');
+      final coord = _coordWith([entity]);
+      return coord.handleTranscript(
+        transcript: transcript,
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+    }
+
+    test('8.1 "toughness" synonym routes through attr handler', () async {
+      final plan = await attrPlan('what is the toughness of Carnifex');
+      expect(plan.debugSummary, startsWith('attr-'));
+      expect(plan.primaryText, isNot(contains('Phase 12E')));
+    });
+
+    test('8.2 "movement" synonym routes through attr handler', () async {
+      final plan = await attrPlan('what is the movement of Carnifex');
+      expect(plan.debugSummary, startsWith('attr-'));
+    });
+
+    test('8.3 "wounds" synonym routes through attr handler', () async {
+      final plan = await attrPlan('what are the wounds of Carnifex');
+      expect(plan.debugSummary, startsWith('attr-'));
+    });
+
+    test('8.4 "save" synonym routes through attr handler', () async {
+      final plan = await attrPlan('what is the save of Carnifex');
+      expect(plan.debugSummary, startsWith('attr-'));
+    });
+
+    test('8.5 "leadership" synonym routes through attr handler', () async {
+      final plan = await attrPlan('what is the leadership of Carnifex');
+      expect(plan.debugSummary, startsWith('attr-'));
+    });
+
+    test('8.6 "objective control" synonym routes through attr handler', () async {
+      final plan = await attrPlan('what is the objective control of Carnifex');
+      expect(plan.debugSummary, startsWith('attr-'));
+    });
+
+    test('8.7 "weapon skill" synonym routes through attr handler', () async {
+      final plan = await attrPlan('what is the weapon skill of Carnifex');
+      expect(plan.debugSummary, startsWith('attr-'));
+    });
+  });
+
+  // =========================================================================
+  // Disambiguation prompt includes entity names
+  // =========================================================================
+  group('9. Disambiguation prompt includes entity names', () {
+    test('9.1 Two matches: prompt contains both names', () async {
+      final e1 = _entity('Alpha Squad', 'alpha_squad', 'slot_0');
+      final e2 = _entity('Alpha Guard', 'alpha_guard', 'slot_0');
+      final coord = _coordWith([e1, e2]);
+      final plan = await coord.handleTranscript(
+        transcript: 'alpha',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, 'disambiguation:2');
+      expect(plan.primaryText, contains('Alpha Squad'));
+      expect(plan.primaryText, contains('Alpha Guard'));
+    });
+
+    test('9.2 Three matches: prompt contains all three names', () async {
+      final e1 = _entity('Alpha Squad', 'alpha_squad', 'slot_0');
+      final e2 = _entity('Alpha Guard', 'alpha_guard', 'slot_0');
+      final e3 = _entity('Alpha Warrior', 'alpha_warrior', 'slot_0');
+      final coord = _coordWith([e1, e2, e3]);
+      final plan = await coord.handleTranscript(
+        transcript: 'alpha',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, 'disambiguation:3');
+      expect(plan.primaryText, contains('Alpha Squad'));
+      expect(plan.primaryText, contains('Alpha Guard'));
+      expect(plan.primaryText, contains('Alpha Warrior'));
+    });
+
+    test('9.3 Four matches: first three names shown, fourth omitted', () async {
+      final e1 = _entity('Alpha Squad', 'alpha_squad', 'slot_0');
+      final e2 = _entity('Alpha Guard', 'alpha_guard', 'slot_0');
+      final e3 = _entity('Alpha Warrior', 'alpha_warrior', 'slot_0');
+      final e4 = _entity('Alpha Ancient', 'alpha_ancient', 'slot_0');
+      final coord = _coordWith([e1, e2, e3, e4]);
+      final plan = await coord.handleTranscript(
+        transcript: 'alpha',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, 'disambiguation:4');
+      expect(plan.primaryText, contains('Alpha Squad'));
+      expect(plan.primaryText, contains('Alpha Guard'));
+      expect(plan.primaryText, contains('Alpha Warrior'));
+      expect(plan.primaryText, isNot(contains('Alpha Ancient')));
+      expect(plan.primaryText, contains('4'));
+    });
+
+    test('9.4 Prompt includes navigation hint ("next" and "select")', () async {
+      final e1 = _entity('Alpha Squad', 'alpha_squad', 'slot_0');
+      final e2 = _entity('Beta Guard', 'beta_guard', 'slot_0');
+      final coord = _coordWith([e1, e2]);
+      final plan = await coord.handleTranscript(
+        transcript: 'test',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.primaryText, contains('next'));
+      expect(plan.primaryText, contains('select'));
+    });
+  });
+
+  // =========================================================================
+  // sessionCleared field behavior
+  // =========================================================================
+  group('10. sessionCleared field behavior', () {
+    test('10.1 Cancel plan has sessionCleared = true', () async {
+      final e1 = _entity('A', 'a', 'slot_0');
+      final e2 = _entity('B', 'b', 'slot_0');
+      final coord = _coordWith([e1, e2]);
+      await coord.handleTranscript(
+        transcript: 'test',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      final plan = await coord.handleTranscript(
+        transcript: 'cancel',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.sessionCleared, isTrue);
+    });
+
+    test('10.2 No-results plan has sessionCleared = false', () async {
+      final coord = _coordWith([]);
+      final plan = await coord.handleTranscript(
+        transcript: 'some unknown unit',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.entities, isEmpty);
+      expect(plan.sessionCleared, isFalse);
+    });
+
+    test('10.3 Disambiguation plan has sessionCleared = false', () async {
+      final e1 = _entity('A', 'a', 'slot_0');
+      final e2 = _entity('B', 'b', 'slot_0');
+      final coord = _coordWith([e1, e2]);
+      final plan = await coord.handleTranscript(
+        transcript: 'test',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, startsWith('disambiguation:'));
+      expect(plan.sessionCleared, isFalse);
+    });
+
+    test('10.4 Unknown/empty transcript has sessionCleared = true', () async {
+      final coord = _coordWith([]);
+      final plan = await coord.handleTranscript(
+        transcript: '',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, 'unknown-empty');
+      expect(plan.sessionCleared, isTrue);
+    });
+
+    test('10.5 Single-result plan has sessionCleared = false', () async {
+      final entity = _entity('Intercessor', 'intercessor', 'slot_0');
+      final coord = _coordWith([entity]);
+      final plan = await coord.handleTranscript(
+        transcript: 'intercessor',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, startsWith('single:'));
+      expect(plan.sessionCleared, isFalse);
     });
   });
 }

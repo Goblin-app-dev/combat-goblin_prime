@@ -663,7 +663,9 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_errorMessage != null) return _ErrorBodyState(_errorMessage!);
     final plan = _voicePlan;
     if (plan == null) return const _IdleBodyState();
-    // No entities → no match (empty result or cancelled/unrecognised).
+    // Coordinator signalled a deliberate state clear (cancel, garbled input).
+    if (plan.sessionCleared) return const _IdleBodyState();
+    // No entities → no match (search ran but found nothing).
     if (plan.entities.isEmpty) return _NoMatchBodyState(plan.primaryText);
     // Follow-ups present → disambiguation session active.
     if (plan.followUps.isNotEmpty) return _ClarifyBodyState(plan);
