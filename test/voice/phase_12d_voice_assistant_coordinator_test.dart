@@ -263,7 +263,8 @@ void main() {
       );
       expect(plan.entities, hasLength(2));
       expect(plan.selectedIndex, 0);
-      expect(plan.followUps, containsAll(['next', 'select', 'cancel']));
+      // followUps now contains the entity display names for voice-native selection.
+      expect(plan.followUps, containsAll(['intercessor', 'intercessor squad']));
       expect(plan.debugSummary, 'disambiguation:2');
     });
 
@@ -332,74 +333,25 @@ void main() {
       return coord;
     }
 
-    test('4.1 "next" advances selectedIndex', () async {
+    test('4.5 Saying entity name in disambiguation selects it', () async {
       final coord = await _coordWithSession();
       final plan = await coord.handleTranscript(
-        transcript: 'next',
+        transcript: 'intercessor squad',
         slotBundles: _noopBundles,
         contextHints: const [],
       );
-      expect(plan.selectedIndex, 1);
-    });
-
-    test('4.2 "previous" retreats selectedIndex', () async {
-      final coord = await _coordWithSession();
-      // Advance first
-      await coord.handleTranscript(
-          transcript: 'next', slotBundles: _noopBundles, contextHints: const []);
-      final plan = await coord.handleTranscript(
-        transcript: 'previous',
-        slotBundles: _noopBundles,
-        contextHints: const [],
-      );
-      expect(plan.selectedIndex, 0);
-    });
-
-    test('4.3 Clamp at first: "previous" at index 0 stays at 0', () async {
-      final coord = await _coordWithSession();
-      final plan = await coord.handleTranscript(
-        transcript: 'previous',
-        slotBundles: _noopBundles,
-        contextHints: const [],
-      );
-      expect(plan.selectedIndex, 0);
-    });
-
-    test('4.4 Clamp at last: "next" past end stays at last index', () async {
-      final coord = await _coordWithSession();
-      // Advance twice for 2-entity list (last index is 1)
-      await coord.handleTranscript(
-          transcript: 'next', slotBundles: _noopBundles, contextHints: const []);
-      final plan = await coord.handleTranscript(
-        transcript: 'next',
-        slotBundles: _noopBundles,
-        contextHints: const [],
-      );
-      expect(plan.selectedIndex, 1); // Clamped — still last
-    });
-
-    test('4.5 "select" finalizes entity, session cleared', () async {
-      final coord = await _coordWithSession();
-      // Advance to entity 1
-      await coord.handleTranscript(
-          transcript: 'next', slotBundles: _noopBundles, contextHints: const []);
-      final plan = await coord.handleTranscript(
-        transcript: 'select',
-        slotBundles: _noopBundles,
-        contextHints: const [],
-      );
-      expect(plan.selectedIndex, isNull); // Session cleared
+      expect(plan.selectedIndex, isNull); // Session cleared on selection
       expect(plan.entities, hasLength(1));
       expect(plan.entities.first.displayName, 'Intercessor Squad');
       expect(plan.primaryText, contains('Intercessor Squad'));
       expect(plan.debugSummary, startsWith('selected:'));
-      // Subsequent transcript starts fresh (new search, not command)
+      // Subsequent transcript starts a fresh search (no active session).
       final followUp = await coord.handleTranscript(
-        transcript: 'next', // No active session → search for "next"
+        transcript: 'next',
         slotBundles: _noopBundles,
         contextHints: const [],
       );
-      // The fake always returns two entities regardless of query
+      // Fake always returns two entities → fresh disambiguation.
       expect(followUp.debugSummary, startsWith('disambiguation:'));
     });
 
@@ -619,7 +571,8 @@ void main() {
         contextHints: const [],
       );
       expect(plan.debugSummary, startsWith('disambiguation:'));
-      expect(plan.followUps, containsAll(['next', 'select', 'cancel']));
+      // followUps now carries entity names for voice-native selection.
+      expect(plan.followUps, containsAll(['intercessor', 'intercessor squad']));
     });
 
     test('7.4 Unrecognized attribute → falls back to plain search plan', () async {
@@ -782,7 +735,7 @@ void main() {
       expect(plan.primaryText, contains('4'));
     });
 
-    test('9.4 Prompt includes navigation hint ("next" and "select")', () async {
+    test('9.4 Prompt ends with "Which one?" — no navigation instructions', () async {
       final e1 = _entity('Alpha Squad', 'alpha_squad', 'slot_0');
       final e2 = _entity('Beta Guard', 'beta_guard', 'slot_0');
       final coord = _coordWith([e1, e2]);
@@ -791,8 +744,9 @@ void main() {
         slotBundles: _noopBundles,
         contextHints: const [],
       );
-      expect(plan.primaryText, contains('next'));
-      expect(plan.primaryText, contains('select'));
+      expect(plan.primaryText, contains('Which one?'));
+      expect(plan.primaryText, isNot(contains('"next"')));
+      expect(plan.primaryText, isNot(contains('"select"')));
     });
   });
 
@@ -862,6 +816,105 @@ void main() {
       );
       expect(plan.debugSummary, startsWith('single:'));
       expect(plan.sessionCleared, isFalse);
+    });
+  });
+
+  // =========================================================================
+  // Name-match disambiguation (voice-native selection)
+  // =========================================================================
+  group('11. Name-match disambiguation', () {
+    // Three-entity disambiguation for "captain" — used by several tests below.
+    Future<VoiceAssistantCoordinator> captainSession() async {
+      final entities = [
+        _entity('Captain', 'captain', 'slot_0'),
+        _entity('Captain with Jump Pack', 'captain_jump', 'slot_0'),
+        _entity('Captain in Terminator Armour', 'captain_term', 'slot_0'),
+      ];
+      final coord = VoiceAssistantCoordinator(
+        searchFacade: _FakeSearchFacade((_) => entities),
+      );
+      await coord.handleTranscript(
+        transcript: 'captain',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      return coord;
+    }
+
+    // A. Direct selection by exact name.
+    test('11.1 A — exact name match selects the correct entity', () async {
+      final coord = await captainSession();
+      final plan = await coord.handleTranscript(
+        transcript: 'captain with jump pack',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, startsWith('selected:'));
+      expect(plan.entities, hasLength(1));
+      expect(plan.entities.first.displayName, 'Captain with Jump Pack');
+      expect(plan.selectedIndex, isNull);
+    });
+
+    // B. Case-insensitive match.
+    test('11.2 B — match ignores uppercase', () async {
+      final coord = await captainSession();
+      final plan = await coord.handleTranscript(
+        transcript: 'CAPTAIN WITH JUMP PACK',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, startsWith('selected:'));
+      expect(plan.entities.first.displayName, 'Captain with Jump Pack');
+    });
+
+    test('11.3 B — match ignores mixed case', () async {
+      final coord = await captainSession();
+      final plan = await coord.handleTranscript(
+        transcript: 'Captain With Jump Pack',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, startsWith('selected:'));
+      expect(plan.entities.first.displayName, 'Captain with Jump Pack');
+    });
+
+    // C. Containment match: leading filler stripped before exact compare.
+    test('11.4 C — "the X" strips filler and matches X', () async {
+      final coord = await captainSession();
+      final plan = await coord.handleTranscript(
+        transcript: 'the captain',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, startsWith('selected:'));
+      expect(plan.entities.first.displayName, 'Captain');
+    });
+
+    // D. Unrecognized input: session clears, transcript treated as new search.
+    test('11.5 D — unrecognized input clears session and falls through to search', () async {
+      final coord = await captainSession();
+      final plan = await coord.handleTranscript(
+        transcript: 'something else entirely',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      // Fake returns 3 entities for any query → fresh disambiguation.
+      expect(plan.debugSummary, startsWith('disambiguation:'));
+      // Session is fresh (not the same object as before).
+      expect(plan.sessionCleared, isFalse);
+    });
+
+    // E. Cancel still returns to idle.
+    test('11.6 E — "cancel" during name-match disambiguation returns to idle', () async {
+      final coord = await captainSession();
+      final plan = await coord.handleTranscript(
+        transcript: 'cancel',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.primaryText, 'Cancelled.');
+      expect(plan.entities, isEmpty);
+      expect(plan.sessionCleared, isTrue);
     });
   });
 }

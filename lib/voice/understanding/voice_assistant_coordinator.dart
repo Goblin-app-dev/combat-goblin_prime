@@ -68,9 +68,9 @@ List<(String, String)> extractAttributeValues(
 /// Formats the disambiguation prompt, listing up to 3 entity names inline.
 ///
 /// Examples:
-///   2 entities → `'I found 2 matches: Alpha and Beta. Say "next" or "select".'`
-///   3 entities → `'I found 3 matches: A, B, and C. Say "next" or "select".'`
-///   4 entities → `'I found 4 matches: A, B, and C. Say "next" or "select".'`
+///   2 entities → `'I found 2 matches: Alpha and Beta. Which one?'`
+///   3 entities → `'I found 3 matches: A, B, and C. Which one?'`
+///   4 entities → `'I found 4 matches: A, B, and C. Which one?'`
 ///
 /// Including names is essential for TTS: "I found 3 matches" alone gives the
 /// listener no information about what they are choosing between.
@@ -83,8 +83,7 @@ String _formatDisambiguationPrompt(List<SpokenEntity> entities) {
   } else {
     nameClause = '${shown[0]}, ${shown[1]}, and ${shown[2]}';
   }
-  return 'I found $count ${count == 1 ? 'match' : 'matches'}: $nameClause. '
-      'Say "next" or "select".';
+  return 'I found $count ${count == 1 ? 'match' : 'matches'}: $nameClause. Which one?';
 }
 
 /// Formats a human-readable attribute-answer string.
@@ -149,9 +148,34 @@ final class VoiceAssistantCoordinator {
   }) async {
     final intent = _classifier.classify(transcript);
 
-    // --- Disambiguation command with active session ---
-    if (intent is DisambiguationCommandIntent && _session != null) {
-      return _handleCommand(intent.command);
+    // --- Active disambiguation session: name match → select; cancel → idle;
+    //     anything else → clear session and fall through as a fresh search. ---
+    if (_session != null) {
+      final matched = _matchEntityName(transcript, _lastEntities);
+      if (matched != null) {
+        _session = null;
+        _lastSelected = matched;
+        return SpokenResponsePlan(
+          primaryText: 'Selected ${matched.displayName}.',
+          entities: [matched],
+          selectedIndex: null,
+          followUps: const [],
+          debugSummary: 'selected:${matched.groupKey}',
+        );
+      }
+      if (intent is DisambiguationCommandIntent &&
+          intent.command == DisambiguationCommand.cancel) {
+        _session = null;
+        return SpokenResponsePlan(
+          primaryText: 'Cancelled.',
+          entities: const [],
+          followUps: const [],
+          debugSummary: 'cancelled',
+          sessionCleared: true,
+        );
+      }
+      // No name match and not cancel → clear session, continue as new search.
+      _session = null;
     }
 
     // --- Unknown / empty transcript ---
@@ -267,7 +291,7 @@ final class VoiceAssistantCoordinator {
     if (response.entities.isEmpty) {
       _session = null;
       return SpokenResponsePlan(
-        primaryText: 'No matches for "$canonical".',
+        primaryText: 'Couldn\'t find "$canonical".',
         entities: const [],
         followUps: const [],
         debugSummary: 'no-results:$canonical',
@@ -280,7 +304,10 @@ final class VoiceAssistantCoordinator {
         primaryText: _formatDisambiguationPrompt(response.entities),
         entities: response.entities,
         selectedIndex: 0,
-        followUps: const ['next', 'previous', 'select', 'cancel'],
+        followUps: response.entities
+            .take(3)
+            .map((e) => e.displayName.toLowerCase())
+            .toList(),
         debugSummary: 'disambiguation:${response.entities.length}',
       );
     }
@@ -394,64 +421,34 @@ final class VoiceAssistantCoordinator {
     return normalized;
   }
 
-  SpokenResponsePlan _handleCommand(DisambiguationCommand command) {
-    final session = _session!;
-    switch (command) {
-      case DisambiguationCommand.next:
-        session.nextEntity();
-        return _planForSession(session);
-      case DisambiguationCommand.previous:
-        session.previousEntity();
-        return _planForSession(session);
-      case DisambiguationCommand.select:
-        final entity = session.currentEntity;
-        _lastSelected = entity;
-        _session = null;
-        if (entity == null) {
-          return SpokenResponsePlan(
-            primaryText: 'Nothing to select.',
-            entities: const [],
-            followUps: const [],
-            debugSummary: 'select-empty',
-          );
-        }
-        return SpokenResponsePlan(
-          primaryText: 'Selected ${entity.displayName}.',
-          entities: [entity],
-          selectedIndex: null,
-          followUps: const [],
-          debugSummary: 'selected:${entity.groupKey}',
-        );
-      case DisambiguationCommand.cancel:
-        _session = null;
-        return SpokenResponsePlan(
-          primaryText: 'Cancelled.',
-          entities: const [],
-          followUps: const [],
-          debugSummary: 'cancelled',
-          sessionCleared: true,
-        );
+  /// Attempts to match [transcript] against an entity display name.
+  ///
+  /// Strips a single leading filler word ("the", "a", "an") before comparing,
+  /// then performs a case-insensitive exact match.
+  ///
+  /// Examples:
+  ///   "hive tyrant"     → matches "Hive Tyrant" (exact, case-insensitive)
+  ///   "the carnifex"    → strip "the " → matches "Carnifex" (exact after strip)
+  ///   "something else"  → no match → null
+  ///
+  /// No edit-distance, no synonym expansion, no substring containment.
+  static SpokenEntity? _matchEntityName(
+    String transcript,
+    List<SpokenEntity> entities,
+  ) {
+    final lower = transcript.trim().toLowerCase();
+    var stripped = lower;
+    for (final filler in const ['the ', 'a ', 'an ']) {
+      if (stripped.startsWith(filler)) {
+        stripped = stripped.substring(filler.length).trim();
+        break;
+      }
     }
-  }
-
-  SpokenResponsePlan _planForSession(VoiceSelectionSession session) {
-    final entity = session.currentEntity;
-    if (entity == null) {
-      return SpokenResponsePlan(
-        primaryText: 'No results to navigate.',
-        entities: const [],
-        followUps: const [],
-        debugSummary: 'navigate-empty',
-      );
+    for (final entity in entities) {
+      final name = entity.displayName.toLowerCase();
+      if (lower == name || stripped == name) return entity;
     }
-    return SpokenResponsePlan(
-      primaryText:
-          'Now on ${entity.displayName}. Say "select" to confirm or "next" to continue.',
-      entities: _lastEntities,
-      selectedIndex: session.entityIndex,
-      followUps: const ['next', 'previous', 'select', 'cancel'],
-      debugSummary: 'navigate:${session.entityIndex}/${_lastEntities.length - 1}',
-    );
+    return null;
   }
 
   SpokenResponsePlan _runSearch(
@@ -464,7 +461,7 @@ final class VoiceAssistantCoordinator {
     if (response.entities.isEmpty) {
       _session = null;
       return SpokenResponsePlan(
-        primaryText: 'No matches for "$canonical".',
+        primaryText: 'Couldn\'t find "$canonical".',
         entities: const [],
         followUps: const [],
         debugSummary: 'no-results:$canonical',
@@ -489,7 +486,10 @@ final class VoiceAssistantCoordinator {
       primaryText: _formatDisambiguationPrompt(response.entities),
       entities: response.entities,
       selectedIndex: 0,
-      followUps: const ['next', 'previous', 'select', 'cancel'],
+      followUps: response.entities
+          .take(3)
+          .map((e) => e.displayName.toLowerCase())
+          .toList(),
       debugSummary: 'disambiguation:${response.entities.length}',
     );
   }
