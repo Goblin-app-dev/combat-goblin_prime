@@ -34,12 +34,21 @@ final class SpokenResponsePlan {
   /// Deterministic summary for logging and test assertions. Never timestamps.
   final String debugSummary;
 
+  /// When true, the coordinator deliberately cleared session state (e.g. user
+  /// said "cancel", or the transcript was too ambiguous to attempt a search).
+  ///
+  /// The UI should return to idle rather than treating this as a no-match.
+  /// Defaults to false — existing callers that do not set this field are
+  /// unaffected.
+  final bool sessionCleared;
+
   SpokenResponsePlan({
     required String primaryText,
     required List<SpokenEntity> entities,
     required List<String> followUps,
     required this.debugSummary,
     this.selectedIndex,
+    this.sessionCleared = false,
   })  : primaryText = primaryText,
         entities = List.unmodifiable(List.of(entities)),
         followUps = List.unmodifiable(List.of(followUps)) {

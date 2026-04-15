@@ -13,22 +13,25 @@ import 'voice_intent_classifier.dart';
 ///
 /// Multi-word keys are listed before single-word keys so that iteration
 /// matches the longest phrase first (Dart Maps iterate in insertion order).
-///
-/// Synonym resolution belongs on the question side; the canonical key (e.g. "BS")
-/// is what is matched against IndexedCharacteristic.name in the index data.
 const _kAttributeSynonyms = <String, String>{
-  'ballistic skill': 'BS', // longest first
+  'objective control': 'OC',
+  'weapon skill': 'WS',
+  'ballistic skill': 'BS',
+  'leadership': 'LD',
+  'toughness': 'T',
+  'movement': 'M',
   'ballistic': 'BS',
+  'wounds': 'W',
+  'save': 'SV',
+  'move': 'M',
   'bs': 'BS',
+  'oc': 'OC',
+  'ld': 'LD',
+  'sv': 'SV',
+  'ws': 'WS',
 };
 
 /// Extracts (weaponName, valueText) pairs for [attributeKey] from [weapons].
-///
-/// [weapons] must be pre-sorted by the caller for stable output.
-/// Returns only pairs where a matching characteristic exists.
-///
-/// Exposed at package level (no underscore) so that tests can call it directly
-/// with constructed [WeaponDoc] fixtures, without needing a full [IndexBundle].
 List<(String, String)> extractAttributeValues(
   String attributeKey,
   List<WeaponDoc> weapons,
@@ -38,7 +41,7 @@ List<(String, String)> extractAttributeValues(
     for (final c in w.characteristics) {
       if (c.name == attributeKey) {
         result.add((w.name, c.valueText));
-        break; // one characteristic of this type per weapon profile
+        break;
       }
     }
   }
@@ -47,9 +50,7 @@ List<(String, String)> extractAttributeValues(
 
 /// Formats a human-readable attribute-answer string.
 ///
-/// Example output: `"Intercessors BS — Bolt Pistol: 3+, Bolt Rifle: 3+"`
-///
-/// Exposed at package level for deterministic testing of output format.
+/// Example: `"Intercessors BS — Bolt Pistol: 3+, Bolt Rifle: 3+"`
 String formatAttributeAnswer(
   String entityName,
   String attributeKey,
@@ -59,25 +60,54 @@ String formatAttributeAnswer(
   return '$entityName $attributeKey — $parts';
 }
 
+/// Formats a concise spoken rule-list answer.
+///
+/// Layer A of the rule answer path: name-only, no descriptions.
+///
+/// Examples:
+///   0 rules → "I couldn't find any surfaced rules for Carnifex."
+///   1 rule  → "Carnifex has Synapse."
+///   2 rules → "Carnifex has Synapse and Deadly Demise."
+///   3+rules → "Carnifex has Synapse, Shadow in the Warp, and Deadly Demise."
+///
+/// Future layers (B: rule details, C: filtered views, D: interactions) extend
+/// by receiving the same [rules] list and rendering differently — not by
+/// changing data extraction.
+String formatRuleListAnswer(String entityName, List<RuleDoc> rules) {
+  if (rules.isEmpty) {
+    return "I couldn't find any surfaced rules for $entityName.";
+  }
+  final names = rules.map((r) => r.name).toList();
+  if (names.length == 1) return '$entityName has ${names[0]}.';
+  if (names.length == 2) return '$entityName has ${names[0]} and ${names[1]}.';
+  final allButLast = names.take(names.length - 1).join(', ');
+  return '$entityName has $allButLast, and ${names.last}.';
+}
+
+String _formatDisambiguationPrompt(List<SpokenEntity> entities) {
+  final count = entities.length;
+  final shown = entities.take(3).map((e) => e.displayName).toList();
+  final String nameClause;
+  if (shown.length == 2) {
+    nameClause = '${shown[0]} and ${shown[1]}';
+  } else {
+    nameClause = '${shown[0]}, ${shown[1]}, and ${shown[2]}';
+  }
+  return 'I found $count ${count == 1 ? 'match' : 'matches'}: $nameClause. Which one?';
+}
+
 /// Coordinator that turns a voice transcript into a [SpokenResponsePlan].
 ///
-/// Responsibilities (single method [handleTranscript]):
-/// 1. Classify transcript intent via [VoiceIntentClassifier].
-/// 2. If a disambiguation command arrives with an active session → handle it.
-/// 3. If an [AssistantQuestionIntent] is detected → route to attribute Q&A.
-/// 4. Otherwise canonicalize the query via [DomainCanonicalizer].
-/// 5. Run [VoiceSearchFacade.searchText] and interpret results:
-///    - 0 results → "No matches" plan, session cleared.
-///    - 1 result  → confirm plan, session cleared.
-///    - N > 1     → disambiguation plan, new [VoiceSelectionSession] created.
+/// Query routing (in order):
+/// 1. Active session intercept (name match / cancel / fallthrough).
+/// 2. Unknown/empty transcript.
+/// 3. Rule-list query detection — bounded explicit patterns only.
+/// 4. Attribute question (AssistantQuestionIntent).
+/// 5. General search.
 ///
-/// State:
-/// - [_session]: current [VoiceSelectionSession] or null.
-/// - [_lastEntities]: entities from the most recent search (for navigation plans).
-/// - [_lastSelected]: last entity confirmed via "select".
-///
-/// The method is `async` for future extensibility (e.g. online STT, async
-/// canonicalization). The current implementation is fully synchronous internally.
+/// Rule answer path (Layer A — unit rule surface lookup):
+///   resolved unit → ruleDocRefs → RuleDoc names → formatted answer.
+/// Future layers extend on top without changing the pipeline.
 final class VoiceAssistantCoordinator {
   final VoiceSearchFacade _searchFacade;
   final VoiceIntentClassifier _classifier;
@@ -85,8 +115,11 @@ final class VoiceAssistantCoordinator {
 
   VoiceSelectionSession? _session;
   List<SpokenEntity> _lastEntities = const [];
-
   SpokenEntity? _lastSelected;
+
+  /// True when the active disambiguation session originated from a rule query.
+  /// On entity selection, routes to rule answer instead of "Selected X."
+  bool _pendingRuleQuery = false;
 
   VoiceAssistantCoordinator({
     required VoiceSearchFacade searchFacade,
@@ -96,10 +129,6 @@ final class VoiceAssistantCoordinator {
         _classifier = classifier,
         _canonicalizer = canonicalizer;
 
-  /// Process [transcript] and return a [SpokenResponsePlan].
-  ///
-  /// [slotBundles] is keyed by slot id (e.g. 'slot_0', 'slot_1').
-  /// [contextHints] are domain vocabulary terms for fuzzy canonicalization.
   Future<SpokenResponsePlan> handleTranscript({
     required String transcript,
     required Map<String, IndexBundle> slotBundles,
@@ -107,22 +136,63 @@ final class VoiceAssistantCoordinator {
   }) async {
     final intent = _classifier.classify(transcript);
 
-    // --- Disambiguation command with active session ---
-    if (intent is DisambiguationCommandIntent && _session != null) {
-      return _handleCommand(intent.command);
+    // 1. Active session: name match → select (or rule answer); cancel; fallthrough.
+    if (_session != null) {
+      final matched = _matchEntityName(transcript, _lastEntities);
+      if (matched != null) {
+        final wasRuleQuery = _pendingRuleQuery;
+        _session = null;
+        _pendingRuleQuery = false;
+        _lastSelected = matched;
+        if (wasRuleQuery) {
+          return _buildRuleListAnswer(matched, slotBundles);
+        }
+        return SpokenResponsePlan(
+          primaryText: 'Selected ${matched.displayName}.',
+          entities: [matched],
+          selectedIndex: null,
+          followUps: const [],
+          debugSummary: 'selected:${matched.groupKey}',
+        );
+      }
+      if (intent is DisambiguationCommandIntent &&
+          intent.command == DisambiguationCommand.cancel) {
+        _session = null;
+        _pendingRuleQuery = false;
+        return SpokenResponsePlan(
+          primaryText: 'Cancelled.',
+          entities: const [],
+          followUps: const [],
+          debugSummary: 'cancelled',
+          sessionCleared: true,
+        );
+      }
+      _session = null;
+      _pendingRuleQuery = false;
     }
 
-    // --- Unknown / empty transcript ---
+    // 2. Unknown / empty transcript.
     if (intent is UnknownIntent) {
       return SpokenResponsePlan(
         primaryText: "Sorry, I didn't catch that. Please say a search term.",
         entities: const [],
         followUps: const [],
         debugSummary: 'unknown-empty',
+        sessionCleared: true,
       );
     }
 
-    // --- Attribute question: intercept before normal search path ---
+    // 3. Rule-list query: intercept before attribute handler.
+    final ruleEntityQuery = _detectRuleQuery(transcript);
+    if (ruleEntityQuery != null) {
+      return _handleRuleListQuestion(
+        entityQuery: ruleEntityQuery,
+        slotBundles: slotBundles,
+        contextHints: contextHints,
+      );
+    }
+
+    // 4. Attribute question.
     if (intent is AssistantQuestionIntent) {
       return _handleAttributeQuestion(
         transcript: transcript,
@@ -131,8 +201,7 @@ final class VoiceAssistantCoordinator {
       );
     }
 
-    // --- Resolve query text ---
-    // DisambiguationCommandIntent with no active session: use raw transcript as query.
+    // 5. General search.
     final String queryText;
     if (intent is SearchIntent) {
       queryText = intent.queryText;
@@ -151,17 +220,179 @@ final class VoiceAssistantCoordinator {
         entities: const [],
         followUps: const [],
         debugSummary: 'empty-canonical',
+        sessionCleared: true,
       );
     }
 
     return _runSearch(canonical, slotBundles);
   }
 
-  /// Clear the active [VoiceSelectionSession] (e.g. on mode change).
-  void clearSession() => _session = null;
+  void clearSession() {
+    _session = null;
+    _pendingRuleQuery = false;
+  }
 
   // ---------------------------------------------------------------------------
-  // Private
+  // Rule-query path (Layer A)
+  // ---------------------------------------------------------------------------
+
+  /// Detects bounded rule/ability query patterns and returns the entity-name
+  /// substring, or null if the transcript is not a rule query.
+  ///
+  /// Supported patterns (case-insensitive, punctuation-stripped):
+  ///   "rules for X"         → X
+  ///   "rules of X"          → X
+  ///   "what rules does X have"      → X
+  ///   "what abilities does X have"  → X
+  ///   "abilities for X"     → X
+  ///   "abilities of X"      → X
+  ///
+  /// Only explicit, bounded patterns are matched. No fuzzy or open-ended NLP.
+  static String? _detectRuleQuery(String transcript) {
+    final cleaned = transcript
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^\w\s]'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+
+    // "what rules does X have" / "what abilities does X have"
+    final m1 =
+        RegExp(r'^what (?:rules|abilities) does (.+?) have$').firstMatch(cleaned);
+    if (m1 != null) return m1.group(1)!.trim();
+
+    // "rules for X" / "rules of X"
+    final m2 = RegExp(r'^rules (?:for|of) (.+)$').firstMatch(cleaned);
+    if (m2 != null) return m2.group(1)!.trim();
+
+    // "abilities for X" / "abilities of X"
+    final m3 = RegExp(r'^abilities (?:for|of) (.+)$').firstMatch(cleaned);
+    if (m3 != null) return m3.group(1)!.trim();
+
+    return null;
+  }
+
+  /// Handles a rule-list query: resolves entity, then calls [_buildRuleListAnswer].
+  ///
+  /// Uses the existing entity-resolution path (canonicalize → search →
+  /// single/disambig/no-match). If multiple entities match, opens a
+  /// disambiguation session with [_pendingRuleQuery] = true so the follow-up
+  /// name selection routes back to the rule answer, not "Selected X."
+  SpokenResponsePlan _handleRuleListQuestion({
+    required String entityQuery,
+    required Map<String, IndexBundle> slotBundles,
+    required List<String> contextHints,
+  }) {
+    final canonical = _canonicalizer.canonicalizeQuery(
+      entityQuery,
+      contextHints: contextHints,
+    );
+    if (canonical.isEmpty) {
+      return SpokenResponsePlan(
+        primaryText: "Sorry, I didn't catch that. Please say a unit name.",
+        entities: const [],
+        followUps: const [],
+        debugSummary: 'rule-empty-canonical',
+        sessionCleared: true,
+      );
+    }
+
+    final response = _searchFacade.searchText(slotBundles, canonical);
+    _lastEntities = response.entities;
+
+    if (response.entities.isEmpty) {
+      _session = null;
+      return SpokenResponsePlan(
+        primaryText: 'Couldn\'t find "$canonical".',
+        entities: const [],
+        followUps: const [],
+        debugSummary: 'rule-no-results:$canonical',
+      );
+    }
+
+    if (response.entities.length > 1) {
+      _session = VoiceSelectionSession(response.entities);
+      _pendingRuleQuery = true;
+      return SpokenResponsePlan(
+        primaryText: _formatDisambiguationPrompt(response.entities),
+        entities: response.entities,
+        selectedIndex: 0,
+        followUps: response.entities
+            .take(3)
+            .map((e) => e.displayName.toLowerCase())
+            .toList(),
+        debugSummary: 'rule-disambiguation:${response.entities.length}',
+      );
+    }
+
+    final entity = response.entities.first;
+    _lastSelected = entity;
+    _session = null;
+    _pendingRuleQuery = false;
+    return _buildRuleListAnswer(entity, slotBundles);
+  }
+
+  /// Resolves rule docs for [entity] and returns a formatted rule-list plan.
+  ///
+  /// This is the Layer A output step. Future layers (detail, filtering,
+  /// interaction) extend here by receiving the same [List<RuleDoc>] and
+  /// rendering differently.
+  SpokenResponsePlan _buildRuleListAnswer(
+    SpokenEntity entity,
+    Map<String, IndexBundle> slotBundles,
+  ) {
+    final variant = entity.primaryVariant;
+    final bundle = slotBundles[variant.sourceSlotId];
+
+    if (bundle == null) {
+      return SpokenResponsePlan(
+        primaryText:
+            'Found ${entity.displayName} but no data bundle is available.',
+        entities: [entity],
+        selectedIndex: 0,
+        followUps: const [],
+        debugSummary: 'rule-no-bundle:${entity.groupKey}',
+      );
+    }
+
+    final unitDoc = bundle.unitByDocId(variant.docId);
+    if (unitDoc == null) {
+      return SpokenResponsePlan(
+        primaryText:
+            'Found ${entity.displayName} but could not load unit data.',
+        entities: [entity],
+        selectedIndex: 0,
+        followUps: const [],
+        debugSummary: 'rule-no-unit-doc:${entity.groupKey}',
+      );
+    }
+
+    final rules = _extractRulesForUnit(unitDoc, bundle);
+    return SpokenResponsePlan(
+      primaryText: formatRuleListAnswer(entity.displayName, rules),
+      entities: [entity],
+      selectedIndex: 0,
+      followUps: const [],
+      debugSummary: 'rule-answer:${rules.length}:${entity.groupKey}',
+    );
+  }
+
+  /// Layer A extraction: resolves ruleDocRefs → RuleDocs.
+  ///
+  /// Refs that don't resolve in this bundle are silently skipped (already
+  /// surfaced as IndexDiagnostics during index build). Preserves ref order.
+  static List<RuleDoc> _extractRulesForUnit(
+    UnitDoc unitDoc,
+    IndexBundle bundle,
+  ) {
+    return unitDoc.ruleDocRefs
+        .map(bundle.ruleByDocId)
+        .whereType<RuleDoc>()
+        .toList();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Attribute question path
   // ---------------------------------------------------------------------------
 
   SpokenResponsePlan _handleAttributeQuestion({
@@ -171,7 +402,6 @@ final class VoiceAssistantCoordinator {
   }) {
     final normalized = _normalizeForParsing(transcript);
 
-    // 1. Detect attribute token — multi-word keys checked first (insertion order).
     String? canonicalAttr;
     String? matchedAttrPhrase;
     for (final entry in _kAttributeSynonyms.entries) {
@@ -182,7 +412,6 @@ final class VoiceAssistantCoordinator {
       }
     }
 
-    // 2. No recognized attribute → fall back to plain search behavior.
     if (canonicalAttr == null) {
       final canonical = _canonicalizer.canonicalizeQuery(
         transcript,
@@ -194,12 +423,12 @@ final class VoiceAssistantCoordinator {
           entities: const [],
           followUps: const [],
           debugSummary: 'empty-canonical',
+          sessionCleared: true,
         );
       }
       return _runSearch(canonical, slotBundles);
     }
 
-    // 3. Extract entity name using the matched synonym phrase (not the canonical key).
     final entityQuery = _extractEntityName(normalized, matchedAttrPhrase!);
     final canonical = _canonicalizer.canonicalizeQuery(
       entityQuery,
@@ -211,17 +440,17 @@ final class VoiceAssistantCoordinator {
         entities: const [],
         followUps: const [],
         debugSummary: 'empty-canonical',
+        sessionCleared: true,
       );
     }
 
-    // 4. Search for the entity.
     final response = _searchFacade.searchText(slotBundles, canonical);
     _lastEntities = response.entities;
 
     if (response.entities.isEmpty) {
       _session = null;
       return SpokenResponsePlan(
-        primaryText: 'No matches for "$canonical".',
+        primaryText: 'Couldn\'t find "$canonical".',
         entities: const [],
         followUps: const [],
         debugSummary: 'no-results:$canonical',
@@ -231,16 +460,17 @@ final class VoiceAssistantCoordinator {
     if (response.entities.length > 1) {
       _session = VoiceSelectionSession(response.entities);
       return SpokenResponsePlan(
-        primaryText:
-            'I found ${response.entities.length} matches. Say "next" or "select".',
+        primaryText: _formatDisambiguationPrompt(response.entities),
         entities: response.entities,
         selectedIndex: 0,
-        followUps: const ['next', 'previous', 'select', 'cancel'],
+        followUps: response.entities
+            .take(3)
+            .map((e) => e.displayName.toLowerCase())
+            .toList(),
         debugSummary: 'disambiguation:${response.entities.length}',
       );
     }
 
-    // 5. Exactly 1 result: look up the doc and answer the attribute question.
     final entity = response.entities.first;
     _lastSelected = entity;
     _session = null;
@@ -249,7 +479,8 @@ final class VoiceAssistantCoordinator {
 
     if (bundle == null) {
       return SpokenResponsePlan(
-        primaryText: 'Found ${entity.displayName} but no data bundle is available.',
+        primaryText:
+            'Found ${entity.displayName} but no data bundle is available.',
         entities: response.entities,
         selectedIndex: 0,
         followUps: const [],
@@ -268,7 +499,6 @@ final class VoiceAssistantCoordinator {
       );
     }
 
-    // Resolve and sort weapons: stable order (name, docId).
     final weapons = unitDoc.weaponDocRefs
         .map(bundle.weaponByDocId)
         .whereType<WeaponDoc>()
@@ -278,7 +508,16 @@ final class VoiceAssistantCoordinator {
         return cmp != 0 ? cmp : a.docId.compareTo(b.docId);
       });
 
-    final attrLines = extractAttributeValues(canonicalAttr, weapons);
+    final unitLines = <(String, String)>[];
+    for (final c in unitDoc.characteristics) {
+      if (c.name == canonicalAttr) {
+        unitLines.add((entity.displayName, c.valueText));
+        break;
+      }
+    }
+
+    final attrLines =
+        unitLines.isNotEmpty ? unitLines : extractAttributeValues(canonicalAttr, weapons);
 
     if (attrLines.isEmpty) {
       return SpokenResponsePlan(
@@ -299,9 +538,6 @@ final class VoiceAssistantCoordinator {
     );
   }
 
-  /// Normalizes text for internal question parsing.
-  /// Lowercases, strips punctuation, collapses whitespace.
-  /// Distinct from [DomainCanonicalizer] which is for entity search matching.
   static String _normalizeForParsing(String text) {
     return text
         .toLowerCase()
@@ -310,12 +546,6 @@ final class VoiceAssistantCoordinator {
         .trim();
   }
 
-  /// Extracts the entity name from a normalized question string.
-  ///
-  /// Rule 1: If normalized contains " of ", take the substring after the last
-  ///         " of " and strip a leading "the ".
-  /// Rule 2: Else find [attrPhrase] in the string, take everything after it,
-  ///         and strip a leading stopword ("the", "a", "an", etc.).
   static String _extractEntityName(String normalized, String attrPhrase) {
     const stopwords = ['the ', 'a ', 'an ', 'for ', 'on ', 'in ', 'to '];
     final ofIdx = normalized.lastIndexOf(' of ');
@@ -338,64 +568,28 @@ final class VoiceAssistantCoordinator {
     return normalized;
   }
 
-  SpokenResponsePlan _handleCommand(DisambiguationCommand command) {
-    final session = _session!;
-    switch (command) {
-      case DisambiguationCommand.next:
-        session.nextEntity();
-        return _planForSession(session);
-      case DisambiguationCommand.previous:
-        session.previousEntity();
-        return _planForSession(session);
-      case DisambiguationCommand.select:
-        final entity = session.currentEntity;
-        _lastSelected = entity;
-        _session = null;
-        if (entity == null) {
-          return SpokenResponsePlan(
-            primaryText: 'Nothing to select.',
-            entities: const [],
-            followUps: const [],
-            debugSummary: 'select-empty',
-          );
-        }
-        return SpokenResponsePlan(
-          primaryText: 'Selected ${entity.displayName}.',
-          entities: [entity],
-          selectedIndex: null,
-          followUps: const [],
-          debugSummary: 'selected:${entity.groupKey}',
-        );
-      case DisambiguationCommand.cancel:
-        _session = null;
-        return SpokenResponsePlan(
-          primaryText: 'Cancelled.',
-          entities: const [],
-          followUps: const [],
-          debugSummary: 'cancelled',
-        );
+  static SpokenEntity? _matchEntityName(
+    String transcript,
+    List<SpokenEntity> entities,
+  ) {
+    final lower = transcript.trim().toLowerCase();
+    var stripped = lower;
+    for (final filler in const ['the ', 'a ', 'an ']) {
+      if (stripped.startsWith(filler)) {
+        stripped = stripped.substring(filler.length).trim();
+        break;
+      }
     }
+    for (final entity in entities) {
+      final name = entity.displayName.toLowerCase();
+      if (lower == name || stripped == name) return entity;
+    }
+    return null;
   }
 
-  SpokenResponsePlan _planForSession(VoiceSelectionSession session) {
-    final entity = session.currentEntity;
-    if (entity == null) {
-      return SpokenResponsePlan(
-        primaryText: 'No results to navigate.',
-        entities: const [],
-        followUps: const [],
-        debugSummary: 'navigate-empty',
-      );
-    }
-    return SpokenResponsePlan(
-      primaryText:
-          'Now on ${entity.displayName}. Say "select" to confirm or "next" to continue.',
-      entities: _lastEntities,
-      selectedIndex: session.entityIndex,
-      followUps: const ['next', 'previous', 'select', 'cancel'],
-      debugSummary: 'navigate:${session.entityIndex}/${_lastEntities.length - 1}',
-    );
-  }
+  // ---------------------------------------------------------------------------
+  // General search path
+  // ---------------------------------------------------------------------------
 
   SpokenResponsePlan _runSearch(
     String canonical,
@@ -407,7 +601,7 @@ final class VoiceAssistantCoordinator {
     if (response.entities.isEmpty) {
       _session = null;
       return SpokenResponsePlan(
-        primaryText: 'No matches for "$canonical".',
+        primaryText: 'Couldn\'t find "$canonical".',
         entities: const [],
         followUps: const [],
         debugSummary: 'no-results:$canonical',
@@ -426,14 +620,15 @@ final class VoiceAssistantCoordinator {
       );
     }
 
-    // Multiple entities: create disambiguation session.
     _session = VoiceSelectionSession(response.entities);
     return SpokenResponsePlan(
-      primaryText:
-          'I found ${response.entities.length} matches. Say "next" or "select".',
+      primaryText: _formatDisambiguationPrompt(response.entities),
       entities: response.entities,
       selectedIndex: 0,
-      followUps: const ['next', 'previous', 'select', 'cancel'],
+      followUps: response.entities
+          .take(3)
+          .map((e) => e.displayName.toLowerCase())
+          .toList(),
       debugSummary: 'disambiguation:${response.entities.length}',
     );
   }

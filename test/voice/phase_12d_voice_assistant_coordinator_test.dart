@@ -263,7 +263,8 @@ void main() {
       );
       expect(plan.entities, hasLength(2));
       expect(plan.selectedIndex, 0);
-      expect(plan.followUps, containsAll(['next', 'select', 'cancel']));
+      // followUps now contains the entity display names for voice-native selection.
+      expect(plan.followUps, containsAll(['intercessor', 'intercessor squad']));
       expect(plan.debugSummary, 'disambiguation:2');
     });
 
@@ -332,74 +333,25 @@ void main() {
       return coord;
     }
 
-    test('4.1 "next" advances selectedIndex', () async {
+    test('4.5 Saying entity name in disambiguation selects it', () async {
       final coord = await _coordWithSession();
       final plan = await coord.handleTranscript(
-        transcript: 'next',
+        transcript: 'intercessor squad',
         slotBundles: _noopBundles,
         contextHints: const [],
       );
-      expect(plan.selectedIndex, 1);
-    });
-
-    test('4.2 "previous" retreats selectedIndex', () async {
-      final coord = await _coordWithSession();
-      // Advance first
-      await coord.handleTranscript(
-          transcript: 'next', slotBundles: _noopBundles, contextHints: const []);
-      final plan = await coord.handleTranscript(
-        transcript: 'previous',
-        slotBundles: _noopBundles,
-        contextHints: const [],
-      );
-      expect(plan.selectedIndex, 0);
-    });
-
-    test('4.3 Clamp at first: "previous" at index 0 stays at 0', () async {
-      final coord = await _coordWithSession();
-      final plan = await coord.handleTranscript(
-        transcript: 'previous',
-        slotBundles: _noopBundles,
-        contextHints: const [],
-      );
-      expect(plan.selectedIndex, 0);
-    });
-
-    test('4.4 Clamp at last: "next" past end stays at last index', () async {
-      final coord = await _coordWithSession();
-      // Advance twice for 2-entity list (last index is 1)
-      await coord.handleTranscript(
-          transcript: 'next', slotBundles: _noopBundles, contextHints: const []);
-      final plan = await coord.handleTranscript(
-        transcript: 'next',
-        slotBundles: _noopBundles,
-        contextHints: const [],
-      );
-      expect(plan.selectedIndex, 1); // Clamped — still last
-    });
-
-    test('4.5 "select" finalizes entity, session cleared', () async {
-      final coord = await _coordWithSession();
-      // Advance to entity 1
-      await coord.handleTranscript(
-          transcript: 'next', slotBundles: _noopBundles, contextHints: const []);
-      final plan = await coord.handleTranscript(
-        transcript: 'select',
-        slotBundles: _noopBundles,
-        contextHints: const [],
-      );
-      expect(plan.selectedIndex, isNull); // Session cleared
+      expect(plan.selectedIndex, isNull); // Session cleared on selection
       expect(plan.entities, hasLength(1));
       expect(plan.entities.first.displayName, 'Intercessor Squad');
       expect(plan.primaryText, contains('Intercessor Squad'));
       expect(plan.debugSummary, startsWith('selected:'));
-      // Subsequent transcript starts fresh (new search, not command)
+      // Subsequent transcript starts a fresh search (no active session).
       final followUp = await coord.handleTranscript(
-        transcript: 'next', // No active session → search for "next"
+        transcript: 'next',
         slotBundles: _noopBundles,
         contextHints: const [],
       );
-      // The fake always returns two entities regardless of query
+      // Fake always returns two entities → fresh disambiguation.
       expect(followUp.debugSummary, startsWith('disambiguation:'));
     });
 
@@ -413,6 +365,7 @@ void main() {
       expect(plan.primaryText, 'Cancelled.');
       expect(plan.entities, isEmpty);
       expect(plan.debugSummary, 'cancelled');
+      expect(plan.sessionCleared, isTrue);
     });
 
     test('4.7 Command with no active session → treated as search', () async {
@@ -618,7 +571,8 @@ void main() {
         contextHints: const [],
       );
       expect(plan.debugSummary, startsWith('disambiguation:'));
-      expect(plan.followUps, containsAll(['next', 'select', 'cancel']));
+      // followUps now carries entity names for voice-native selection.
+      expect(plan.followUps, containsAll(['intercessor', 'intercessor squad']));
     });
 
     test('7.4 Unrecognized attribute → falls back to plain search plan', () async {
@@ -674,6 +628,512 @@ void main() {
       );
       expect(plan1.primaryText, plan2.primaryText);
       expect(plan1.debugSummary, plan2.debugSummary);
+    });
+  });
+
+  // =========================================================================
+  // Unit stat synonym routing
+  // =========================================================================
+  group('8. Unit stat synonym routing', () {
+    Future<SpokenResponsePlan> attrPlan(String transcript) async {
+      final entity = _entity('Carnifex', 'carnifex', 'slot_0');
+      final coord = _coordWith([entity]);
+      return coord.handleTranscript(
+        transcript: transcript,
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+    }
+
+    test('8.1 "toughness" synonym routes through attr handler', () async {
+      final plan = await attrPlan('what is the toughness of Carnifex');
+      expect(plan.debugSummary, startsWith('attr-'));
+      expect(plan.primaryText, isNot(contains('Phase 12E')));
+    });
+
+    test('8.2 "movement" synonym routes through attr handler', () async {
+      final plan = await attrPlan('what is the movement of Carnifex');
+      expect(plan.debugSummary, startsWith('attr-'));
+    });
+
+    test('8.3 "wounds" synonym routes through attr handler', () async {
+      final plan = await attrPlan('what are the wounds of Carnifex');
+      expect(plan.debugSummary, startsWith('attr-'));
+    });
+
+    test('8.4 "save" synonym routes through attr handler', () async {
+      final plan = await attrPlan('what is the save of Carnifex');
+      expect(plan.debugSummary, startsWith('attr-'));
+    });
+
+    test('8.5 "leadership" synonym routes through attr handler', () async {
+      final plan = await attrPlan('what is the leadership of Carnifex');
+      expect(plan.debugSummary, startsWith('attr-'));
+    });
+
+    test('8.6 "objective control" synonym routes through attr handler', () async {
+      final plan = await attrPlan('what is the objective control of Carnifex');
+      expect(plan.debugSummary, startsWith('attr-'));
+    });
+
+    test('8.7 "weapon skill" synonym routes through attr handler', () async {
+      final plan = await attrPlan('what is the weapon skill of Carnifex');
+      expect(plan.debugSummary, startsWith('attr-'));
+    });
+  });
+
+  // =========================================================================
+  // Disambiguation prompt includes entity names
+  // =========================================================================
+  group('9. Disambiguation prompt includes entity names', () {
+    test('9.1 Two matches: prompt contains both names', () async {
+      final e1 = _entity('Alpha Squad', 'alpha_squad', 'slot_0');
+      final e2 = _entity('Alpha Guard', 'alpha_guard', 'slot_0');
+      final coord = _coordWith([e1, e2]);
+      final plan = await coord.handleTranscript(
+        transcript: 'alpha',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, 'disambiguation:2');
+      expect(plan.primaryText, contains('Alpha Squad'));
+      expect(plan.primaryText, contains('Alpha Guard'));
+    });
+
+    test('9.2 Three matches: prompt contains all three names', () async {
+      final e1 = _entity('Alpha Squad', 'alpha_squad', 'slot_0');
+      final e2 = _entity('Alpha Guard', 'alpha_guard', 'slot_0');
+      final e3 = _entity('Alpha Warrior', 'alpha_warrior', 'slot_0');
+      final coord = _coordWith([e1, e2, e3]);
+      final plan = await coord.handleTranscript(
+        transcript: 'alpha',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, 'disambiguation:3');
+      expect(plan.primaryText, contains('Alpha Squad'));
+      expect(plan.primaryText, contains('Alpha Guard'));
+      expect(plan.primaryText, contains('Alpha Warrior'));
+    });
+
+    test('9.3 Four matches: first three names shown, fourth omitted', () async {
+      final e1 = _entity('Alpha Squad', 'alpha_squad', 'slot_0');
+      final e2 = _entity('Alpha Guard', 'alpha_guard', 'slot_0');
+      final e3 = _entity('Alpha Warrior', 'alpha_warrior', 'slot_0');
+      final e4 = _entity('Alpha Ancient', 'alpha_ancient', 'slot_0');
+      final coord = _coordWith([e1, e2, e3, e4]);
+      final plan = await coord.handleTranscript(
+        transcript: 'alpha',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, 'disambiguation:4');
+      expect(plan.primaryText, contains('Alpha Squad'));
+      expect(plan.primaryText, contains('Alpha Guard'));
+      expect(plan.primaryText, contains('Alpha Warrior'));
+      expect(plan.primaryText, isNot(contains('Alpha Ancient')));
+      expect(plan.primaryText, contains('4'));
+    });
+
+    test('9.4 Prompt ends with "Which one?" — no navigation instructions', () async {
+      final e1 = _entity('Alpha Squad', 'alpha_squad', 'slot_0');
+      final e2 = _entity('Beta Guard', 'beta_guard', 'slot_0');
+      final coord = _coordWith([e1, e2]);
+      final plan = await coord.handleTranscript(
+        transcript: 'test',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.primaryText, contains('Which one?'));
+      expect(plan.primaryText, isNot(contains('"next"')));
+      expect(plan.primaryText, isNot(contains('"select"')));
+    });
+  });
+
+  // =========================================================================
+  // sessionCleared field behavior
+  // =========================================================================
+  group('10. sessionCleared field behavior', () {
+    test('10.1 Cancel plan has sessionCleared = true', () async {
+      final e1 = _entity('A', 'a', 'slot_0');
+      final e2 = _entity('B', 'b', 'slot_0');
+      final coord = _coordWith([e1, e2]);
+      await coord.handleTranscript(
+        transcript: 'test',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      final plan = await coord.handleTranscript(
+        transcript: 'cancel',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.sessionCleared, isTrue);
+    });
+
+    test('10.2 No-results plan has sessionCleared = false', () async {
+      final coord = _coordWith([]);
+      final plan = await coord.handleTranscript(
+        transcript: 'some unknown unit',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.entities, isEmpty);
+      expect(plan.sessionCleared, isFalse);
+    });
+
+    test('10.3 Disambiguation plan has sessionCleared = false', () async {
+      final e1 = _entity('A', 'a', 'slot_0');
+      final e2 = _entity('B', 'b', 'slot_0');
+      final coord = _coordWith([e1, e2]);
+      final plan = await coord.handleTranscript(
+        transcript: 'test',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, startsWith('disambiguation:'));
+      expect(plan.sessionCleared, isFalse);
+    });
+
+    test('10.4 Unknown/empty transcript has sessionCleared = true', () async {
+      final coord = _coordWith([]);
+      final plan = await coord.handleTranscript(
+        transcript: '',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, 'unknown-empty');
+      expect(plan.sessionCleared, isTrue);
+    });
+
+    test('10.5 Single-result plan has sessionCleared = false', () async {
+      final entity = _entity('Intercessor', 'intercessor', 'slot_0');
+      final coord = _coordWith([entity]);
+      final plan = await coord.handleTranscript(
+        transcript: 'intercessor',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, startsWith('single:'));
+      expect(plan.sessionCleared, isFalse);
+    });
+  });
+
+  // =========================================================================
+  // Name-match disambiguation (voice-native selection)
+  // =========================================================================
+  group('11. Name-match disambiguation', () {
+    // Three-entity disambiguation for "captain" — used by several tests below.
+    Future<VoiceAssistantCoordinator> captainSession() async {
+      final entities = [
+        _entity('Captain', 'captain', 'slot_0'),
+        _entity('Captain with Jump Pack', 'captain_jump', 'slot_0'),
+        _entity('Captain in Terminator Armour', 'captain_term', 'slot_0'),
+      ];
+      final coord = VoiceAssistantCoordinator(
+        searchFacade: _FakeSearchFacade((_) => entities),
+      );
+      await coord.handleTranscript(
+        transcript: 'captain',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      return coord;
+    }
+
+    // A. Direct selection by exact name.
+    test('11.1 A — exact name match selects the correct entity', () async {
+      final coord = await captainSession();
+      final plan = await coord.handleTranscript(
+        transcript: 'captain with jump pack',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, startsWith('selected:'));
+      expect(plan.entities, hasLength(1));
+      expect(plan.entities.first.displayName, 'Captain with Jump Pack');
+      expect(plan.selectedIndex, isNull);
+    });
+
+    // B. Case-insensitive match.
+    test('11.2 B — match ignores uppercase', () async {
+      final coord = await captainSession();
+      final plan = await coord.handleTranscript(
+        transcript: 'CAPTAIN WITH JUMP PACK',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, startsWith('selected:'));
+      expect(plan.entities.first.displayName, 'Captain with Jump Pack');
+    });
+
+    test('11.3 B — match ignores mixed case', () async {
+      final coord = await captainSession();
+      final plan = await coord.handleTranscript(
+        transcript: 'Captain With Jump Pack',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, startsWith('selected:'));
+      expect(plan.entities.first.displayName, 'Captain with Jump Pack');
+    });
+
+    // C. Containment match: leading filler stripped before exact compare.
+    test('11.4 C — "the X" strips filler and matches X', () async {
+      final coord = await captainSession();
+      final plan = await coord.handleTranscript(
+        transcript: 'the captain',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, startsWith('selected:'));
+      expect(plan.entities.first.displayName, 'Captain');
+    });
+
+    // D. Unrecognized input: session clears, transcript treated as new search.
+    test('11.5 D — unrecognized input clears session and falls through to search', () async {
+      final coord = await captainSession();
+      final plan = await coord.handleTranscript(
+        transcript: 'something else entirely',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      // Fake returns 3 entities for any query → fresh disambiguation.
+      expect(plan.debugSummary, startsWith('disambiguation:'));
+      // Session is fresh (not the same object as before).
+      expect(plan.sessionCleared, isFalse);
+    });
+
+    // E. Cancel still returns to idle.
+    test('11.6 E — "cancel" during name-match disambiguation returns to idle', () async {
+      final coord = await captainSession();
+      final plan = await coord.handleTranscript(
+        transcript: 'cancel',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.primaryText, 'Cancelled.');
+      expect(plan.entities, isEmpty);
+      expect(plan.sessionCleared, isTrue);
+    });
+  });
+
+  // =========================================================================
+  // Rule-list query path (Layer A)
+  // =========================================================================
+  group('12. Rule-list query path', () {
+    // Helper: coord that returns one entity for any query.
+    VoiceAssistantCoordinator _ruleCoord(List<SpokenEntity> entities) =>
+        VoiceAssistantCoordinator(
+          searchFacade: _FakeSearchFacade((_) => entities),
+        );
+
+    // -------------------------------------------------------------------------
+    // A. Direct rule query — all 6 bounded patterns route to rule- path.
+    // With _noopBundles the bundle lookup fails → rule-no-bundle: debug prefix,
+    // which proves the coordinator entered _buildRuleListAnswer (rule path).
+    // -------------------------------------------------------------------------
+
+    Future<SpokenResponsePlan> _ruleQuery(String transcript) async {
+      final entity = _entity('Carnifex', 'carnifex', 'slot_0');
+      return _ruleCoord([entity]).handleTranscript(
+        transcript: transcript,
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+    }
+
+    test('12.1 "what rules does carnifex have" → rule path', () async {
+      final plan = await _ruleQuery('what rules does carnifex have');
+      expect(plan.debugSummary, startsWith('rule-'));
+      expect(plan.entities, hasLength(1));
+    });
+
+    test('12.2 "rules for carnifex" → rule path', () async {
+      final plan = await _ruleQuery('rules for carnifex');
+      expect(plan.debugSummary, startsWith('rule-'));
+    });
+
+    test('12.3 "rules of carnifex" → rule path', () async {
+      final plan = await _ruleQuery('rules of carnifex');
+      expect(plan.debugSummary, startsWith('rule-'));
+    });
+
+    test('12.4 "abilities for carnifex" → rule path', () async {
+      final plan = await _ruleQuery('abilities for carnifex');
+      expect(plan.debugSummary, startsWith('rule-'));
+    });
+
+    test('12.5 "abilities of carnifex" → rule path', () async {
+      final plan = await _ruleQuery('abilities of carnifex');
+      expect(plan.debugSummary, startsWith('rule-'));
+    });
+
+    test('12.6 "what abilities does carnifex have" → rule path', () async {
+      final plan = await _ruleQuery('what abilities does carnifex have');
+      expect(plan.debugSummary, startsWith('rule-'));
+    });
+
+    // -------------------------------------------------------------------------
+    // B. Ambiguous rule query: disambiguation triggered, then name selection
+    //    routes back to the rule path (not "Selected X.").
+    // -------------------------------------------------------------------------
+
+    test('12.7 "rules for captain" with multiple matches → rule-disambiguation', () async {
+      final entities = [
+        _entity('Captain', 'captain', 'slot_0'),
+        _entity('Captain with Jump Pack', 'captain_jump', 'slot_0'),
+      ];
+      final coord = _ruleCoord(entities);
+      final plan = await coord.handleTranscript(
+        transcript: 'rules for captain',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, 'rule-disambiguation:2');
+      expect(plan.primaryText, contains('Which one?'));
+    });
+
+    test('12.8 After rule disambiguation, name selection → rule answer path', () async {
+      final entities = [
+        _entity('Captain', 'captain', 'slot_0'),
+        _entity('Captain with Jump Pack', 'captain_jump', 'slot_0'),
+      ];
+      final coord = _ruleCoord(entities);
+      // Trigger disambiguation.
+      await coord.handleTranscript(
+        transcript: 'rules for captain',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      // Select by name — should route to rule path, not "Selected X."
+      final plan = await coord.handleTranscript(
+        transcript: 'captain with jump pack',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      // rule-no-bundle: proves _buildRuleListAnswer was reached (rule path).
+      expect(plan.debugSummary, startsWith('rule-'));
+      expect(plan.debugSummary, isNot(startsWith('selected:')));
+      expect(plan.entities, hasLength(1));
+      expect(plan.entities.first.displayName, 'Captain with Jump Pack');
+    });
+
+    // -------------------------------------------------------------------------
+    // C. No results for a rule query.
+    // -------------------------------------------------------------------------
+
+    test('12.9 Rule query with no entity match → rule-no-results', () async {
+      final coord = _ruleCoord([]);
+      final plan = await coord.handleTranscript(
+        transcript: 'rules for unknown xyzzy unit',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, startsWith('rule-no-results:'));
+      expect(plan.entities, isEmpty);
+    });
+
+    // -------------------------------------------------------------------------
+    // D. formatRuleListAnswer pure-function tests (Layer A formatting).
+    // -------------------------------------------------------------------------
+
+    test('12.10 formatRuleListAnswer — zero rules → honest no-rules text', () {
+      final text = formatRuleListAnswer('Carnifex', const []);
+      expect(text, contains("couldn't find any surfaced rules"));
+      expect(text, contains('Carnifex'));
+    });
+
+    test('12.11 formatRuleListAnswer — one rule', () {
+      const nodeRef = NodeRef(0);
+      final rule = RuleDoc(
+        docId: 'rule:synapse',
+        canonicalKey: 'synapse',
+        ruleId: 'synapse',
+        name: 'Synapse',
+        description: '',
+        sourceFileId: 'test',
+        sourceNode: nodeRef,
+      );
+      expect(formatRuleListAnswer('Carnifex', [rule]), 'Carnifex has Synapse.');
+    });
+
+    test('12.12 formatRuleListAnswer — two rules', () {
+      const nodeRef = NodeRef(0);
+      RuleDoc r(String name) => RuleDoc(
+            docId: 'rule:${name.toLowerCase()}',
+            canonicalKey: name.toLowerCase(),
+            ruleId: name.toLowerCase(),
+            name: name,
+            description: '',
+            sourceFileId: 'test',
+            sourceNode: nodeRef,
+          );
+      final text = formatRuleListAnswer('Carnifex', [r('Synapse'), r('Deadly Demise')]);
+      expect(text, 'Carnifex has Synapse and Deadly Demise.');
+    });
+
+    test('12.13 formatRuleListAnswer — three rules (Oxford comma)', () {
+      const nodeRef = NodeRef(0);
+      RuleDoc r(String name) => RuleDoc(
+            docId: 'rule:${name.toLowerCase().replaceAll(' ', '_')}',
+            canonicalKey: name.toLowerCase(),
+            ruleId: name.toLowerCase(),
+            name: name,
+            description: '',
+            sourceFileId: 'test',
+            sourceNode: nodeRef,
+          );
+      final text = formatRuleListAnswer(
+          'Hive Tyrant', [r('Synapse'), r('Shadow in the Warp'), r('Deadly Demise')]);
+      expect(text, 'Hive Tyrant has Synapse, Shadow in the Warp, and Deadly Demise.');
+    });
+
+    // -------------------------------------------------------------------------
+    // E. No regression — existing paths unaffected.
+    // -------------------------------------------------------------------------
+
+    test('12.14 No regression: attr query still routes to attr- path', () async {
+      final entity = _entity('Carnifex', 'carnifex', 'slot_0');
+      final coord = _ruleCoord([entity]);
+      final plan = await coord.handleTranscript(
+        transcript: 'what is the toughness of carnifex',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, startsWith('attr-'));
+    });
+
+    test('12.15 No regression: "what are the abilities of X" not a rule query → search path', () async {
+      final entity = _entity('Intercessor', 'intercessor', 'slot_0');
+      final coord = _ruleCoord([entity]);
+      final plan = await coord.handleTranscript(
+        transcript: 'what are the abilities of Intercessors',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      // No rule pattern matched → falls through attribute handler → unrecognized attr → search.
+      expect(plan.debugSummary, startsWith('single:'));
+    });
+
+    test('12.16 No regression: cancel during rule disambiguation → Cancelled', () async {
+      final entities = [
+        _entity('Captain', 'captain', 'slot_0'),
+        _entity('Captain with Jump Pack', 'captain_jump', 'slot_0'),
+      ];
+      final coord = _ruleCoord(entities);
+      await coord.handleTranscript(
+        transcript: 'rules for captain',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      final plan = await coord.handleTranscript(
+        transcript: 'cancel',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.primaryText, 'Cancelled.');
+      expect(plan.sessionCleared, isTrue);
     });
   });
 }
