@@ -692,27 +692,42 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Renders a [SpokenResponsePlan]: primary text banner + entity list.
   ///
-  /// Shared by [_buildAnswerBody] and [_buildClarifyBody]. When
-  /// [plan.selectedIndex] is non-null the highlighted entity row is
+  /// [isClarify] selects the clarify colour treatment (amber tint, action
+  /// pending) vs the answer treatment (primary container, success/resolved).
+  /// When [plan.selectedIndex] is non-null the highlighted entity row is
   /// rendered with a subtle accent border.
-  Widget _buildPlanResults(SpokenResponsePlan plan) {
+  Widget _buildPlanResults(SpokenResponsePlan plan, {required bool isClarify}) {
+    final Color bannerColor;
+    final Color bannerTextColor;
+    final TextStyle? bannerTextStyle;
+    if (isClarify) {
+      bannerColor = Colors.amber.shade50;
+      bannerTextColor = Colors.amber.shade900;
+      bannerTextStyle = Theme.of(context)
+          .textTheme
+          .bodyMedium
+          ?.copyWith(color: bannerTextColor);
+    } else {
+      bannerColor = Theme.of(context).colorScheme.primaryContainer;
+      bannerTextColor = Theme.of(context).colorScheme.onPrimaryContainer;
+      bannerTextStyle = Theme.of(context).textTheme.bodyLarge?.copyWith(
+            color: bannerTextColor,
+            fontWeight: FontWeight.w500,
+          );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Primary text banner
+        // Primary text banner — answer vs clarify use distinct colour treatments.
         Container(
-          margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.secondaryContainer,
+            color: bannerColor,
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Text(
-            plan.primaryText,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSecondaryContainer,
-                ),
-          ),
+          child: Text(plan.primaryText, style: bannerTextStyle),
         ),
         if (plan.entities.isNotEmpty)
           Expanded(
@@ -841,7 +856,13 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           const SizedBox(height: 24),
-          const Text('Ask a question', style: TextStyle(color: Colors.grey)),
+          Text(
+            'Ask a question',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w500,
+                ),
+          ),
           const SizedBox(height: 16),
           DefaultTextStyle.merge(
             style: const TextStyle(fontSize: 12, color: Colors.grey),
@@ -890,34 +911,53 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// answer — single confirmed result or attribute answer.
-  Widget _buildAnswerBody(SpokenResponsePlan plan) => _buildPlanResults(plan);
+  Widget _buildAnswerBody(SpokenResponsePlan plan) =>
+      _buildPlanResults(plan, isClarify: false);
 
   /// clarify — disambiguation session active (multiple matches).
-  Widget _buildClarifyBody(SpokenResponsePlan plan) => _buildPlanResults(plan);
+  Widget _buildClarifyBody(SpokenResponsePlan plan) =>
+      _buildPlanResults(plan, isClarify: true);
 
   /// noMatch — coordinator returned no entities.
   Widget _buildNoMatchBody(String _) {
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.search_off, size: 64, color: Colors.grey.shade400),
-          const SizedBox(height: 16),
-          const Text("I couldn't find that unit in the loaded data."),
-          const SizedBox(height: 16),
-          DefaultTextStyle.merge(
-            style: const TextStyle(fontSize: 12, color: Colors.grey),
-            child: const Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('Try asking:'),
-                SizedBox(height: 4),
-                Text('• What is the toughness of a Carnifex?'),
-                Text('• What rules does a Carnifex have?'),
-              ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.search_off, size: 56, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
+            Text(
+              "I couldn't find that unit in the loaded data.",
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
-          ),
-        ],
+            const SizedBox(height: 20),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: DefaultTextStyle.merge(
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                child: const Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Try asking:'),
+                    SizedBox(height: 4),
+                    Text('• What is the toughness of a Carnifex?'),
+                    Text('• What rules does a Carnifex have?'),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1125,23 +1165,23 @@ class _MicButtonState extends State<_MicButton> {
       onTapCancel: () => widget.controller
           .endListening(reason: VoiceStopReason.userCancelled),
       child: Container(
-        width: 52,
-        height: 52,
+        width: 56,
+        height: 56,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: bg,
           boxShadow: [
             BoxShadow(
-              color: bg.withValues(alpha: 0.35),
-              blurRadius: 8,
-              spreadRadius: 1,
+              color: bg.withValues(alpha: 0.4),
+              blurRadius: 10,
+              spreadRadius: 2,
             ),
           ],
         ),
         child: Icon(
           isListening ? Icons.stop : Icons.mic,
           color: Colors.white,
-          size: 26,
+          size: 28,
         ),
       ),
     );
