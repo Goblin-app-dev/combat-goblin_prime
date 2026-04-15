@@ -917,4 +917,223 @@ void main() {
       expect(plan.sessionCleared, isTrue);
     });
   });
+
+  // =========================================================================
+  // Rule-list query path (Layer A)
+  // =========================================================================
+  group('12. Rule-list query path', () {
+    // Helper: coord that returns one entity for any query.
+    VoiceAssistantCoordinator _ruleCoord(List<SpokenEntity> entities) =>
+        VoiceAssistantCoordinator(
+          searchFacade: _FakeSearchFacade((_) => entities),
+        );
+
+    // -------------------------------------------------------------------------
+    // A. Direct rule query — all 6 bounded patterns route to rule- path.
+    // With _noopBundles the bundle lookup fails → rule-no-bundle: debug prefix,
+    // which proves the coordinator entered _buildRuleListAnswer (rule path).
+    // -------------------------------------------------------------------------
+
+    Future<SpokenResponsePlan> _ruleQuery(String transcript) async {
+      final entity = _entity('Carnifex', 'carnifex', 'slot_0');
+      return _ruleCoord([entity]).handleTranscript(
+        transcript: transcript,
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+    }
+
+    test('12.1 "what rules does carnifex have" → rule path', () async {
+      final plan = await _ruleQuery('what rules does carnifex have');
+      expect(plan.debugSummary, startsWith('rule-'));
+      expect(plan.entities, hasLength(1));
+    });
+
+    test('12.2 "rules for carnifex" → rule path', () async {
+      final plan = await _ruleQuery('rules for carnifex');
+      expect(plan.debugSummary, startsWith('rule-'));
+    });
+
+    test('12.3 "rules of carnifex" → rule path', () async {
+      final plan = await _ruleQuery('rules of carnifex');
+      expect(plan.debugSummary, startsWith('rule-'));
+    });
+
+    test('12.4 "abilities for carnifex" → rule path', () async {
+      final plan = await _ruleQuery('abilities for carnifex');
+      expect(plan.debugSummary, startsWith('rule-'));
+    });
+
+    test('12.5 "abilities of carnifex" → rule path', () async {
+      final plan = await _ruleQuery('abilities of carnifex');
+      expect(plan.debugSummary, startsWith('rule-'));
+    });
+
+    test('12.6 "what abilities does carnifex have" → rule path', () async {
+      final plan = await _ruleQuery('what abilities does carnifex have');
+      expect(plan.debugSummary, startsWith('rule-'));
+    });
+
+    // -------------------------------------------------------------------------
+    // B. Ambiguous rule query: disambiguation triggered, then name selection
+    //    routes back to the rule path (not "Selected X.").
+    // -------------------------------------------------------------------------
+
+    test('12.7 "rules for captain" with multiple matches → rule-disambiguation', () async {
+      final entities = [
+        _entity('Captain', 'captain', 'slot_0'),
+        _entity('Captain with Jump Pack', 'captain_jump', 'slot_0'),
+      ];
+      final coord = _ruleCoord(entities);
+      final plan = await coord.handleTranscript(
+        transcript: 'rules for captain',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, 'rule-disambiguation:2');
+      expect(plan.primaryText, contains('Which one?'));
+    });
+
+    test('12.8 After rule disambiguation, name selection → rule answer path', () async {
+      final entities = [
+        _entity('Captain', 'captain', 'slot_0'),
+        _entity('Captain with Jump Pack', 'captain_jump', 'slot_0'),
+      ];
+      final coord = _ruleCoord(entities);
+      // Trigger disambiguation.
+      await coord.handleTranscript(
+        transcript: 'rules for captain',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      // Select by name — should route to rule path, not "Selected X."
+      final plan = await coord.handleTranscript(
+        transcript: 'captain with jump pack',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      // rule-no-bundle: proves _buildRuleListAnswer was reached (rule path).
+      expect(plan.debugSummary, startsWith('rule-'));
+      expect(plan.debugSummary, isNot(startsWith('selected:')));
+      expect(plan.entities, hasLength(1));
+      expect(plan.entities.first.displayName, 'Captain with Jump Pack');
+    });
+
+    // -------------------------------------------------------------------------
+    // C. No results for a rule query.
+    // -------------------------------------------------------------------------
+
+    test('12.9 Rule query with no entity match → rule-no-results', () async {
+      final coord = _ruleCoord([]);
+      final plan = await coord.handleTranscript(
+        transcript: 'rules for unknown xyzzy unit',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, startsWith('rule-no-results:'));
+      expect(plan.entities, isEmpty);
+    });
+
+    // -------------------------------------------------------------------------
+    // D. formatRuleListAnswer pure-function tests (Layer A formatting).
+    // -------------------------------------------------------------------------
+
+    test('12.10 formatRuleListAnswer — zero rules → honest no-rules text', () {
+      final text = formatRuleListAnswer('Carnifex', const []);
+      expect(text, contains("couldn't find any surfaced rules"));
+      expect(text, contains('Carnifex'));
+    });
+
+    test('12.11 formatRuleListAnswer — one rule', () {
+      const nodeRef = NodeRef(0);
+      final rule = RuleDoc(
+        docId: 'rule:synapse',
+        canonicalKey: 'synapse',
+        ruleId: 'synapse',
+        name: 'Synapse',
+        description: '',
+        sourceFileId: 'test',
+        sourceNode: nodeRef,
+      );
+      expect(formatRuleListAnswer('Carnifex', [rule]), 'Carnifex has Synapse.');
+    });
+
+    test('12.12 formatRuleListAnswer — two rules', () {
+      const nodeRef = NodeRef(0);
+      RuleDoc r(String name) => RuleDoc(
+            docId: 'rule:${name.toLowerCase()}',
+            canonicalKey: name.toLowerCase(),
+            ruleId: name.toLowerCase(),
+            name: name,
+            description: '',
+            sourceFileId: 'test',
+            sourceNode: nodeRef,
+          );
+      final text = formatRuleListAnswer('Carnifex', [r('Synapse'), r('Deadly Demise')]);
+      expect(text, 'Carnifex has Synapse and Deadly Demise.');
+    });
+
+    test('12.13 formatRuleListAnswer — three rules (Oxford comma)', () {
+      const nodeRef = NodeRef(0);
+      RuleDoc r(String name) => RuleDoc(
+            docId: 'rule:${name.toLowerCase().replaceAll(' ', '_')}',
+            canonicalKey: name.toLowerCase(),
+            ruleId: name.toLowerCase(),
+            name: name,
+            description: '',
+            sourceFileId: 'test',
+            sourceNode: nodeRef,
+          );
+      final text = formatRuleListAnswer(
+          'Hive Tyrant', [r('Synapse'), r('Shadow in the Warp'), r('Deadly Demise')]);
+      expect(text, 'Hive Tyrant has Synapse, Shadow in the Warp, and Deadly Demise.');
+    });
+
+    // -------------------------------------------------------------------------
+    // E. No regression — existing paths unaffected.
+    // -------------------------------------------------------------------------
+
+    test('12.14 No regression: attr query still routes to attr- path', () async {
+      final entity = _entity('Carnifex', 'carnifex', 'slot_0');
+      final coord = _ruleCoord([entity]);
+      final plan = await coord.handleTranscript(
+        transcript: 'what is the toughness of carnifex',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.debugSummary, startsWith('attr-'));
+    });
+
+    test('12.15 No regression: "what are the abilities of X" not a rule query → search path', () async {
+      final entity = _entity('Intercessor', 'intercessor', 'slot_0');
+      final coord = _ruleCoord([entity]);
+      final plan = await coord.handleTranscript(
+        transcript: 'what are the abilities of Intercessors',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      // No rule pattern matched → falls through attribute handler → unrecognized attr → search.
+      expect(plan.debugSummary, startsWith('single:'));
+    });
+
+    test('12.16 No regression: cancel during rule disambiguation → Cancelled', () async {
+      final entities = [
+        _entity('Captain', 'captain', 'slot_0'),
+        _entity('Captain with Jump Pack', 'captain_jump', 'slot_0'),
+      ];
+      final coord = _ruleCoord(entities);
+      await coord.handleTranscript(
+        transcript: 'rules for captain',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      final plan = await coord.handleTranscript(
+        transcript: 'cancel',
+        slotBundles: _noopBundles,
+        contextHints: const [],
+      );
+      expect(plan.primaryText, 'Cancelled.');
+      expect(plan.sessionCleared, isTrue);
+    });
+  });
 }
