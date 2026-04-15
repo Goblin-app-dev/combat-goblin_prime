@@ -842,6 +842,20 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           const SizedBox(height: 24),
           const Text('Ask a question', style: TextStyle(color: Colors.grey)),
+          const SizedBox(height: 16),
+          DefaultTextStyle.merge(
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
+            child: const Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Try:'),
+                SizedBox(height: 4),
+                Text('• What is the toughness of a Carnifex?'),
+                Text('• Which units have Synapse?'),
+                Text('• What is the BS of Intercessors?'),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -890,6 +904,19 @@ class _HomeScreenState extends State<HomeScreen> {
           Icon(Icons.search_off, size: 64, color: Colors.grey.shade400),
           const SizedBox(height: 16),
           const Text("I couldn't find that unit in the loaded data."),
+          const SizedBox(height: 16),
+          DefaultTextStyle.merge(
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
+            child: const Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Try asking:'),
+                SizedBox(height: 4),
+                Text('• What is the toughness of a Carnifex?'),
+                Text('• What rules does a Carnifex have?'),
+              ],
+            ),
+          ),
         ],
       ),
     );
