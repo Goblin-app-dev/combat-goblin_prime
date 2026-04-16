@@ -339,6 +339,21 @@ class VoiceRuntimeController {
     final priorState = _stateNotifier.value as ListeningState;
     final trigger = priorState.trigger!; // Always non-null for ListeningState.
 
+    // Claim ProcessingState synchronously before the first await.
+    //
+    // In Dart's single-threaded model, two concurrent callers can both pass
+    // the ListeningState guard above if neither has yielded yet — the second
+    // caller reads state before the first caller's first `await` runs.
+    // Setting ProcessingState here (synchronously) closes that window: if a
+    // second call reaches the guard after this line, it sees ProcessingState
+    // and returns immediately.  Rule A is still satisfied because
+    // ListeningEnded is emitted below, after state is already ProcessingState.
+    _setState(ProcessingState(
+      mode: priorState.mode,
+      trigger: trigger,
+      sessionId: sessionId,
+    ));
+
     _listenTimer?.cancel();
     _listenTimer = null;
     _captureLimitTimer?.cancel();
@@ -356,12 +371,7 @@ class VoiceRuntimeController {
     final stopMs = DateTime.now().millisecondsSinceEpoch;
     final listenDuration = stopMs - _listenBeganMs;
 
-    // Rule A: state update before event emit.
-    _setState(ProcessingState(
-      mode: priorState.mode,
-      trigger: trigger,
-      sessionId: sessionId,
-    ));
+    // Rule A satisfied: state (ProcessingState, above) before event (here).
     _emit(ListeningEnded(reason: reason, sessionId: sessionId));
 
     onAudioCaptured?.call(buffer);
