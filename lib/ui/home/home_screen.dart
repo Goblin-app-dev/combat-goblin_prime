@@ -18,12 +18,12 @@ import 'package:combat_goblin_prime/voice/runtime/spoken_plan_player.dart';
 import 'package:combat_goblin_prime/voice/runtime/testing/fake_audio_focus_gateway.dart';
 import 'package:combat_goblin_prime/voice/runtime/testing/fake_audio_route_observer.dart';
 import 'package:combat_goblin_prime/voice/runtime/testing/fake_mic_permission_gateway.dart';
-import 'package:combat_goblin_prime/voice/runtime/voice_listen_trigger.dart';
 import 'package:combat_goblin_prime/voice/runtime/voice_runtime_controller.dart';
 import 'package:combat_goblin_prime/voice/runtime/voice_runtime_event.dart';
 import 'package:combat_goblin_prime/voice/runtime/voice_runtime_state.dart';
 import 'package:combat_goblin_prime/voice/runtime/voice_stop_reason.dart';
 import 'package:combat_goblin_prime/voice/settings/voice_settings.dart';
+import 'package:combat_goblin_prime/voice/voice_button_handler.dart';
 import 'package:combat_goblin_prime/voice/voice_search_facade.dart';
 
 /// Home screen with 3-section vertical layout.
@@ -628,7 +628,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(width: 12),
-              RepaintBoundary(child: _MicButton(controller: _voiceController)),
+              RepaintBoundary(child: _MicButton(controller: _voiceController, player: _spokenPlanPlayer)),
             ],
           ),
         ),
@@ -1118,12 +1118,19 @@ class _SlotChip extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Mic button — push-to-talk, observes VoiceRuntimeController state directly.
+// Mic button — single-tap toggle, strict finite-state machine.
+//
+// Tap policy (enforced at two levels — here and inside handleVoiceButtonTap):
+//   TTS playing (any ctrl state) → stop speaking → beginListening (sequential)
+//   idle / error                 → beginListening
+//   listening                    → endListening (→ processing)
+//   arming / processing          → tap disabled / ignored
 // ---------------------------------------------------------------------------
 
 class _MicButton extends StatefulWidget {
   final VoiceRuntimeController controller;
-  const _MicButton({required this.controller});
+  final SpokenPlanPlayer player;
+  const _MicButton({required this.controller, required this.player});
 
   @override
   State<_MicButton> createState() => _MicButtonState();
@@ -1134,11 +1141,13 @@ class _MicButtonState extends State<_MicButton> {
   void initState() {
     super.initState();
     widget.controller.state.addListener(_rebuild);
+    widget.player.isSpeakingNotifier.addListener(_rebuild);
   }
 
   @override
   void dispose() {
     widget.controller.state.removeListener(_rebuild);
+    widget.player.isSpeakingNotifier.removeListener(_rebuild);
     super.dispose();
   }
 
@@ -1147,26 +1156,33 @@ class _MicButtonState extends State<_MicButton> {
   @override
   Widget build(BuildContext context) {
     final state = widget.controller.state.value;
+    final isSpeaking = widget.player.isSpeakingNotifier.value;
     final isListening = state is ListeningState;
     final isArming = state is ArmingState;
-    final isBusy = isListening || isArming;
+    final isProcessing = state is ProcessingState;
+
+    // Tap is disabled only during transient mid-flight states where no user
+    // action is meaningful (arming = waiting for permission/focus grant;
+    // processing = STT pipeline in flight).  Listening and speaking both
+    // respond to taps: listening → stop, speaking → stop-speak-then-listen.
+    final bool tapEnabled = !isArming && !isProcessing;
 
     final Color bg = isListening
         ? Colors.red
-        : isArming
-            ? Colors.orange
-            : Theme.of(context).colorScheme.primary;
+        : isArming || isProcessing
+            ? Colors.grey.shade400
+            : isSpeaking
+                ? Theme.of(context).colorScheme.secondary
+                : Theme.of(context).colorScheme.primary;
     final shadowColor = bg.withValues(alpha: 0.4);
 
     return GestureDetector(
-      onTapDown: isBusy
-          ? null
-          : (_) => widget.controller
-              .beginListening(trigger: VoiceListenTrigger.pushToTalk),
-      onTapUp: (_) => widget.controller
-          .endListening(reason: VoiceStopReason.userReleasedPushToTalk),
-      onTapCancel: () => widget.controller
-          .endListening(reason: VoiceStopReason.userCancelled),
+      onTap: tapEnabled
+          ? () => unawaited(handleVoiceButtonTap(
+                controller: widget.controller,
+                player: widget.player,
+              ))
+          : null,
       child: Container(
         width: 56,
         height: 56,
@@ -1182,7 +1198,11 @@ class _MicButtonState extends State<_MicButton> {
           ],
         ),
         child: Icon(
-          isListening ? Icons.stop : Icons.mic,
+          isListening
+              ? Icons.stop
+              : isSpeaking
+                  ? Icons.volume_up
+                  : Icons.mic,
           color: Colors.white,
           size: 28,
         ),
