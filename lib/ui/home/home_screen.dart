@@ -86,21 +86,22 @@ class _HomeScreenState extends State<HomeScreen> {
     unawaited(_initRealVoice());
   }
 
-  /// Attaches [onTextCandidate], the event listener, and the state listener
-  /// to [controller]. Caller must have already removed the listener from the
-  /// previous controller before calling this.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _updateContextHints();
+  }
+
+  void _updateContextHints() {
+    final controller = ImportSessionProvider.of(context);
+    _voiceController.contextHints = _buildContextHints(controller);
+  }
+
+  /// Attaches [onTextCandidate] and the event listener to [controller].
   void _attachVoiceCallbacks(VoiceRuntimeController controller) {
     _voiceEventSub?.cancel();
     controller.onTextCandidate = _onTextCandidate;
     _voiceEventSub = controller.events.listen(_onVoiceEvent);
-    controller.state.addListener(_onRuntimeStateChanged);
-  }
-
-  /// Rebuilds body when the voice runtime transitions state (e.g. idle →
-  /// listening → processing → idle). Kept minimal: the body reads state
-  /// directly via [_computeBodyState] during build.
-  void _onRuntimeStateChanged() {
-    if (mounted) setState(() {});
   }
 
   /// Async init: creates real platform adapters and replaces the controller.
@@ -126,10 +127,10 @@ class _HomeScreenState extends State<HomeScreen> {
       maxCaptureDuration: Duration(seconds: settings.maxCaptureDurationSeconds),
     );
     final oldController = _voiceController;
-    oldController.state.removeListener(_onRuntimeStateChanged);
     _attachVoiceCallbacks(newController);
     _voiceController = newController;
     oldController.dispose();
+    if (mounted) _updateContextHints();
 
     // Replace spoken plan player with one backed by the real TTS engine.
     final oldPlayer = _spokenPlanPlayer;
@@ -146,7 +147,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _voiceEventSub?.cancel();
-    _voiceController.state.removeListener(_onRuntimeStateChanged);
     _searchController.dispose();
     _voiceController.dispose();
     _spokenPlanPlayer.dispose();
@@ -583,74 +583,76 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final controller = ImportSessionProvider.of(context);
-    // Keep STT context hints current with loaded bundles.
-    _voiceController.contextHints = _buildContextHints(controller);
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (context, _) {
-        return Column(
-          children: [
-            // --- Update banner ---
-            if (controller.isUpdating)
-              Container(
-                width: double.infinity,
-                color: Colors.blue.shade50,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                child: Row(
-                  children: [
-                    const SizedBox(
-                      width: 12,
-                      height: 12,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Updating data…',
-                      style: TextStyle(
-                          fontSize: 12, color: Colors.blue.shade800),
-                    ),
-                  ],
+    return Column(
+      children: [
+        // --- Update banner ---
+        if (controller.isUpdating)
+          Container(
+            width: double.infinity,
+            color: Colors.blue.shade50,
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            child: Row(
+              children: [
+                const SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Updating data…',
+                  style: TextStyle(
+                      fontSize: 12, color: Colors.blue.shade800),
+                ),
+              ],
+            ),
+          ),
+
+        // --- Input row: text field + mic button ---
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _searchController,
+                  decoration: const InputDecoration(
+                    hintText: 'Ask a question…',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onSubmitted: _search,
+                  textInputAction: TextInputAction.search,
                 ),
               ),
+              const SizedBox(width: 12),
+              RepaintBoundary(child: _MicButton(controller: _voiceController)),
+            ],
+          ),
+        ),
 
-            // --- Input row: text field + mic button ---
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _searchController,
-                      decoration: const InputDecoration(
-                        hintText: 'Ask a question…',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      onSubmitted: _search,
-                      textInputAction: TextInputAction.search,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  _MicButton(controller: _voiceController),
-                ],
-              ),
+        const Divider(height: 1, thickness: 1),
+
+        // --- Body: results / states ---
+        // Rebuilds only when voice runtime state changes; static siblings are
+        // unaffected by voice state transitions.
+        Expanded(
+          child: RepaintBoundary(
+            child: ListenableBuilder(
+              listenable: _voiceController.state,
+              builder: (context, _) => _buildResults(controller),
             ),
+          ),
+        ),
 
-            const Divider(height: 1, thickness: 1),
-
-            // --- Body: results / states ---
-            Expanded(child: _buildResults(controller)),
-
-            // --- Bottom: Slot Status Bar ---
-            _SlotStatusBar(
-              controller: controller,
-              onTap: widget.onNavigateToDownloads,
-            ),
-          ],
-        );
-      },
+        // --- Bottom: Slot Status Bar ---
+        _SlotStatusBar(
+          controller: controller,
+          onTap: widget.onNavigateToDownloads,
+        ),
+      ],
     );
   }
 
@@ -1154,6 +1156,7 @@ class _MicButtonState extends State<_MicButton> {
         : isArming
             ? Colors.orange
             : Theme.of(context).colorScheme.primary;
+    final shadowColor = bg.withValues(alpha: 0.4);
 
     return GestureDetector(
       onTapDown: isBusy
@@ -1172,7 +1175,7 @@ class _MicButtonState extends State<_MicButton> {
           color: bg,
           boxShadow: [
             BoxShadow(
-              color: bg.withValues(alpha: 0.4),
+              color: shadowColor,
               blurRadius: 10,
               spreadRadius: 2,
             ),
