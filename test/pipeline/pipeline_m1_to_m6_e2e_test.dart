@@ -199,7 +199,7 @@ class _SnapshotEntry {
 }
 
 /// Runs the full M1→M6 pipeline and returns all phase outputs.
-Future<_PipelineResult> runPipeline() async {
+Future<_PipelineResult> runPipeline(Directory testDir) async {
   const testSource = SourceLocator(
     sourceKey: 'bsdata_wh40k_10e',
     sourceUrl: 'https://github.com/BSData/wh40k-10e',
@@ -220,7 +220,7 @@ Future<_PipelineResult> runPipeline() async {
   final primaryCatalogBytes =
       await File('test/Imperium - Space Marines.cat').readAsBytes();
 
-  final rawBundle = await AcquireService().buildBundle(
+  final rawBundle = await AcquireService(storage: AcquireStorage(appDataRoot: testDir)).buildBundle(
     gameSystemBytes: gameSystemBytes,
     gameSystemExternalFileName: 'Warhammer 40,000.gst',
     primaryCatalogBytes: primaryCatalogBytes,
@@ -640,25 +640,18 @@ void _printRosterSection({
 }
 
 void main() {
+  late Directory _testDir;
   late _PipelineResult pipelineResult;
 
   setUpAll(() async {
-    // Clean storage before test
-    final dir = Directory('appDataRoot');
-    if (await dir.exists()) {
-      await dir.delete(recursive: true);
-    }
+    _testDir = await Directory.systemTemp.createTemp('cgp_test_');
 
     // Run the pipeline once for all tests
-    pipelineResult = await runPipeline();
+    pipelineResult = await runPipeline(_testDir);
   });
 
   tearDownAll(() async {
-    // Clean storage after test
-    final dir = Directory('appDataRoot');
-    if (await dir.exists()) {
-      await dir.delete(recursive: true);
-    }
+    if (await _testDir.exists()) await _testDir.delete(recursive: true);
   });
 
   group('M1→M6 Pipeline E2E', () {

@@ -33,6 +33,7 @@ import 'package:combat_goblin_prime/voice/voice_search_facade.dart';
 
 Future<IndexBundle?> _buildIndex({
   required String primaryPath,
+  required Directory testDir,
   Map<String, String> dependencyPaths = const {},
 }) async {
   if (!File(primaryPath).existsSync()) return null;
@@ -46,7 +47,7 @@ Future<IndexBundle?> _buildIndex({
   final gsBytes = await File('test/Warhammer 40,000.gst').readAsBytes();
   final primaryBytes = await File(primaryPath).readAsBytes();
 
-  final raw = await AcquireService().buildBundle(
+  final raw = await AcquireService(storage: AcquireStorage(appDataRoot: testDir)).buildBundle(
     gameSystemBytes: gsBytes,
     gameSystemExternalFileName: 'Warhammer 40,000.gst',
     primaryCatalogBytes: primaryBytes,
@@ -76,14 +77,15 @@ VoiceAssistantCoordinator _coord() =>
 void main() {
   // ===== Tyranids ==========================================================
   group('Rule query integration — Tyranids', () {
+    late Directory _testDir;
     late IndexBundle? idx;
 
     setUpAll(() async {
-      final dir = Directory('appDataRoot');
-      if (await dir.exists()) await dir.delete(recursive: true);
+      _testDir = await Directory.systemTemp.createTemp('cgp_test_');
 
       idx = await _buildIndex(
         primaryPath: 'test/Xenos - Tyranids.cat',
+        testDir: _testDir,
         dependencyPaths: {
           '581a-46b9-5b86-44b7': 'test/Unaligned Forces.cat',
           '374d-45f0-5832-001e': 'test/Library - Tyranids.cat',
@@ -106,8 +108,7 @@ void main() {
     });
 
     tearDownAll(() async {
-      final dir = Directory('appDataRoot');
-      if (await dir.exists()) await dir.delete(recursive: true);
+      if (await _testDir.exists()) await _testDir.delete(recursive: true);
     });
 
     // A. Rule query routes to rule- path (not generic search fallback).
