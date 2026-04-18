@@ -42,7 +42,6 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final _searchController = TextEditingController();
   final _facade = VoiceSearchFacade();
   late final VoiceAssistantCoordinator _coordinator;
 
@@ -147,7 +146,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _voiceEventSub?.cancel();
-    _searchController.dispose();
     _voiceController.dispose();
     _spokenPlanPlayer.dispose();
     super.dispose();
@@ -173,7 +171,6 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _isProcessing = false;
         _voicePlan = plan;
-        _searchController.text = candidate.text;
       });
       // Speak the plan. play() handles its own concurrency: any previous
       // playback is cancelled before the new plan starts.
@@ -255,32 +252,6 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }
     return hints.take(50).toList();
-  }
-
-  void _search(String query) {
-    final controller = ImportSessionProvider.of(context);
-    final bundles = _activeBundles(controller);
-    if (query.isEmpty || bundles.isEmpty) {
-      setState(() { _voicePlan = null; _errorMessage = null; });
-      return;
-    }
-    setState(() { _isProcessing = true; _errorMessage = null; });
-    // Route through coordinator so typed questions use the full intent pipeline.
-    final hints = _buildContextHints(controller);
-    unawaited(() async {
-      try {
-        final plan = await _coordinator.handleTranscript(
-          transcript: query,
-          slotBundles: bundles,
-          contextHints: hints,
-        );
-        if (!mounted) return;
-        setState(() { _isProcessing = false; _voicePlan = plan; });
-      } catch (_) {
-        if (!mounted) return;
-        setState(() { _isProcessing = false; _errorMessage = 'Something went wrong.'; });
-      }
-    }());
   }
 
   /// Returns display names of all loaded catalog slots (for stats view).
@@ -590,8 +561,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Container(
             width: double.infinity,
             color: Colors.blue.shade50,
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             child: Row(
               children: [
                 const SizedBox(
@@ -602,48 +572,38 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(width: 8),
                 Text(
                   'Updating data…',
-                  style: TextStyle(
-                      fontSize: 12, color: Colors.blue.shade800),
+                  style: TextStyle(fontSize: 12, color: Colors.blue.shade800),
                 ),
               ],
             ),
           ),
 
-        // --- Input row: text field + mic button ---
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+        // --- Display panel (all voice states) + large toggle button ---
+        Expanded(
+          child: Column(
             children: [
+              // Read-only display panel. Rebuilds on voice state changes;
+              // no text input, no cursor, no keyboard.
               Expanded(
-                child: TextField(
-                  controller: _searchController,
-                  decoration: const InputDecoration(
-                    hintText: 'Ask a question…',
-                    border: OutlineInputBorder(),
-                    isDense: true,
+                child: RepaintBoundary(
+                  child: ListenableBuilder(
+                    listenable: _voiceController.state,
+                    builder: (context, _) => _buildResults(controller),
                   ),
-                  onSubmitted: _search,
-                  textInputAction: TextInputAction.search,
                 ),
               ),
-              const SizedBox(width: 12),
-              RepaintBoundary(child: _MicButton(controller: _voiceController, player: _spokenPlanPlayer)),
+
+              // Large centered toggle button — the only interaction surface.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+                child: RepaintBoundary(
+                  child: _VoiceToggleButton(
+                    controller: _voiceController,
+                    player: _spokenPlanPlayer,
+                  ),
+                ),
+              ),
             ],
-          ),
-        ),
-
-        const Divider(height: 1, thickness: 1),
-
-        // --- Body: results / states ---
-        // Rebuilds only when voice runtime state changes; static siblings are
-        // unaffected by voice state transitions.
-        Expanded(
-          child: RepaintBoundary(
-            child: ListenableBuilder(
-              listenable: _voiceController.state,
-              builder: (context, _) => _buildResults(controller),
-            ),
           ),
         ),
 
@@ -1118,25 +1078,26 @@ class _SlotChip extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Mic button — single-tap toggle, strict finite-state machine.
+// Voice toggle button — large, centered, labeled.
 //
-// Tap policy (enforced at two levels — here and inside handleVoiceButtonTap):
-//   TTS playing (any ctrl state) → stop speaking → beginListening (sequential)
-//   idle / error                 → beginListening
-//   listening                    → endListening (→ processing)
-//   arming / processing          → tap disabled / ignored
+// Tap policy delegated to handleVoiceButtonTap (enforced at two levels):
+//   idle / error  → Start Listening
+//   listening     → Stop Listening
+//   arming        → disabled (transitional)
+//   processing    → disabled (STT pipeline in flight)
+//   TTS playing   → Start Listening (stops TTS first, then listens)
 // ---------------------------------------------------------------------------
 
-class _MicButton extends StatefulWidget {
+class _VoiceToggleButton extends StatefulWidget {
   final VoiceRuntimeController controller;
   final SpokenPlanPlayer player;
-  const _MicButton({required this.controller, required this.player});
+  const _VoiceToggleButton({required this.controller, required this.player});
 
   @override
-  State<_MicButton> createState() => _MicButtonState();
+  State<_VoiceToggleButton> createState() => _VoiceToggleButtonState();
 }
 
-class _MicButtonState extends State<_MicButton> {
+class _VoiceToggleButtonState extends State<_VoiceToggleButton> {
   @override
   void initState() {
     super.initState();
@@ -1156,55 +1117,47 @@ class _MicButtonState extends State<_MicButton> {
   @override
   Widget build(BuildContext context) {
     final state = widget.controller.state.value;
-    final isSpeaking = widget.player.isSpeakingNotifier.value;
     final isListening = state is ListeningState;
     final isArming = state is ArmingState;
     final isProcessing = state is ProcessingState;
-
-    // Tap is disabled only during transient mid-flight states where no user
-    // action is meaningful (arming = waiting for permission/focus grant;
-    // processing = STT pipeline in flight).  Listening and speaking both
-    // respond to taps: listening → stop, speaking → stop-speak-then-listen.
     final bool tapEnabled = !isArming && !isProcessing;
 
-    final Color bg = isListening
-        ? Colors.red
-        : isArming || isProcessing
-            ? Colors.grey.shade400
-            : isSpeaking
-                ? Theme.of(context).colorScheme.secondary
-                : Theme.of(context).colorScheme.primary;
-    final shadowColor = bg.withValues(alpha: 0.4);
+    final String label = isListening
+        ? 'Stop Listening'
+        : isArming
+            ? 'Starting…'
+            : isProcessing
+                ? 'Processing…'
+                : 'Start Listening';
 
-    return GestureDetector(
-      onTap: tapEnabled
-          ? () => unawaited(handleVoiceButtonTap(
-                controller: widget.controller,
-                player: widget.player,
-              ))
-          : null,
-      child: Container(
-        width: 56,
-        height: 56,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: bg,
-          boxShadow: [
-            BoxShadow(
-              color: shadowColor,
-              blurRadius: 10,
-              spreadRadius: 2,
-            ),
-          ],
+    final IconData icon = isListening ? Icons.stop : Icons.mic;
+
+    return SizedBox(
+      width: double.infinity,
+      height: 72,
+      child: ElevatedButton.icon(
+        onPressed: tapEnabled
+            ? () => unawaited(handleVoiceButtonTap(
+                  controller: widget.controller,
+                  player: widget.player,
+                ))
+            : null,
+        icon: Icon(icon, size: 28),
+        label: Text(
+          label,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
         ),
-        child: Icon(
-          isListening
-              ? Icons.stop
-              : isSpeaking
-                  ? Icons.volume_up
-                  : Icons.mic,
-          color: Colors.white,
-          size: 28,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: isListening
+              ? Colors.red
+              : Theme.of(context).colorScheme.primary,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: Colors.grey.shade300,
+          disabledForegroundColor: Colors.grey.shade600,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          elevation: tapEnabled ? 4 : 0,
         ),
       ),
     );
