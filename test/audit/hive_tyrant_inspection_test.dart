@@ -85,6 +85,7 @@ Future<({IndexBundle index, BoundPackBundle bound})> _buildIndexAndBound({
   required String gameSystemPath,
   required String primaryCatalogPath,
   Map<String, String> dependencyPaths = const {},
+  required Directory testDir,
 }) async {
   const testSource = SourceLocator(
     sourceKey: 'audit_fixture',
@@ -95,7 +96,7 @@ Future<({IndexBundle index, BoundPackBundle bound})> _buildIndexAndBound({
   final gameSystemBytes = await File(gameSystemPath).readAsBytes();
   final primaryCatalogBytes = await File(primaryCatalogPath).readAsBytes();
 
-  final rawBundle = await AcquireService().buildBundle(
+  final rawBundle = await AcquireService(storage: AcquireStorage(appDataRoot: testDir)).buildBundle(
     gameSystemBytes: gameSystemBytes,
     gameSystemExternalFileName: gameSystemPath.split('/').last,
     primaryCatalogBytes: primaryCatalogBytes,
@@ -155,26 +156,19 @@ int _recursiveChildCount(BoundEntry entry) {
 // ---------------------------------------------------------------------------
 
 void main() {
-  setUp(() async {
-    final dir = Directory('appDataRoot');
-    if (await dir.exists()) await dir.delete(recursive: true);
-  });
-
-  tearDown(() async {
-    final dir = Directory('appDataRoot');
-    if (await dir.exists()) await dir.delete(recursive: true);
-  });
-
   group('Hive Tyrant Targeted Inspection', () {
     const tyranidCatalogPath = 'test/Xenos - Tyranids.cat';
     const libTyranidPath = 'test/Library - Tyranids.cat';
     const unalignedPath = 'test/Unaligned Forces.cat';
 
+    late Directory _testDir;
     late IndexBundle index;
     late BoundPackBundle bound;
     bool _fixturePresent = false;
 
     setUpAll(() async {
+      _testDir = await Directory.systemTemp.createTemp('cgp_test_');
+
       _fixturePresent = File(tyranidCatalogPath).existsSync() &&
           File(libTyranidPath).existsSync() &&
           File(unalignedPath).existsSync();
@@ -191,6 +185,7 @@ void main() {
           '581a-46b9-5b86-44b7': unalignedPath,
           '374d-45f0-5832-001e': libTyranidPath,
         },
+        testDir: _testDir,
       );
       index = result.index;
       bound = result.bound;
@@ -200,8 +195,7 @@ void main() {
     });
 
     tearDownAll(() async {
-      final dir = Directory('appDataRoot');
-      if (await dir.exists()) await dir.delete(recursive: true);
+      if (await _testDir.exists()) await _testDir.delete(recursive: true);
     });
 
     // ── Task 1: Target Resolution ─────────────────────────────────────────

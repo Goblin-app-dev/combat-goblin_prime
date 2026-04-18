@@ -20,14 +20,11 @@ void main() {
     branch: 'main',
   );
 
+  late Directory _testDir;
   late RawPackBundle rawBundle;
 
   setUpAll(() async {
-    // Clean storage
-    final dir = Directory('appDataRoot');
-    if (await dir.exists()) {
-      await dir.delete(recursive: true);
-    }
+    _testDir = await Directory.systemTemp.createTemp('cgp_test_');
 
     // Acquire bundle once for all invariant tests
     final gameSystemBytes = await File('test/Warhammer 40,000.gst').readAsBytes();
@@ -40,7 +37,7 @@ void main() {
       'ac3b-689c-4ad4-70cb': 'test/Library - Astartes Heresy Legends.cat',
     };
 
-    rawBundle = await AcquireService().buildBundle(
+    rawBundle = await AcquireService(storage: AcquireStorage(appDataRoot: _testDir)).buildBundle(
       gameSystemBytes: gameSystemBytes,
       gameSystemExternalFileName: 'Warhammer 40,000.gst',
       primaryCatalogBytes: primaryCatalogBytes,
@@ -55,10 +52,7 @@ void main() {
   });
 
   tearDownAll(() async {
-    final dir = Directory('appDataRoot');
-    if (await dir.exists()) {
-      await dir.delete(recursive: true);
-    }
+    if (await _testDir.exists()) await _testDir.delete(recursive: true);
   });
 
   group('M2 Parse: structural invariants', () {

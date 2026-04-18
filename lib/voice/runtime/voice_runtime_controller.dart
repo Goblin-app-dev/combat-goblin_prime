@@ -333,7 +333,11 @@ class VoiceRuntimeController {
   ///     - Failure: state → [ErrorState(sttFailed)] → emit [ErrorRaised]
   /// 4b. No engine: state → [IdleState] (session-guarded)
   Future<void> _stop(VoiceStopReason reason) async {
-    if (_stateNotifier.value is! ListeningState) return;
+    debugPrint('[VOICE STOP] entered — reason: $reason, state: ${_stateNotifier.value.runtimeType}');
+    if (_stateNotifier.value is! ListeningState) {
+      debugPrint('[VOICE STOP] guard rejected — not ListeningState');
+      return;
+    }
 
     final sessionId = _currentSessionId;
     final priorState = _stateNotifier.value as ListeningState;
@@ -353,6 +357,7 @@ class VoiceRuntimeController {
       trigger: trigger,
       sessionId: sessionId,
     ));
+    debugPrint('[VOICE STOP] → ProcessingState claimed, sessionId: $sessionId');
 
     _listenTimer?.cancel();
     _listenTimer = null;
@@ -362,7 +367,9 @@ class VoiceRuntimeController {
     // Stop capture and collect accumulated frames.
     _frameSub?.cancel();
     _frameSub = null;
+    debugPrint('[VOICE STOP] before captureGateway.stop()');
     await _captureGateway?.stop();
+    debugPrint('[VOICE STOP] after captureGateway.stop()');
 
     // Concatenate frames into a single buffer.
     final buffer = _buildBuffer();
@@ -376,21 +383,26 @@ class VoiceRuntimeController {
 
     onAudioCaptured?.call(buffer);
 
+    debugPrint('[VOICE STOP] before abandonFocus');
     await _focusGateway.abandonFocus();
+    debugPrint('[VOICE STOP] after abandonFocus');
 
     // Only proceed with STT if the session is still current.
     if (_stateNotifier.value is! ProcessingState ||
         _currentSessionId != sessionId) {
+      debugPrint('[VOICE STOP] session invalidated after abandonFocus — aborting STT');
       return;
     }
 
     final sttEngine = _sttEngine;
     if (sttEngine != null && buffer.isNotEmpty) {
+      debugPrint('[VOICE STOP] before transcribe — buffer: ${buffer.length} bytes');
       try {
         final rawCandidate = await sttEngine.transcribe(
           buffer,
           contextHints: contextHints,
         );
+        debugPrint('[VOICE STOP] after transcribe — text: "${rawCandidate.text}"');
         if (_stateNotifier.value is! ProcessingState ||
             _currentSessionId != sessionId) {
           return;

@@ -64,6 +64,8 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Non-null when the coordinator or search threw an unexpected exception.
   String? _errorMessage;
 
+  String? _lastTranscript;
+
   @override
   void initState() {
     super.initState();
@@ -158,7 +160,7 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Routes a [TextCandidate] through [VoiceAssistantCoordinator] and updates UI.
   Future<void> _onTextCandidate(TextCandidate candidate) async {
     if (!mounted || candidate.text.isEmpty) return;
-    setState(() { _isProcessing = true; _errorMessage = null; });
+    setState(() { _isProcessing = true; _errorMessage = null; _lastTranscript = candidate.text; });
     final sessionController = ImportSessionProvider.of(context);
     final bundles = _activeBundles(sessionController);
     try {
@@ -641,7 +643,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildResults(ImportSessionController controller) {
     final bundles = _activeBundles(controller);
     if (bundles.isEmpty) return _buildNoCatalogsBody(controller);
-    return switch (_computeBodyState()) {
+    final bodyState = _computeBodyState();
+    debugPrint('[VOICE UI] body state: ${bodyState.runtimeType}');
+    return switch (bodyState) {
       _IdleBodyState() => _buildIdleBody(controller),
       _ListeningBodyState() => _buildListeningBody(),
       _ProcessingBodyState() => _buildProcessingBody(),
@@ -650,63 +654,6 @@ class _HomeScreenState extends State<HomeScreen> {
       _NoMatchBodyState(:final message) => _buildNoMatchBody(message),
       _ErrorBodyState(:final message) => _buildErrorBody(message),
     };
-  }
-
-  /// Renders a [SpokenResponsePlan]: primary text banner + entity list.
-  ///
-  /// [isClarify] selects the clarify colour treatment (amber tint, action
-  /// pending) vs the answer treatment (primary container, success/resolved).
-  /// When [plan.selectedIndex] is non-null the highlighted entity row is
-  /// rendered with a subtle accent border.
-  Widget _buildPlanResults(SpokenResponsePlan plan, {required bool isClarify}) {
-    final Color bannerColor;
-    final Color bannerTextColor;
-    final TextStyle? bannerTextStyle;
-    if (isClarify) {
-      bannerColor = Colors.amber.shade50;
-      bannerTextColor = Colors.amber.shade900;
-      bannerTextStyle = Theme.of(context)
-          .textTheme
-          .bodyMedium
-          ?.copyWith(color: bannerTextColor);
-    } else {
-      bannerColor = Theme.of(context).colorScheme.primaryContainer;
-      bannerTextColor = Theme.of(context).colorScheme.onPrimaryContainer;
-      bannerTextStyle = Theme.of(context).textTheme.bodyLarge?.copyWith(
-            color: bannerTextColor,
-            fontWeight: FontWeight.w500,
-          );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Primary text banner — answer vs clarify use distinct colour treatments.
-        Container(
-          margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: bannerColor,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(plan.primaryText, style: bannerTextStyle),
-        ),
-        if (plan.entities.isNotEmpty)
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: plan.entities.length,
-              itemBuilder: (context, index) {
-                final isSelected = index == plan.selectedIndex;
-                return _buildEntityCard(
-                  plan.entities[index],
-                  isSelected: isSelected,
-                );
-              },
-            ),
-          ),
-      ],
-    );
   }
 
   // ---------------------------------------------------------------------------
@@ -846,80 +793,79 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// listening — mic is arming or capturing.
   Widget _buildListeningBody() {
-    return const Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.mic, size: 64, color: Colors.red),
-          SizedBox(height: 16),
-          Text('Listening…'),
-        ],
-      ),
-    );
+    return Center(child: _buildConversationHeader(userText: null, goblinText: null));
   }
 
   /// processing — STT pipeline or coordinator is running.
   Widget _buildProcessingBody() {
-    return const Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 16),
-          Text('Thinking…'),
-        ],
+    return Center(
+      child: _buildConversationHeader(
+        userText: _lastTranscript ?? '\u2026',
+        goblinText: 'Thinking\u2026',
       ),
     );
   }
 
   /// answer — single confirmed result or attribute answer.
-  Widget _buildAnswerBody(SpokenResponsePlan plan) =>
-      _buildPlanResults(plan, isClarify: false);
+  Widget _buildAnswerBody(SpokenResponsePlan plan) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 20),
+        _buildConversationHeader(
+          userText: _lastTranscript ?? '\u2026',
+          goblinText: plan.primaryText,
+        ),
+        if (plan.entities.isNotEmpty) ...[
+          const Divider(height: 16),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: plan.entities.length,
+              itemBuilder: (context, index) {
+                final isSelected = index == plan.selectedIndex;
+                return _buildEntityCard(plan.entities[index], isSelected: isSelected);
+              },
+            ),
+          ),
+        ],
+      ],
+    );
+  }
 
   /// clarify — disambiguation session active (multiple matches).
-  Widget _buildClarifyBody(SpokenResponsePlan plan) =>
-      _buildPlanResults(plan, isClarify: true);
+  Widget _buildClarifyBody(SpokenResponsePlan plan) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 20),
+        _buildConversationHeader(
+          userText: _lastTranscript ?? '\u2026',
+          goblinText: plan.primaryText,
+        ),
+        if (plan.entities.isNotEmpty) ...[
+          const Divider(height: 16),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: plan.entities.length,
+              itemBuilder: (context, index) {
+                final isSelected = index == plan.selectedIndex;
+                return _buildEntityCard(plan.entities[index], isSelected: isSelected);
+              },
+            ),
+          ),
+        ],
+      ],
+    );
+  }
 
   /// noMatch — coordinator returned no entities.
   Widget _buildNoMatchBody(String _) {
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.search_off, size: 56, color: Colors.grey.shade400),
-            const SizedBox(height: 16),
-            Text(
-              "I couldn't find that unit in the loaded data.",
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 20),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey.shade200),
-              ),
-              child: DefaultTextStyle.merge(
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                child: const Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Try asking:'),
-                    SizedBox(height: 4),
-                    Text('• What is the toughness of a Carnifex?'),
-                    Text('• What is the movement of a Carnifex?'),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
+      child: _buildConversationHeader(
+        userText: _lastTranscript ?? '\u2026',
+        goblinText: "I couldn't find that unit.",
       ),
     );
   }
@@ -927,14 +873,67 @@ class _HomeScreenState extends State<HomeScreen> {
   /// error — coordinator or search threw an unexpected exception.
   Widget _buildErrorBody(String _) {
     return Center(
+      child: _buildConversationHeader(
+        userText: _lastTranscript ?? '\u2026',
+        goblinText: 'Something went wrong.',
+      ),
+    );
+  }
+
+  Widget _buildConversationHeader({
+    required String? userText,
+    required String? goblinText,
+  }) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.error_outline, size: 64, color: Colors.red.shade300),
-          const SizedBox(height: 16),
-          const Text('Something went wrong.'),
+          _labeledLine(
+            label: 'You:',
+            text: userText ?? 'Listening\u2026',
+            labelColor: Colors.grey.shade600,
+            theme: theme,
+          ),
+          if (goblinText != null) ...[
+            const SizedBox(height: 8),
+            _labeledLine(
+              label: 'Goblin:',
+              text: goblinText,
+              labelColor: theme.colorScheme.primary,
+              theme: theme,
+            ),
+          ],
         ],
       ),
+    );
+  }
+
+  Widget _labeledLine({
+    required String label,
+    required String text,
+    required Color labelColor,
+    required ThemeData theme,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 68,
+          child: Text(
+            label,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: labelColor,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(text, style: theme.textTheme.bodyMedium),
+        ),
+      ],
     );
   }
 

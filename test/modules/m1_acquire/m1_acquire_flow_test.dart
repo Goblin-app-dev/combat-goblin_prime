@@ -14,20 +14,14 @@ void main() {
   );
 
   group('M1 Acquire: flow harness (fixtures)', () {
+    late Directory _testDir;
+
     setUp(() async {
-      // Always start clean: deterministic storage root.
-      final dir = Directory('appDataRoot');
-      if (await dir.exists()) {
-        await dir.delete(recursive: true);
-      }
+      _testDir = await Directory.systemTemp.createTemp('cgp_m1_test_');
     });
 
     tearDown(() async {
-      // Keep reruns clean.
-      final dir = Directory('appDataRoot');
-      if (await dir.exists()) {
-        await dir.delete(recursive: true);
-      }
+      if (await _testDir.exists()) await _testDir.delete(recursive: true);
     });
 
     test('buildBundle: reads fixtures, preflights, and either succeeds or fails with AcquireFailure (dependencies)', () async {
@@ -65,7 +59,9 @@ void main() {
       print('[DIAGNOSTIC] primaryCatalog declaredGameSystemId: ${catPreflight.declaredGameSystemId}');
       print('[DIAGNOSTIC] primaryCatalog dependencies: ${catPreflight.importDependencies.map((d) => d.targetId).toList()}');
 
-      final acquireService = AcquireService();
+      final acquireService = AcquireService(
+        storage: AcquireStorage(appDataRoot: _testDir),
+      );
 
       RawPackBundle? bundle;
       try {
@@ -128,12 +124,12 @@ void main() {
       expect(await gsStored.exists(), isTrue);
       expect(await catStored.exists(), isTrue);
 
-      // Path contract checks (string containment only; do not hardcode separators)
-      expect(b.gameSystemMetadata.storedPath.contains('appDataRoot'), isTrue);
+      // Path contract checks — files must be nested under the test root.
+      expect(b.gameSystemMetadata.storedPath.startsWith(_testDir.path), isTrue);
       expect(b.gameSystemMetadata.storedPath.contains('gamesystem_cache'), isTrue);
       expect(b.gameSystemMetadata.storedPath.contains(b.gameSystemPreflight.rootId), isTrue);
 
-      expect(b.primaryCatalogMetadata.storedPath.contains('appDataRoot'), isTrue);
+      expect(b.primaryCatalogMetadata.storedPath.startsWith(_testDir.path), isTrue);
       expect(b.primaryCatalogMetadata.storedPath.contains('packs'), isTrue);
       expect(b.primaryCatalogMetadata.storedPath.contains(b.packId), isTrue);
       expect(b.primaryCatalogMetadata.storedPath.contains('catalogs'), isTrue);

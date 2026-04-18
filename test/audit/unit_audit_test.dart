@@ -55,6 +55,7 @@ import 'unit_dump_exporter.dart';
 Future<IndexBundle> _buildIndex({
   required String gameSystemPath,
   required String primaryCatalogPath,
+  required Directory appDataRoot,
   Map<String, String> dependencyPaths = const {},
 }) async {
   const testSource = SourceLocator(
@@ -66,7 +67,9 @@ Future<IndexBundle> _buildIndex({
   final gameSystemBytes = await File(gameSystemPath).readAsBytes();
   final primaryCatalogBytes = await File(primaryCatalogPath).readAsBytes();
 
-  final rawBundle = await AcquireService().buildBundle(
+  final rawBundle = await AcquireService(
+    storage: AcquireStorage(appDataRoot: appDataRoot),
+  ).buildBundle(
     gameSystemBytes: gameSystemBytes,
     gameSystemExternalFileName: gameSystemPath.split('/').last,
     primaryCatalogBytes: primaryCatalogBytes,
@@ -150,26 +153,18 @@ void _runAudit({
 // ---------------------------------------------------------------------------
 
 void main() {
-  // Clean up stale appDataRoot between test runs
-  setUp(() async {
-    final dir = Directory('appDataRoot');
-    if (await dir.exists()) await dir.delete(recursive: true);
-  });
-
-  tearDown(() async {
-    final dir = Directory('appDataRoot');
-    if (await dir.exists()) await dir.delete(recursive: true);
-  });
-
   // ── Space Marines fixture (always available) ─────────────────────────────
 
   group('Audit: Imperium - Space Marines', () {
+    late Directory _testDir;
     late IndexBundle smIndex;
 
     setUpAll(() async {
+      _testDir = await Directory.systemTemp.createTemp('cgp_audit_sm_');
       smIndex = await _buildIndex(
         gameSystemPath: 'test/Warhammer 40,000.gst',
         primaryCatalogPath: 'test/Imperium - Space Marines.cat',
+        appDataRoot: _testDir,
         dependencyPaths: {
           'b00-cd86-4b4c-97ba': 'test/Imperium - Agents of the Imperium.cat',
           '7481-280e-b55e-7867': 'test/Library - Titans.cat',
@@ -184,8 +179,7 @@ void main() {
     });
 
     tearDownAll(() async {
-      final dir = Directory('appDataRoot');
-      if (await dir.exists()) await dir.delete(recursive: true);
+      if (await _testDir.exists()) await _testDir.delete(recursive: true);
     });
 
     test('index health: non-empty, low duplicate count', () {
@@ -336,10 +330,13 @@ void main() {
     const libTyranidPath = 'test/Library - Tyranids.cat';
     const unalignedPath = 'test/Unaligned Forces.cat';
 
+    late Directory _testDir;
     late IndexBundle tyranidIndex;
     bool _fixturePresent = false;
 
     setUpAll(() async {
+      _testDir = await Directory.systemTemp.createTemp('cgp_audit_ty_');
+
       _fixturePresent = File(tyranidCatalogPath).existsSync() &&
           File(libTyranidPath).existsSync() &&
           File(unalignedPath).existsSync();
@@ -357,6 +354,7 @@ void main() {
       tyranidIndex = await _buildIndex(
         gameSystemPath: 'test/Warhammer 40,000.gst',
         primaryCatalogPath: tyranidCatalogPath,
+        appDataRoot: _testDir,
         dependencyPaths: {
           '581a-46b9-5b86-44b7': unalignedPath,
           '374d-45f0-5832-001e': libTyranidPath,
@@ -369,8 +367,7 @@ void main() {
     });
 
     tearDownAll(() async {
-      final dir = Directory('appDataRoot');
-      if (await dir.exists()) await dir.delete(recursive: true);
+      if (await _testDir.exists()) await _testDir.delete(recursive: true);
     });
 
     test('index health: non-empty, low duplicate count', () {

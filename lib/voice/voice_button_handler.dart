@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import 'runtime/spoken_plan_player.dart';
 import 'runtime/voice_listen_trigger.dart';
 import 'runtime/voice_runtime_controller.dart';
@@ -30,10 +32,12 @@ Future<void> handleVoiceButtonTap({
   required VoiceRuntimeController controller,
   required SpokenPlanPlayer player,
 }) async {
-  // Speaking takes priority regardless of controller state: stop TTS first,
-  // then begin listening only if the controller is in a startable state.
-  // The two awaits are sequential — no concurrent mic + TTS overlap.
-  if (player.isSpeakingNotifier.value) {
+  final rs0 = controller.state.value;
+  final isSpeaking = player.isSpeakingNotifier.value;
+  debugPrint('[VOICE TAP] received — state: ${rs0.runtimeType}, isSpeaking: $isSpeaking');
+
+  if (isSpeaking) {
+    debugPrint('[VOICE TAP] action: stop_tts_then_listen');
     await player.stop();
     final rs = controller.state.value;
     if (rs is IdleState || rs is ErrorState) {
@@ -44,11 +48,12 @@ Future<void> handleVoiceButtonTap({
 
   final rs = controller.state.value;
   if (rs is ListeningState) {
+    debugPrint('[VOICE TAP] action: stop_listening');
     await controller.endListening(reason: VoiceStopReason.userReleasedPushToTalk);
   } else if (rs is IdleState || rs is ErrorState) {
+    debugPrint('[VOICE TAP] action: start_listening');
     await controller.beginListening(trigger: VoiceListenTrigger.pushToTalk);
+  } else {
+    debugPrint('[VOICE TAP] action: noop (${rs.runtimeType})');
   }
-  // ArmingState, ProcessingState → no-op.
-  // Controller guards also fire (beginListening/endListening from wrong state
-  // are no-ops), providing a second layer of protection.
 }

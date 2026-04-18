@@ -14,20 +14,14 @@ void main() {
   );
 
   group('M2 Parse: flow harness (fixtures)', () {
+    late Directory _testDir;
+
     setUp(() async {
-      // Always start clean: deterministic storage root.
-      final dir = Directory('appDataRoot');
-      if (await dir.exists()) {
-        await dir.delete(recursive: true);
-      }
+      _testDir = await Directory.systemTemp.createTemp('cgp_test_');
     });
 
     tearDown(() async {
-      // Keep reruns clean.
-      final dir = Directory('appDataRoot');
-      if (await dir.exists()) {
-        await dir.delete(recursive: true);
-      }
+      if (await _testDir.exists()) await _testDir.delete(recursive: true);
     });
 
     test('parseBundle: acquires RawPackBundle then parses into ParsedPackBundle', () async {
@@ -51,7 +45,7 @@ void main() {
         'ac3b-689c-4ad4-70cb': 'test/Library - Astartes Heresy Legends.cat',
       };
 
-      final acquireService = AcquireService();
+      final acquireService = AcquireService(storage: AcquireStorage(appDataRoot: _testDir));
 
       RawPackBundle rawBundle;
       try {

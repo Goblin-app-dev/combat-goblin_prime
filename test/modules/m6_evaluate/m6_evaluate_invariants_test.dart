@@ -59,14 +59,11 @@ void main() {
     branch: 'main',
   );
 
+  late Directory _testDir;
   late BoundPackBundle boundBundle;
 
   setUpAll(() async {
-    // Clean storage
-    final dir = Directory('appDataRoot');
-    if (await dir.exists()) {
-      await dir.delete(recursive: true);
-    }
+    _testDir = await Directory.systemTemp.createTemp('cgp_test_');
 
     // Acquire, parse, wrap, link, bind bundle once for all tests
     final gameSystemBytes =
@@ -81,7 +78,7 @@ void main() {
       'ac3b-689c-4ad4-70cb': 'test/Library - Astartes Heresy Legends.cat',
     };
 
-    final rawBundle = await AcquireService().buildBundle(
+    final rawBundle = await AcquireService(storage: AcquireStorage(appDataRoot: _testDir)).buildBundle(
       gameSystemBytes: gameSystemBytes,
       gameSystemExternalFileName: 'Warhammer 40,000.gst',
       primaryCatalogBytes: primaryCatalogBytes,
@@ -103,10 +100,7 @@ void main() {
   });
 
   tearDownAll(() async {
-    final dir = Directory('appDataRoot');
-    if (await dir.exists()) {
-      await dir.delete(recursive: true);
-    }
+    if (await _testDir.exists()) await _testDir.delete(recursive: true);
   });
 
   group('M6 Evaluate: invariant validation', () {

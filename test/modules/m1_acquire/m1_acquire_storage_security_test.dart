@@ -7,22 +7,19 @@ import 'package:combat_goblin_prime/modules/m1_acquire/m1_acquire.dart';
 import 'package:combat_goblin_prime/modules/m1_acquire/storage/acquire_storage.dart';
 
 void main() {
-  final storage = AcquireStorage();
   final validBytes = Uint8List.fromList([0x01, 0x02, 0x03]);
 
   group('AcquireStorage path traversal prevention', () {
+    late Directory _testDir;
+    late AcquireStorage storage;
+
     setUp(() async {
-      final dir = Directory('appDataRoot');
-      if (await dir.exists()) {
-        await dir.delete(recursive: true);
-      }
+      _testDir = await Directory.systemTemp.createTemp('cgp_test_');
+      storage = AcquireStorage(appDataRoot: _testDir);
     });
 
     tearDown(() async {
-      final dir = Directory('appDataRoot');
-      if (await dir.exists()) {
-        await dir.delete(recursive: true);
-      }
+      if (await _testDir.exists()) await _testDir.delete(recursive: true);
     });
 
     // ── Traversal via rootId ──
